@@ -1,11 +1,12 @@
-import type Resolver from "@core/integral/Resolver";
-import type System from "@core/integral/System";
-import type Store from "@core/structural/Memory";
-import type SemanticAtomizer from "@core/structural/SemanticAtomizer";
-import logger from "@src/utils/SpectralLogger";
 import axios from "axios";
 import nlp from "compromise";
 import wiki from "wikipedia";
+
+import type Resolver from "@core_i/Resolver";
+import type System from "@core_i/System";
+import type Store from "@core_s/Memory";
+import type SemanticAtomizer from "@atomics/SemanticAtomizer";
+import logger from "@utils/SpectralLogger";
 
 // Wikipedia API requires a valid User-Agent to avoid 403 Forbidden errors.
 // This identifies the engine as a research tool for topological logic.

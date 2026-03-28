@@ -1,5 +1,5 @@
-import { BRAIN_CONFIG } from "../src/config";
-import { UMAPLoader } from "../src/core/structural/UMAPLoader";
+import { BRAIN_CONFIG } from "@config";
+import { UMAPLoader } from "@core_s/UMAPLoader";
 
 async function test() {
   const loader = new UMAPLoader(

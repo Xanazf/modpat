@@ -1,4 +1,4 @@
-import { DOPAT_CONFIG } from "@src/config";
+import { DOPAT_CONFIG } from "@config";
 
 /**
  * Enumeration of physical property buffers within the logical manifold.
@@ -48,7 +48,7 @@ export enum OperatorClass {
  * @param token The string representation of the operator.
  * @returns The classified OperatorClass.
  */
-export function classifyOperatorToken(token: string): OperatorClass {
+function classifyOperatorToken(token: string): OperatorClass {
   switch (token.trim().toLowerCase()) {
     case "implies":
     case "=>":
@@ -524,5 +524,5 @@ class System {
   }
 }
 
-export { LogicOperations, TargetBuffer };
+export { LogicOperations, TargetBuffer, classifyOperatorToken };
 export default System;

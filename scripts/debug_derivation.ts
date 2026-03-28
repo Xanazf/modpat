@@ -1,7 +1,7 @@
-import Resolver from "@core/integral/Resolver";
-import System from "@core/integral/System";
-import SemanticAtomizer from "@core/structural/SemanticAtomizer";
-import logger from "@src/utils/SpectralLogger";
+import Resolver from "@core_i/Resolver";
+import System from "@core_i/System";
+import SemanticAtomizer from "@atomics/SemanticAtomizer";
+import logger from "@utils/SpectralLogger";
 
 async function debugDerivation() {
   const system = new System();

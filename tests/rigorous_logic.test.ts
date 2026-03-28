@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import logger from "@src/utils/SpectralLogger";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function runRigorousTests() {
@@ -58,7 +58,7 @@ export async function runRigorousTests() {
       logger.log(`Geodesic Path tokens: ${pathTokens}`);
       if (!pathTokens.toLowerCase().includes("distractor")) {
         logger.warn(
-          `  ⚠ Distractor did not warp the logical geodesic. Path: "${pathTokens}"`
+          `  ! Distractor did not warp the logical geodesic. Path: "${pathTokens}"`
         );
       } else {
         logger.log(

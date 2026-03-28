@@ -1,9 +1,9 @@
 import assert from "node:assert";
-import { OperatorClass } from "@src/core/integral/System";
-import { DatabaseContext } from "@src/core/structural/DatabaseContext";
-import { ManifoldManager } from "@src/core/structural/ManifoldManager";
-import { SystemPersistence } from "@src/core/structural/Persistence";
-import logger from "@src/utils/SpectralLogger";
+import { OperatorClass } from "@core_i/System";
+import { DatabaseContext } from "@core_s/DatabaseContext";
+import { ManifoldManager } from "@core_s/ManifoldManager";
+import { SystemPersistence } from "@core_s/Persistence";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeSignalManagerSuite() {

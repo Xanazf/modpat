@@ -1,4 +1,4 @@
-import type System from "../core/integral/System";
+import type System from "@core_i/System";
 
 /**
  * Maps Logical vs Semantic output to the RGB space.

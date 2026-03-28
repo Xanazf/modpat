@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { DOPAT_CONFIG } from "@src/config";
-import logger from "@src/utils/SpectralLogger";
+import { DOPAT_CONFIG } from "@config";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeStressSuite() {
@@ -48,7 +48,7 @@ export async function executeStressSuite() {
           `  ✓ Successfully propagated logic through ${chainSize} steps`
         );
       } else {
-        logger.warn(`  ⚠ Logic faded after ${chainSize} steps. Got: ${result}`);
+        logger.warn(`  ! Logic faded after ${chainSize} steps. Got: ${result}`);
       }
     });
 

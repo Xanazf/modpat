@@ -1,5 +1,5 @@
 import { BRAIN_CONFIG } from "@src/config";
-import { UMAPLoader } from "./UMAPLoader";
+import { UMAPLoader } from "@core_s/UMAPLoader";
 
 /**
  * BaseAtomizer: Foundational logic for symbol-to-topology mapping.

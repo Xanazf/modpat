@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import logger from "@src/utils/SpectralLogger";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeComplexSemanticSuite() {

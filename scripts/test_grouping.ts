@@ -1,5 +1,5 @@
-import System from "../src/core/integral/System";
-import SemanticAtomizer from "../src/core/structural/SemanticAtomizer";
+import System from "@core_i/System";
+import SemanticAtomizer from "@atomics/SemanticAtomizer";
 
 async function test() {
   const system = new System();

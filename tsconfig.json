@@ -30,8 +30,13 @@
     "paths": {
       "@src/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
+      "@core_i/*": ["./src/core/integral/*"],
+      "@core_s/*": ["./src/core/structural/*"],
+      "@atomics/*": ["./src/core/structural/atomizers/*"],
+      "@utils/*": ["./src/utils/*"],
       "@config": ["./src/config.ts"]
     }
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts"],
+  "exclude": ["./scratchpad/*"]
 }

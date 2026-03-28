@@ -1,6 +1,6 @@
 import assert from "node:assert";
-import { GeodesicMapper } from "@src/core/integral/Mapper";
-import logger from "@src/utils/SpectralLogger";
+import { GeodesicMapper } from "@core_i/Mapper";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function runMapperReviewTest() {

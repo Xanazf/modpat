@@ -1,5 +1,5 @@
-import type System from "@core/integral/System";
-import { classifyOperatorToken } from "@core/integral/System";
+import type System from "@core_i/System";
+import { classifyOperatorToken } from "@core_i/System";
 import { BaseAtomizer } from "./BaseAtomizer";
 
 /**

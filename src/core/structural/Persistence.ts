@@ -1,4 +1,4 @@
-import type System from "@core/integral/System";
+import type System from "@core_i/System";
 import type { DuckDBConnection } from "@duckdb/node-api";
 
 /**

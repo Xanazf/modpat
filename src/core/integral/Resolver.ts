@@ -1,8 +1,8 @@
 import nlp from "compromise";
-import { DOPAT_CONFIG } from "../../config";
-import { TensorMath_GPU } from "../structural/Math";
-import type Store from "../structural/Memory";
-import { GeodesicMapper } from "./Mapper";
+import { DOPAT_CONFIG } from "@config";
+import { TensorMath_GPU } from "@core_s/Math";
+import type Store from "@core_s/Memory";
+import Mapper from "./Mapper";
 import System, { OperatorClass } from "./System";
 
 /**
@@ -20,7 +20,7 @@ export default class Resolver implements Resolution.Engine {
   /** GPU-accelerated tensor operations for high-density manifolds. */
   private gpu: TensorMath_GPU | null = null;
   /** Mapper for calculating geodesic paths through the manifold. */
-  private mapper: GeodesicMapper;
+  private mapper: Mapper;
 
   /** Maximum capacity for the pre-allocated resolution buffers. */
   private static MAX_SEQUENCE_LENGTH = 1024;
@@ -56,7 +56,7 @@ export default class Resolver implements Resolution.Engine {
     this.system = system;
     this.atomizer = atomizer;
     this.store = store;
-    this.mapper = new GeodesicMapper(this.system);
+    this.mapper = new Mapper(this.system);
 
     const maxN = Resolver.MAX_SEQUENCE_LENGTH;
     this.T_buffer = new Float64Array(maxN);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import type System from "@src/core/integral/System";
-import type Atomizer from "@src/core/structural/Atomizer";
-import logger from "@src/utils/SpectralLogger";
+import type System from "@core_i/System";
+import type Atomizer from "@atomics/LogicAtomizer";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 async function testMemoryAlignment(system: System) {

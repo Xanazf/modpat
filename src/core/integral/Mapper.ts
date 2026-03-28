@@ -1,44 +1,16 @@
-import logger from "@src/utils/SpectralLogger";
-import { TensorMath_GPU } from "../structural/Math";
+import logger from "@utils/SpectralLogger";
+import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
 
 /**
- * Configuration options for the geodesic routing process.
- */
-export interface RouteOptions {
-  /** The number of discrete steps to take along the path. */
-  steps?: number;
-  /** A set of scope IDs to prioritize during path attraction. */
-  boostScopes?: Set<number>;
-  /** The step size for gradient descent updates. */
-  learningRate?: number;
-  /** Maximum number of relaxation iterations. */
-  maxIterations?: number;
-  /** Whether to output detailed routing logs. */
-  verbose?: boolean;
-}
-
-/**
- * Result of a path integrity review.
- */
-export interface ReviewReport {
-  /** Whether the path successfully avoided logic traps and remained stable. */
-  passed: boolean;
-  /** The reason for failure, if applicable. */
-  reason?: string;
-  /** The index in the path where a logic trap was detected. */
-  trapIndex?: number;
-}
-
-/**
- * The GeodesicMapper is responsible for finding the shortest logical path
+ * The Mapper is responsible for finding the shortest logical path
  * through the non-Euclidean manifold of concepts.
  *
  * It treats logical derivation as a physical process of "falling" through
  * a density field of meaning, avoiding contradictions (Logic Traps) while
  * being pulled toward relevant high-mass nodes.
  */
-export class GeodesicMapper {
+class Mapper implements Mapping.Engine {
   /** The logical manifold providing the physical state of all precepts. */
   private system: System;
   /** Optional GPU math engine for acceleration. */
@@ -79,7 +51,7 @@ export class GeodesicMapper {
   public async route(
     sourceId: number,
     targetId: number,
-    options: RouteOptions = {}
+    options: Mapping.RouteOptions = {}
   ): Promise<Uint32Array> {
     const steps = options.steps ?? 32;
     const boostScopes = options.boostScopes;
@@ -571,7 +543,7 @@ export class GeodesicMapper {
     pz: Float32Array,
     pw: Float32Array,
     steps: number
-  ): ReviewReport {
+  ): Mapping.ReviewReport {
     const c = this.system.c || 1.0;
     const c2 = c * c;
 
@@ -657,4 +629,4 @@ export class GeodesicMapper {
   }
 }
 
-export default GeodesicMapper;
+export default Mapper;

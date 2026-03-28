@@ -52,6 +52,45 @@ declare namespace Root {
   }
 }
 
+declare namespace Mapping {
+  /**
+   * Configuration options for the geodesic routing process.
+   */
+  interface RouteOptions {
+    /** The number of discrete steps to take along the path. */
+    steps?: number;
+    /** A set of scope IDs to prioritize during path attraction. */
+    boostScopes?: Set<number>;
+    /** The step size for gradient descent updates. */
+    learningRate?: number;
+    /** Maximum number of relaxation iterations. */
+    maxIterations?: number;
+    /** Whether to output detailed routing logs. */
+    verbose?: boolean;
+  }
+
+  /**
+   * Result of a path integrity review.
+   */
+  interface ReviewReport {
+    /** Whether the path successfully avoided logic traps and remained stable. */
+    passed: boolean;
+    /** The reason for failure, if applicable. */
+    reason?: string;
+    /** The index in the path where a logic trap was detected. */
+    trapIndex?: number;
+  }
+
+  interface Engine {
+    setGPU(gpu: PMath.Engine | null): void;
+    route(
+      sourceId: number,
+      targetId: number,
+      options: Mapping.RouteOptions = {}
+    ): Promise<Uint32Array>;
+  }
+}
+
 declare namespace Resolution {
   interface Engine {
     resolveSequence(sequenceIds: Uint32Array): Promise<Uint32Array>;

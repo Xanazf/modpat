@@ -1,6 +1,6 @@
-import { DatabaseContext } from "@src/core/structural/DatabaseContext";
-import { SystemPersistence } from "@src/core/structural/Persistence";
-import logger from "@src/utils/SpectralLogger";
+import { DatabaseContext } from "@core_s/DatabaseContext";
+import { SystemPersistence } from "@core_s/Persistence";
+import logger from "@utils/SpectralLogger";
 import * as assert from "assert";
 import { describe, it, TestHarness } from "./utils/harness";
 

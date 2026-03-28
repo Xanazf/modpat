@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import LiveInference from "@src/core/integral/LiveInference";
-import logger from "@src/utils/SpectralLogger";
+import LiveInference from "@core_i/LiveInference";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeLiveInferenceSuite() {

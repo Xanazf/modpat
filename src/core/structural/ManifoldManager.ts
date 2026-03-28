@@ -1,7 +1,7 @@
-import type System from "../integral/System";
-import type { TargetBuffer } from "../integral/System";
+import type System from "@core_i/System";
+import type { TargetBuffer } from "@core_i/System";
 import type { SystemPersistence } from "./Persistence";
-import SpectralAtomizer from "./SpectralAtomizer";
+import SpectralAtomizer from "@atomics/SpectralAtomizer";
 
 /**
  * The ManifoldManager acts as the guardian and regulator of the logical manifolds.

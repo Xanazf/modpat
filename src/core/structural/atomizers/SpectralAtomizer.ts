@@ -1,6 +1,7 @@
-import type System from "../integral/System";
-import { OperatorClass } from "../integral/System";
-import { ComplexArray } from "./FFT";
+import type System from "@core_i/System";
+import { OperatorClass } from "@core_i/System";
+import { ComplexArray } from "@core_s/FFT";
+import { BaseAtomizer } from "./BaseAtomizer";
 
 /**
  * The SpectralAtomizer is responsible for mapping raw physical signals
@@ -10,7 +11,10 @@ import { ComplexArray } from "./FFT";
  * where spectral peaks materialize as massive bodies and phase alignments
  * define logical operators through interference patterns.
  */
-export default class SpectralAtomizer implements Atomic.Engine {
+export default class SpectralAtomizer
+  extends BaseAtomizer
+  implements Atomic.Engine
+{
   /**
    * Initializes the spectral atomizer engine.
    */

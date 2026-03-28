@@ -1,6 +1,6 @@
-import type System from "@core/integral/System";
-import { OperatorClass } from "@core/integral/System";
-import Atomizer from "@core/structural/Atomizer";
+import type System from "@core_i/System";
+import { OperatorClass } from "@core_i/System";
+import Atomizer from "@atomics/LogicAtomizer";
 import {
   type DuckDBConnection,
   DuckDBInstance,
