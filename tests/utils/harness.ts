@@ -36,7 +36,7 @@ export class TestHarness {
     dbPath?: string
   ): Promise<TestEnvironment<A>> {
     if (TestHarness.useSharedEnv && TestHarness.sharedEnvs.has(type)) {
-      return TestHarness.sharedEnvs.get(type)!;
+      return TestHarness.sharedEnvs.get(type)! as unknown as TestEnvironment<A>;
     }
 
     const system = new System();
@@ -60,7 +60,7 @@ export class TestHarness {
     if (TestHarness.useSharedEnv) {
       TestHarness.sharedEnvs.set(type, env);
     }
-    return env;
+    return env as unknown as TestEnvironment<A>;
   }
 
   /**

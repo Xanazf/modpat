@@ -14,7 +14,8 @@ declare namespace Atomic {
   interface Engine {
     ingestSequence(text: string, system: System): Uint32Array;
     decodeSequence(sequenceIds: Uint32Array, system: System): string;
-    getSymbolScope(symbol: string): number;
+    getSymbolScope(symbol: string, isOperator: boolean): number;
+    init(): Promise<void>;
   }
 }
 

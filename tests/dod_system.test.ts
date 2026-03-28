@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type System from "@core_i/System";
-import type Atomizer from "@atomics/LogicAtomizer";
+import type LogicAtomizer from "@atomics/LogicAtomizer";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
@@ -64,7 +64,10 @@ async function testPhysicsDeterminism(system: System) {
   );
 }
 
-async function testAtomizerBidirectional(system: System, atomizer: Atomizer) {
+async function testAtomizerBidirectional(
+  system: System,
+  atomizer: LogicAtomizer
+) {
   const testString = "p implies q";
   const ids = atomizer.ingestSequence(testString, system);
   assert.strictEqual(ids.length, 3);
@@ -116,7 +119,10 @@ export async function executeSuite() {
     });
 
     await it("Testing Bidirectional Atomizer (Ingest <-> Decode)", async () => {
-      await testAtomizerBidirectional(env.system, env.atomizer);
+      await testAtomizerBidirectional(
+        env.system,
+        env.atomizer as LogicAtomizer
+      );
     });
 
     await it("Testing Memory Free-list Allocator", async () => {

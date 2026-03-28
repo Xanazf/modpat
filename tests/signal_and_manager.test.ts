@@ -3,12 +3,19 @@ import { OperatorClass } from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldManager } from "@core_s/ManifoldManager";
 import { SystemPersistence } from "@core_s/Persistence";
+import type SpectralAtomizer from "@atomics/SpectralAtomizer";
 import logger from "@utils/SpectralLogger";
-import { describe, it, TestHarness } from "./utils/harness";
+import {
+  describe,
+  it,
+  TestHarness,
+  type TestEnvironment,
+} from "./utils/harness";
 
 export async function executeSignalManagerSuite() {
   await describe("SIGNALING & MANIFOLD MANAGER SUITE", async () => {
-    const env = await TestHarness.getEnvironment("spectral");
+    const env: TestEnvironment<SpectralAtomizer> =
+      await TestHarness.getEnvironment("spectral");
     const emergencySystem = (await TestHarness.getEnvironment("base")).system;
 
     const dbCtx = new DatabaseContext(":memory:");

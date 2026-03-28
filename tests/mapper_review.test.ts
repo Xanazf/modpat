@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { GeodesicMapper } from "@core_i/Mapper";
+import Mapper from "@core_i/Mapper";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
@@ -25,7 +25,7 @@ export async function runMapperReviewTest() {
       env.system.mass[trapId] = env.system.c ** 2 * 1000.0;
       env.system.entropy[trapId] = 0.0;
 
-      const mapper = new GeodesicMapper(env.system);
+      const mapper = new Mapper(env.system);
       const path = await mapper.route(alphaId, betaId, {
         steps: 32,
         verbose: true,
