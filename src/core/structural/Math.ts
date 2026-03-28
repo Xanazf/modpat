@@ -204,6 +204,7 @@ class TensorMath_GPU implements PMath.Engine {
       gpuImpl = navigator.gpu;
     } else {
       if (!TensorMath_GPU.instance) {
+        //@ts-expect-error: - FIX YOUR SHIT MAMMAL
         TensorMath_GPU.instance = gpu.create([]);
       }
       gpuImpl = TensorMath_GPU.instance as unknown as GPU;

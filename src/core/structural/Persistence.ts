@@ -104,7 +104,6 @@ export class SystemPersistence {
       system.operatorClass[id] = Number(row[11]);
     }
 
-    // @ts-expect-error: updating private length for hydration
     system.length = length;
   }
 
