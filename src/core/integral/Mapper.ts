@@ -197,81 +197,77 @@ class Mapper implements Mapping.Engine {
     const device = await TensorMath_GPU.getDevice();
     const sysLength = this.system.length;
 
-    const bPathX = device.createBuffer({
-      size: px.byteLength,
-      usage:
-        GPUBufferUsage.STORAGE |
-        GPUBufferUsage.COPY_SRC |
-        GPUBufferUsage.COPY_DST,
-    });
-    const bPathY = device.createBuffer({
-      size: py.byteLength,
-      usage:
-        GPUBufferUsage.STORAGE |
-        GPUBufferUsage.COPY_SRC |
-        GPUBufferUsage.COPY_DST,
-    });
-    const bSysPosX = device.createBuffer({
-      size: sysLength * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    const bSysPosY = device.createBuffer({
-      size: sysLength * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    const bSysMass = device.createBuffer({
-      size: sysLength * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    const bSysEntropy = device.createBuffer({
-      size: sysLength * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    const bSysOpClass = device.createBuffer({
-      size: sysLength * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    const bParams = device.createBuffer({
-      size: 32,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    const bReadX = device.createBuffer({
-      size: px.byteLength,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
-    const bReadY = device.createBuffer({
-      size: py.byteLength,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
+    const createBuffer = (
+      data: GPUAllowSharedBufferSource | undefined,
+      size: number,
+      usage: GPUBufferUsageFlags
+    ) => {
+      const buffer = device.createBuffer({ size, usage });
+      if (data) device.queue.writeBuffer(buffer, 0, data);
+      return buffer;
+    };
 
-    device.queue.writeBuffer(bPathX, 0, px);
-    device.queue.writeBuffer(bPathY, 0, py);
-    device.queue.writeBuffer(
-      bSysPosX,
-      0,
-      new Float32Array(this.system.posX.subarray(0, sysLength))
+    const c = this.system.c || 1.0;
+    const c2 = c * c;
+    const sysInfluence = new Float32Array(sysLength);
+    for (let j = 0; j < sysLength; j++) {
+      const massFactor = Math.abs(this.system.mass[j] / c2);
+      const entropyFactor = this.system.entropy[j] || 0.1;
+      const isBoosted = boostScopes?.has(this.system.scope[j]);
+
+      let influence = massFactor * 2.0 + entropyFactor * 1.5;
+      if (isBoosted) influence *= 10.0;
+      sysInfluence[j] = influence;
+    }
+
+    const penaltyData = new Float32Array(Math.max(1, penalties.length) * 8); // Pad to 8 floats
+    if (penalties.length > 0) {
+      for (let i = 0; i < penalties.length; i++) {
+        penaltyData[i * 8 + 0] = penalties[i].x;
+        penaltyData[i * 8 + 1] = penalties[i].y;
+        penaltyData[i * 8 + 2] = penalties[i].z;
+        penaltyData[i * 8 + 3] = penalties[i].w;
+        penaltyData[i * 8 + 4] = penalties[i].strength;
+      }
+    } else {
+      penaltyData.fill(0);
+    }
+
+    const pathData = new Float32Array((steps + 1) * 4);
+    for (let i = 0; i <= steps; i++) {
+      pathData[i * 4 + 0] = px[i];
+      pathData[i * 4 + 1] = py[i];
+      pathData[i * 4 + 2] = pz[i];
+      pathData[i * 4 + 3] = pw[i];
+    }
+
+    const sysPosData = new Float32Array(sysLength * 4);
+    for (let j = 0; j < sysLength; j++) {
+      sysPosData[j * 4 + 0] = this.system.posX[j];
+      sysPosData[j * 4 + 1] = this.system.posY[j];
+      sysPosData[j * 4 + 2] = this.system.entropy[j];
+      sysPosData[j * 4 + 3] = this.system.time[j];
+    }
+
+    const bPath = createBuffer(
+      pathData,
+      pathData.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     );
-    device.queue.writeBuffer(
-      bSysPosY,
-      0,
-      new Float32Array(this.system.posY.subarray(0, sysLength))
+    const bSysPos = createBuffer(
+      sysPosData,
+      sysPosData.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
-    device.queue.writeBuffer(
-      bSysMass,
-      0,
-      new Float32Array(this.system.mass.subarray(0, sysLength))
+    const bSysInfluence = createBuffer(
+      sysInfluence,
+      sysInfluence.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
-    device.queue.writeBuffer(
-      bSysEntropy,
-      0,
-      new Float32Array(this.system.entropy.subarray(0, sysLength))
-    );
-    device.queue.writeBuffer(
-      bSysOpClass,
-      0,
-      new Uint32Array(
-        Array.from(this.system.operatorClass.subarray(0, sysLength))
-      )
+    const bPenalties = createBuffer(
+      penaltyData,
+      penaltyData.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
 
     const params = new ArrayBuffer(32);
@@ -279,22 +275,29 @@ class Mapper implements Mapping.Engine {
     view.setUint32(0, steps, true);
     view.setUint32(4, sysLength, true);
     view.setFloat32(8, learningRate, true);
-    view.setFloat32(12, this.system.c, true);
+    view.setUint32(12, penalties.length, true);
     view.setUint32(16, maxIterations, true);
     view.setFloat32(20, 0.01, true); // h
-    device.queue.writeBuffer(bParams, 0, params);
+    const bParams = createBuffer(
+      params,
+      32,
+      GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    );
+
+    const bReadPath = createBuffer(
+      undefined,
+      pathData.byteLength,
+      GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    );
 
     const bg = device.createBindGroup({
       layout: this.geodesicPipeline!.getBindGroupLayout(0),
       entries: [
-        { binding: 0, resource: { buffer: bPathX } },
-        { binding: 1, resource: { buffer: bPathY } },
-        { binding: 2, resource: { buffer: bSysPosX } },
-        { binding: 3, resource: { buffer: bSysPosY } },
-        { binding: 4, resource: { buffer: bSysMass } },
-        { binding: 5, resource: { buffer: bSysEntropy } },
-        { binding: 6, resource: { buffer: bSysOpClass } },
-        { binding: 7, resource: { buffer: bParams } },
+        { binding: 0, resource: { buffer: bPath } },
+        { binding: 1, resource: { buffer: bSysPos } },
+        { binding: 2, resource: { buffer: bSysInfluence } },
+        { binding: 3, resource: { buffer: bPenalties } },
+        { binding: 4, resource: { buffer: bParams } },
       ],
     });
 
@@ -304,35 +307,23 @@ class Mapper implements Mapping.Engine {
     pass.setBindGroup(0, bg);
     pass.dispatchWorkgroups(1);
     pass.end();
-    encoder.copyBufferToBuffer(bPathX, 0, bReadX, 0, px.byteLength);
-    encoder.copyBufferToBuffer(bPathY, 0, bReadY, 0, py.byteLength);
+    encoder.copyBufferToBuffer(bPath, 0, bReadPath, 0, pathData.byteLength);
     device.queue.submit([encoder.finish()]);
 
-    await Promise.all([
-      bReadX.mapAsync(GPUMapMode.READ),
-      bReadY.mapAsync(GPUMapMode.READ),
-    ]);
+    await bReadPath.mapAsync(GPUMapMode.READ);
+    const resPath = new Float32Array(bReadPath.getMappedRange().slice(0));
+    bReadPath.unmap();
 
-    const resX = new Float32Array(bReadX.getMappedRange().slice(0));
-    const resY = new Float32Array(bReadY.getMappedRange().slice(0));
-    bReadX.unmap();
-    bReadY.unmap();
+    for (let i = 0; i <= steps; i++) {
+      px[i] = resPath[i * 4 + 0];
+      py[i] = resPath[i * 4 + 1];
+      pz[i] = resPath[i * 4 + 2];
+      pw[i] = resPath[i * 4 + 3];
+    }
 
-    px.set(resX);
-    py.set(resY);
-
-    [
-      bPathX,
-      bPathY,
-      bSysPosX,
-      bSysPosY,
-      bSysMass,
-      bSysEntropy,
-      bSysOpClass,
-      bParams,
-      bReadX,
-      bReadY,
-    ].forEach(b => b.destroy());
+    [bPath, bSysPos, bSysInfluence, bPenalties, bParams, bReadPath].forEach(b =>
+      b.destroy()
+    );
   }
 
   /**
@@ -342,40 +333,45 @@ class Mapper implements Mapping.Engine {
     const device = await TensorMath_GPU.getDevice();
     const geodesicShader = device.createShaderModule({
       code: `
-        @group(0) @binding(0) var<storage, read_write> pathX: array<f32>;
-        @group(0) @binding(1) var<storage, read_write> pathY: array<f32>;
-        @group(0) @binding(2) var<storage, read> sysPosX: array<f32>;
-        @group(0) @binding(3) var<storage, read> sysPosY: array<f32>;
-        @group(0) @binding(4) var<storage, read> sysMass: array<f32>;
-        @group(0) @binding(5) var<storage, read> sysEntropy: array<f32>;
-        @group(0) @binding(6) var<storage, read> sysOpClass: array<u32>;
+        @group(0) @binding(0) var<storage, read_write> pathData: array<vec4<f32>>;
+        @group(0) @binding(1) var<storage, read> sysPos: array<vec4<f32>>;
+        @group(0) @binding(2) var<storage, read> sysInfluence: array<f32>;
         
+        struct Penalty {
+            pos: vec4<f32>,
+            strength: f32,
+            _pad1: f32,
+            _pad2: f32,
+            _pad3: f32,
+        };
+        @group(0) @binding(3) var<storage, read> penalties: array<Penalty>;
+
         struct Params {
             steps: u32,
             sysLength: u32,
             learningRate: f32,
-            c: f32,
+            penaltyCount: u32,
             iterations: u32,
-            h: f32
+            h: f32,
         };
-        @group(0) @binding(7) var<uniform> params: Params;
+        @group(0) @binding(4) var<uniform> params: Params;
 
-        fn densityAt(x: f32, y: f32) -> f32 {
+        fn densityAt(p: vec4<f32>) -> f32 {
             var d = 1.0;
             for (var j = 0u; j < params.sysLength; j = j + 1u) {
-                let dx = x - sysPosX[j];
-                let dy = y - sysPosY[j];
-                let weightedDistSq = (dx * dx) * 10.0 + (dy * dy) * 0.5;
+                let diff = p - sysPos[j];
+                let distSq = dot(diff, diff);
                 
-                if (weightedDistSq < 400.0) {
-                    let massFactor = sysMass[j] / (params.c * params.c);
-                    let entropyFactor = sysEntropy[j];
-                    let opClass = sysOpClass[j];
-                    
-                    var influence = (abs(massFactor) * 1.5 + entropyFactor * 1.0);
-                    if (opClass != 0u) { influence = influence * 2.0; }
-
-                    d = d - influence * exp(-weightedDistSq / 50.0);
+                if (distSq < 400.0) {
+                    d = d - sysInfluence[j] * exp(-distSq / 40.0);
+                }
+            }
+            for (var k = 0u; k < params.penaltyCount; k = k + 1u) {
+                let pen = penalties[k];
+                let diff = p - pen.pos;
+                let distSq = dot(diff, diff);
+                if (distSq < 100.0) {
+                    d = d + pen.strength * exp(-distSq / 20.0);
                 }
             }
             return max(0.01, d);
@@ -387,18 +383,19 @@ class Mapper implements Mapping.Engine {
 
             for (var iter = 0u; iter < params.iterations; iter = iter + 1u) {
                 if (i > 0u && i < params.steps) {
-                    let currX = pathX[i];
-                    let currY = pathY[i];
+                    let curr = pathData[i];
                     let h = params.h;
 
-                    let gradX = (densityAt(currX + h, currY) - densityAt(currX, currY)) / h;
-                    let gradY = (densityAt(currX, currY + h) - densityAt(currX, currY)) / h;
+                    let d0 = densityAt(curr);
+                    let gradX = (densityAt(vec4<f32>(curr.x + h, curr.y, curr.z, curr.w)) - d0) / h;
+                    let gradY = (densityAt(vec4<f32>(curr.x, curr.y + h, curr.z, curr.w)) - d0) / h;
+                    let gradZ = (densityAt(vec4<f32>(curr.x, curr.y, curr.z + h, curr.w)) - d0) / h;
+                    let gradW = (densityAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w + h)) - d0) / h;
+                    let grad = vec4<f32>(gradX, gradY, gradZ, gradW);
 
-                    let springX = (pathX[i - 1u] + pathX[i + 1u]) / 2.0 - currX;
-                    let springY = (pathY[i - 1u] + pathY[i + 1u]) / 2.0 - currY;
+                    let spring = (pathData[i - 1u] + pathData[i + 1u]) / 2.0 - curr;
 
-                    pathX[i] = pathX[i] + params.learningRate * (springX - gradX);
-                    pathY[i] = pathY[i] + params.learningRate * (springY - gradY);
+                    pathData[i] = curr + params.learningRate * (spring - grad);
                 }
                 storageBarrier();
             }
@@ -552,9 +549,11 @@ class Mapper implements Mapping.Engine {
         nearestId = -1;
       // Identify the nearest manifold concept to this path node.
       for (let j = 0; j < this.system.length; j++) {
-        const dx = this.system.posX[j] - px[i],
-          dy = this.system.posY[j] - py[i];
-        const distSq = dx * dx + dy * dy;
+        const dx = this.system.posX[j] - px[i];
+        const dy = this.system.posY[j] - py[i];
+        const dz = this.system.entropy[j] - pz[i];
+        const dw = this.system.time[j] - pw[i];
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
         if (distSq < nearestDistSq) {
           nearestDistSq = distSq;
           nearestId = j;
@@ -600,9 +599,11 @@ class Mapper implements Mapping.Engine {
         minDiff = Infinity;
       // Find the best discrete match in the manifold for this continuous path point.
       for (let j = 0; j < this.system.length; j++) {
-        const dx = this.system.posX[j] - px[i],
-          dy = this.system.posY[j] - py[i];
-        const diffSq = dx * dx + dy * dy;
+        const dx = this.system.posX[j] - px[i];
+        const dy = this.system.posY[j] - py[i];
+        const dz = this.system.entropy[j] - pz[i];
+        const dw = this.system.time[j] - pw[i];
+        const diffSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
         if (diffSq < minDiff) {
           const massFactor = Math.abs(this.system.mass[j] / c2);
