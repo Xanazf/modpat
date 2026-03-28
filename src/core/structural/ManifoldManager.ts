@@ -28,6 +28,9 @@ export class ManifoldManager {
   private tmrFreeListB: number[] = [];
   private tmrFreeListC: number[] = [];
 
+  /** Flag to prevent race conditions during asynchronous self-healing hydration. */
+  private isHydrating: boolean = false;
+
   /**
    * Initializes the Manifold Manager with primary and emergency systems.
    *
@@ -55,21 +58,36 @@ export class ManifoldManager {
   }
 
   /**
+   * Deep equality check for TMR buffers.
+   */
+  private arraysEqual(a: number[], b: number[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  /**
    * Triple Modular Redundancy (TMR) Voter for the FreeList.
    *
    * Ensures the integrity of critical memory pointers by comparing three
-   * independent buffers. If the primary buffers (A and B) disagree,
-   * it falls back to the tertiary buffer (C).
+   * independent buffers. Identifies consensus through majority vote.
    *
-   * @returns The most reliable version of the FreeList.
+   * @returns A safe clone of the most reliable version of the FreeList.
    */
   public getVotedFreeList(): number[] {
-    // If A == B, return A. Else return C.
-    // In JS, we check lengths or specific elements for equality.
-    if (this.tmrFreeListA.length === this.tmrFreeListB.length) {
-      return this.tmrFreeListA;
-    }
-    return this.tmrFreeListC;
+    const ab = this.arraysEqual(this.tmrFreeListA, this.tmrFreeListB);
+    const bc = this.arraysEqual(this.tmrFreeListB, this.tmrFreeListC);
+    const ac = this.arraysEqual(this.tmrFreeListA, this.tmrFreeListC);
+
+    if (ab) return [...this.tmrFreeListA];
+    if (bc) return [...this.tmrFreeListB];
+    if (ac) return [...this.tmrFreeListA];
+
+    // Total disagreement: trigger interrupt and return empty list to prevent corruption
+    this.triggerInterrupt("TMR Failure: Complete loss of FreeList consensus");
+    return [];
   }
 
   /**
@@ -107,14 +125,21 @@ export class ManifoldManager {
    * persistent store (DuckDB).
    */
   public async selfHealRoutine(): Promise<void> {
+    if (this.isHydrating) return;
+
     const corruptedIds = this.activeSystem.checkIntegrity();
     if (corruptedIds.length > 0) {
       console.warn(
         `[ManifoldManager] Detected ${corruptedIds.length} corrupted precepts. Initiating self-healing...`
       );
-      // Perform a full hydrate from DuckDB for maximum safety
-      await this.activeSystem.hydrate(this.persistence);
-      console.log(`[ManifoldManager] Self-healing complete.`);
+      this.isHydrating = true;
+      try {
+        // Perform a full hydrate from DuckDB for maximum safety
+        await this.activeSystem.hydrate(this.persistence);
+        console.log(`[ManifoldManager] Self-healing complete.`);
+      } finally {
+        this.isHydrating = false;
+      }
     }
   }
 
@@ -131,6 +156,25 @@ export class ManifoldManager {
       `[ManifoldManager] CRITICAL INTERRUPT: ${reason}. Switching to Emergency Manifold!`
     );
     this.activeSystem = this.emergencySystem;
+
+    // Attempt to hydrate emergency system from persistence to prevent operating on stale/empty state
+    this.isHydrating = true;
+    this.activeSystem
+      .hydrate(this.persistence)
+      .then(() => {
+        console.log(
+          `[ManifoldManager] Emergency Manifold hydrated successfully.`
+        );
+      })
+      .catch(err => {
+        console.error(
+          `[ManifoldManager] Failed to hydrate Emergency Manifold:`,
+          err
+        );
+      })
+      .finally(() => {
+        this.isHydrating = false;
+      });
   }
 
   /**
@@ -162,6 +206,9 @@ export class ManifoldManager {
    * @param dt - The time delta (step size).
    */
   public tick(dt: number): void {
+    // Skip calculations if manifold is currently hydrating to prevent race conditions
+    if (this.isHydrating) return;
+
     // Apply entropy decay and mass reduction across the manifold
     this.activeSystem.decay(dt);
 
@@ -189,7 +236,6 @@ export class ManifoldManager {
     oldValue: number,
     newValue: number
   ): Promise<void> {
-    // Simulated logging of state deltas to DuckDB
-    const timestamp = Date.now();
+    await this.persistence.logDelta(preceptId, field, oldValue, newValue);
   }
 }

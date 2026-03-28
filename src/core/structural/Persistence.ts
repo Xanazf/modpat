@@ -153,4 +153,43 @@ export class SystemPersistence {
       SELECT *, '${epochId}' as epoch_id FROM precepts;
     `);
   }
+
+  /**
+   * Logs a state change delta for deterministic replay.
+   *
+   * @param preceptId - The ID of the logic atom.
+   * @param field - The specific physical field that was updated.
+   * @param oldValue - Value before the shift.
+   * @param newValue - Value after the shift.
+   */
+  public async logDelta(
+    preceptId: number,
+    field: number,
+    oldValue: number,
+    newValue: number
+  ): Promise<void> {
+    await this.connection.run(`
+      CREATE TABLE IF NOT EXISTS system_deltas (
+        timestamp BIGINT,
+        precept_id INTEGER,
+        field INTEGER,
+        old_value DOUBLE,
+        new_value DOUBLE
+      )
+    `);
+
+    const stmt = await this.connection.prepare(
+      "INSERT INTO system_deltas (timestamp, precept_id, field, old_value, new_value) VALUES (?, ?, ?, ?, ?)"
+    );
+    try {
+      stmt.bindBigInt(1, BigInt(Date.now()));
+      stmt.bindInteger(2, preceptId);
+      stmt.bindInteger(3, field);
+      stmt.bindDouble(4, oldValue);
+      stmt.bindDouble(5, newValue);
+      await stmt.run();
+    } finally {
+      stmt.destroySync();
+    }
+  }
 }
