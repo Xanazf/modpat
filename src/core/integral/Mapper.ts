@@ -22,9 +22,6 @@ class Mapper implements Mapping.Engine {
   /** WebGPU pipeline for geodesic calculations. */
   private geodesicPipeline: GPUComputePipeline | null = null;
 
-  /** Minimum density required before triggering an expansion. */
-  private static readonly MIN_DENSITY_THRESHOLD = 0.2;
-
   /**
    * Initializes the mapper with a reference to the active logical manifold.
    *
@@ -157,21 +154,16 @@ class Mapper implements Mapping.Engine {
       if (this.unfolder) {
         let voidDetected = false;
         for (let i = 0; i <= steps; i++) {
-          const density = this.getDensity(
-            px[i],
-            py[i],
-            pz[i],
-            pw[i],
-            penalties,
-            boostScopes
-          );
-          if (density < Mapper.MIN_DENSITY_THRESHOLD) {
-            const voidPreceptId = this.findNearestPrecept(
+          const { potential, nearestId: voidPreceptId } =
+            this.getPotentialAndNearest(
               px[i],
               py[i],
               pz[i],
-              pw[i]
+              pw[i],
+              penalties,
+              boostScopes
             );
+          if (potential > DOPAT_CONFIG.PHYSICS.VOID_POTENTIAL_THRESHOLD) {
             if (voidPreceptId !== -1) {
               logger.step(
                 `Mapper: Logical void detected near precept ${voidPreceptId}. Triggering expansion...`
@@ -352,17 +344,23 @@ class Mapper implements Mapping.Engine {
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
 
-    const params = new ArrayBuffer(32);
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const params = new ArrayBuffer(48); // Padded for alignment
     const view = new DataView(params);
     view.setUint32(0, steps, true);
     view.setUint32(4, sysLength, true);
     view.setFloat32(8, learningRate, true);
     view.setUint32(12, penalties.length, true);
     view.setUint32(16, maxIterations, true);
-    view.setFloat32(20, 0.01, true); // h
+    view.setFloat32(20, phys.GRADIENT_STEP, true); // h
+    view.setFloat32(24, phys.INFLUENCE_RADIUS, true);
+    view.setFloat32(28, phys.INFLUENCE_FALLOFF, true);
+    view.setFloat32(32, phys.PENALTY_RADIUS, true);
+    view.setFloat32(36, phys.PENALTY_FALLOFF, true);
+
     const bParams = createBuffer(
       params,
-      32,
+      48,
       GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     );
 
@@ -435,25 +433,29 @@ class Mapper implements Mapping.Engine {
             penaltyCount: u32,
             iterations: u32,
             h: f32,
+            influenceRadius: f32,
+            influenceFalloff: f32,
+            penaltyRadius: f32,
+            penaltyFalloff: f32,
         };
         @group(0) @binding(4) var<uniform> params: Params;
 
-        fn densityAt(p: vec4<f32>) -> f32 {
+        fn potentialAt(p: vec4<f32>) -> f32 {
             var d = 1.0;
             for (var j = 0u; j < params.sysLength; j = j + 1u) {
                 let diff = p - sysPos[j];
                 let distSq = dot(diff, diff);
                 
-                if (distSq < 400.0) {
-                    d = d - sysInfluence[j] * exp(-distSq / 40.0);
+                if (distSq < params.influenceRadius) {
+                    d = d - sysInfluence[j] * exp(-distSq / params.influenceFalloff);
                 }
             }
             for (var k = 0u; k < params.penaltyCount; k = k + 1u) {
                 let pen = penalties[k];
                 let diff = p - pen.pos;
                 let distSq = dot(diff, diff);
-                if (distSq < 100.0) {
-                    d = d + pen.strength * exp(-distSq / 20.0);
+                if (distSq < params.penaltyRadius) {
+                    d = d + pen.strength * exp(-distSq / params.penaltyFalloff);
                 }
             }
             return max(0.01, d);
@@ -468,11 +470,11 @@ class Mapper implements Mapping.Engine {
                     let curr = pathData[i];
                     let h = params.h;
 
-                    let d0 = densityAt(curr);
-                    let gradX = (densityAt(vec4<f32>(curr.x + h, curr.y, curr.z, curr.w)) - d0) / h;
-                    let gradY = (densityAt(vec4<f32>(curr.x, curr.y + h, curr.z, curr.w)) - d0) / h;
-                    let gradZ = (densityAt(vec4<f32>(curr.x, curr.y, curr.z + h, curr.w)) - d0) / h;
-                    let gradW = (densityAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w + h)) - d0) / h;
+                    let d0 = potentialAt(curr);
+                    let gradX = (potentialAt(vec4<f32>(curr.x + h, curr.y, curr.z, curr.w)) - d0) / h;
+                    let gradY = (potentialAt(vec4<f32>(curr.x, curr.y + h, curr.z, curr.w)) - d0) / h;
+                    let gradZ = (potentialAt(vec4<f32>(curr.x, curr.y, curr.z + h, curr.w)) - d0) / h;
+                    let gradW = (potentialAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w + h)) - d0) / h;
                     let grad = vec4<f32>(gradX, gradY, gradZ, gradW);
 
                     let spring = (pathData[i - 1u] + pathData[i + 1u]) / 2.0 - curr;
@@ -527,13 +529,14 @@ class Mapper implements Mapping.Engine {
     }[],
     verbose: boolean = false
   ): void {
+    const phys = DOPAT_CONFIG.PHYSICS;
     for (let iter = 0; iter < maxIterations; iter++) {
       let totalGradNorm = 0;
       for (let i = 1; i < steps; i++) {
-        const h = 0.01; // Finite difference step for numerical gradient.
+        const h = phys.GRADIENT_STEP; // Finite difference step for numerical gradient.
 
         // Numerical gradient calculation: find the direction of steepest logical descent.
-        const d0 = this.getDensity(
+        const d0 = this.getPotential(
           px[i],
           py[i],
           pz[i],
@@ -542,7 +545,7 @@ class Mapper implements Mapping.Engine {
           boostScopes
         );
         const gx =
-          (this.getDensity(
+          (this.getPotential(
             px[i] + h,
             py[i],
             pz[i],
@@ -553,7 +556,7 @@ class Mapper implements Mapping.Engine {
             d0) /
           h;
         const gy =
-          (this.getDensity(
+          (this.getPotential(
             px[i],
             py[i] + h,
             pz[i],
@@ -564,7 +567,7 @@ class Mapper implements Mapping.Engine {
             d0) /
           h;
         const gz =
-          (this.getDensity(
+          (this.getPotential(
             px[i],
             py[i],
             pz[i] + h,
@@ -575,7 +578,7 @@ class Mapper implements Mapping.Engine {
             d0) /
           h;
         const gw =
-          (this.getDensity(
+          (this.getPotential(
             px[i],
             py[i],
             pz[i],
@@ -611,8 +614,9 @@ class Mapper implements Mapping.Engine {
   }
 
   /**
-   * Calculates the "logical resistance" or density at a given point in the manifold.
-   * Higher density means more logical relevance/attraction.
+   * Calculates the "logical resistance" or potential at a given point in the manifold.
+   * Higher potential means more logical void/resistance.
+   * Lower potential means more logical relevance/attraction.
    *
    * @param x Path X coordinate.
    * @param y Path Y coordinate.
@@ -620,9 +624,9 @@ class Mapper implements Mapping.Engine {
    * @param w Path Time (W) coordinate.
    * @param penalties Repulsion nodes.
    * @param boostScopes Scopes to prioritize.
-   * @returns The logical density value.
+   * @returns The logical potential value.
    */
-  private getDensity(
+  private getPotential(
     x: number,
     y: number,
     z: number,
@@ -638,7 +642,8 @@ class Mapper implements Mapping.Engine {
   ): number {
     const c = this.system.c || 1.0;
     const c2 = c * c;
-    let density = 1.0;
+    const phys = DOPAT_CONFIG.PHYSICS;
+    let potential = 1.0;
 
     for (let j = 0; j < this.system.length; j++) {
       const dx = x - this.system.posX[j],
@@ -648,7 +653,7 @@ class Mapper implements Mapping.Engine {
       const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
       // Only consider concepts within a reasonable influence radius.
-      if (distSq < 400.0) {
+      if (distSq < phys.INFLUENCE_RADIUS) {
         const massFactor = Math.abs(this.system.mass[j] / c2);
         const entropyFactor = this.system.entropy[j] || 0.1;
         const isBoosted = boostScopes?.has(this.system.scope[j]);
@@ -657,7 +662,7 @@ class Mapper implements Mapping.Engine {
         if (isBoosted) influence *= 10.0;
 
         // Concept Attraction: Create a deep potential well at the location of high-mass concepts.
-        density -= influence * Math.exp(-distSq / 40.0);
+        potential -= influence * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
       }
     }
 
@@ -668,42 +673,75 @@ class Mapper implements Mapping.Engine {
         dz = z - p.z,
         dw = w - p.w;
       const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-      if (distSq < 100.0) {
-        density += p.strength * Math.exp(-distSq / 20.0);
+      if (distSq < phys.PENALTY_RADIUS) {
+        potential += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
       }
     }
-    return Math.max(0.01, density);
+    return Math.max(0.01, potential);
   }
 
   /**
-   * Identifies the nearest precept ID in the manifold to a given coordinate.
-   *
-   * @param x Path X coordinate.
-   * @param y Path Y coordinate.
-   * @param z Path Entropy (Z) coordinate.
-   * @param w Path Time (W) coordinate.
-   * @returns The index of the nearest precept.
+   * Calculates the "logical resistance" or potential and finds the nearest precept.
+   * Combined to reduce manifold scans.
    */
-  private findNearestPrecept(
+  private getPotentialAndNearest(
     x: number,
     y: number,
     z: number,
-    w: number
-  ): number {
+    w: number,
+    penalties: {
+      x: number;
+      y: number;
+      z: number;
+      w: number;
+      strength: number;
+    }[],
+    boostScopes: Set<number> | undefined
+  ): { potential: number; nearestId: number } {
+    const c = this.system.c || 1.0;
+    const c2 = c * c;
+    const phys = DOPAT_CONFIG.PHYSICS;
+    let potential = 1.0;
     let nearestDistSq = Infinity;
     let nearestId = -1;
+
     for (let j = 0; j < this.system.length; j++) {
-      const dx = this.system.posX[j] - x;
-      const dy = this.system.posY[j] - y;
-      const dz = this.system.entropy[j] - z;
-      const dw = this.system.time[j] - w;
+      const dx = x - this.system.posX[j],
+        dy = y - this.system.posY[j],
+        dz = z - this.system.entropy[j],
+        dw = w - this.system.time[j];
       const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+
+      // Nearest search
       if (distSq < nearestDistSq) {
         nearestDistSq = distSq;
         nearestId = j;
       }
+
+      // Potential field calculation
+      if (distSq < phys.INFLUENCE_RADIUS) {
+        const massFactor = Math.abs(this.system.mass[j] / c2);
+        const entropyFactor = this.system.entropy[j] || 0.1;
+        const isBoosted = boostScopes?.has(this.system.scope[j]);
+
+        let influence = massFactor * 2.0 + entropyFactor * 1.5;
+        if (isBoosted) influence *= 10.0;
+
+        potential -= influence * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
+      }
     }
-    return nearestId;
+
+    for (const p of penalties) {
+      const dx = x - p.x,
+        dy = y - p.y,
+        dz = z - p.z,
+        dw = w - p.w;
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (distSq < phys.PENALTY_RADIUS) {
+        potential += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
+      }
+    }
+    return { potential: Math.max(0.01, potential), nearestId };
   }
 
   /**
@@ -733,6 +771,7 @@ class Mapper implements Mapping.Engine {
     // - at present, paradoxical queries are being resolved to "unknown";
     const c = this.system.c || 1.0;
     const c2 = c * c;
+    const phys = DOPAT_CONFIG.PHYSICS;
 
     for (let i = 1; i < steps; i++) {
       let nearestDistSq = Infinity,
@@ -751,10 +790,13 @@ class Mapper implements Mapping.Engine {
       }
 
       // Check if the nearest concept is a logic trap (Supermassive with no entropy).
-      if (nearestId !== -1 && nearestDistSq < 25.0) {
+      if (nearestId !== -1 && nearestDistSq < phys.TRAP_DISTANCE_THRESHOLD) {
         const massFactor = Math.abs(this.system.mass[nearestId] / c2);
         const entropy = this.system.entropy[nearestId];
-        if (massFactor > 500.0 && entropy < 0.1) {
+        if (
+          massFactor > phys.TRAP_MASS_THRESHOLD &&
+          entropy < phys.TRAP_ENTROPY_THRESHOLD
+        ) {
           return { passed: false, reason: "Logic Trap detected", trapIndex: i };
         }
       }
@@ -782,6 +824,7 @@ class Mapper implements Mapping.Engine {
   ): Uint32Array {
     const c = this.system.c || 1.0;
     const c2 = c * c;
+    const phys = DOPAT_CONFIG.PHYSICS;
     const resultIds: number[] = [];
 
     for (let i = 0; i <= steps; i++) {
@@ -798,7 +841,9 @@ class Mapper implements Mapping.Engine {
         if (diffSq < minDiff) {
           const massFactor = Math.abs(this.system.mass[j] / c2);
           // Explicitly avoid snapping to identified Logic Traps.
-          const isTrap = massFactor > 500.0 && this.system.entropy[j] < 0.1;
+          const isTrap =
+            massFactor > phys.TRAP_MASS_THRESHOLD &&
+            this.system.entropy[j] < phys.TRAP_ENTROPY_THRESHOLD;
 
           if (!isTrap) {
             minDiff = diffSq;
