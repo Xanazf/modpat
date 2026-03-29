@@ -541,6 +541,13 @@ class Mapper implements Mapping.Engine {
     pw: Float32Array,
     steps: number
   ): Mapping.ReviewReport {
+    // TODO: clarifying questions should probably go here.
+    // - broad queries result in traps and paradoxes;
+    //  - "what's up?" => "ceiling && sky && greeting";
+    //  - at the same time, "ceiling != sky != greeting", a paradox;
+    // - if the Mapper cannot bypass a paradox, trigger an "ask";
+    // - not bypassing a paradox means the query is too general;
+    // - at present, paradoxical queries are being resolved to "unknown";
     const c = this.system.c || 1.0;
     const c2 = c * c;
 

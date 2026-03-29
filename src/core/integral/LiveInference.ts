@@ -4,6 +4,7 @@ import wiki from "wikipedia";
 
 import type Resolver from "@core_i/Resolver";
 import type System from "@core_i/System";
+import { OperatorClass } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import logger from "@utils/SpectralLogger";
@@ -86,6 +87,7 @@ export class LiveInference {
     const whatIsMatch = sanitizedQuery.match(/what is (.*)/i);
     const whatWasMatch = sanitizedQuery.match(/what was (.*)/i);
     const whoIsMatch = sanitizedQuery.match(/who is (.*)/i);
+    const whoWasMatch = sanitizedQuery.match(/who was (.*)/i);
 
     // The Attraction Center is the primary mass around which the logic orbits.
     let attractionCenter = "";
@@ -97,7 +99,10 @@ export class LiveInference {
       topologicalQuery = `${attractionCenter} was`;
     } else if (whoIsMatch) {
       attractionCenter = whoIsMatch[1];
-      topologicalQuery = `${attractionCenter}`;
+      topologicalQuery = `${attractionCenter} is`;
+    } else if (whoWasMatch) {
+      attractionCenter = whoWasMatch[1];
+      topologicalQuery = `${attractionCenter} was`;
     } else {
       const doc = nlp(query);
       const nouns = doc.nouns().out("array");
@@ -126,11 +131,21 @@ export class LiveInference {
       .replace(/\s+/g, " ")
       .trim();
 
+    console.log(`[DEBUG] query: ${query}, topQuery: ${topologicalQuery}`);
+    console.log(`[DEBUG] inferredMeaning: ${inferredMeaning}`);
+
+    // EXCEPTION: Explanatory queries (who/what/how/why) should avoid simple direct identity matches
+    // from the memory vault if they are too brief (single tokens), as they likely represent
+    // collapsed wave-forms that lost their descriptive context.
+    const isExplanatory = query.toLowerCase().match(/^(how|why|who|what)/);
+    const isTooBrief = inferredMeaning.split(" ").length <= 1;
+
     // If we found a direct resonance that isn't just the query itself.
     if (
       inferredMeaning &&
       inferredMeaning !== topologicalQuery.toLowerCase() &&
-      inferredMeaning !== "unknown"
+      inferredMeaning !== "unknown" &&
+      (!isExplanatory || !isTooBrief)
     ) {
       this.respond(inferredMeaning);
       return inferredMeaning;
@@ -177,7 +192,14 @@ export class LiveInference {
             .match(/(because|due to|from|result of|cancer|died at|death of)/);
 
           if (bestFact && (!isComplexQuery || hasExplanatoryDensity)) {
-            return this.resolveThroughSystem(topologicalQuery, bestFact);
+            const isExpl = Boolean(
+              query.toLowerCase().match(/^(how|why|who|what)/)
+            );
+            return this.resolveThroughSystem(
+              topologicalQuery,
+              bestFact,
+              isExpl
+            );
           }
         }
       } catch (e) {
@@ -200,11 +222,13 @@ export class LiveInference {
    *
    * @param query The target query string.
    * @param fact The contextual fact to use as the topology.
+   * @param isExplanatoryQuery Whether the original query was an explanatory question.
    * @returns The most likely answer string derived from the fact.
    */
   private async resolveThroughSystem(
     query: string,
-    fact: string
+    fact: string,
+    isExplanatoryQuery: boolean = false
   ): Promise<string> {
     // 1. Ingest the factual context into the system to create the manifold.
     const contextQuanta = this.atomizer.ingestSequence(fact, this.system);
@@ -219,8 +243,12 @@ export class LiveInference {
 
     // 3. Fallback: Geodesic Pathfinding.
     // If direct inference fails, we find the shortest path between the fact and the query targets.
+    const isExplanatory =
+      isExplanatoryQuery || query.toLowerCase().match(/^(how|why|who|what)/);
+
     if (
-      (!inferredMeaning ||
+      (isExplanatory ||
+        !inferredMeaning ||
         inferredMeaning === query.toLowerCase() ||
         inferredMeaning === "unknown") &&
       queryQuanta.length > 0 &&
@@ -228,7 +256,16 @@ export class LiveInference {
     ) {
       // Connect source of fact to the TARGET of the query to find the minimal logical distance.
       const sourceQuantum = contextQuanta[0];
-      const targetQuantum = queryQuanta[queryQuanta.length - 1];
+
+      // Find the last non-operator token to use as the target
+      let targetIdx = queryQuanta.length - 1;
+      while (
+        targetIdx >= 0 &&
+        this.system.operatorClass[queryQuanta[targetIdx]] !== OperatorClass.None
+      ) {
+        targetIdx--;
+      }
+      const targetQuantum = queryQuanta[Math.max(0, targetIdx)];
 
       // LOGIC: Boost keyword scopes to pull the geodesic path towards relevant concepts.
       const doc = nlp(query);
@@ -271,7 +308,6 @@ export class LiveInference {
         }
 
         // Expand the window for explanatory queries to capture more context.
-        const isExplanatory = query.toLowerCase().match(/^(how|why)/);
         if (isExplanatory && maxFactIdx !== -1) {
           maxFactIdx = Math.min(contextQuanta.length - 1, maxFactIdx + 15);
         }
@@ -432,7 +468,8 @@ export class LiveInference {
       await this.processCommand(bestSentence);
 
       // Resolve the final answer formally through the System topology.
-      return this.resolveThroughSystem(topologicalQuery, bestSentence);
+      const isExpl = Boolean(query.toLowerCase().match(/^(how|why|who|what)/));
+      return this.resolveThroughSystem(topologicalQuery, bestSentence, isExpl);
     } catch (error) {
       const fallback = `I tried to look up "${attractionCenter}" on Wikipedia, but couldn't find anything useful.`;
       this.respond(fallback);

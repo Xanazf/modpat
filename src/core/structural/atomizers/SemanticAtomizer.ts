@@ -70,6 +70,13 @@ export default class SemanticAtomizer
    * @returns A sequence of quantum IDs representing the materialized semantic tokens.
    */
   public ingestSequence(text: string, system: System): Uint32Array {
+    // TODO: distinguish plurality more granularly:
+    // - "one" = baseline;
+    // - "all" = "one" * "a lot";
+    //  - very broad scope && very high mass;
+    //  - "a lot" = maxilon * 0.5?;
+    // - "some" || "few" = "one" * 1.5;
+
     // Inject custom logical semantics into the NLP engine to improve classification.
     const plugin = {
       words: {
@@ -90,13 +97,14 @@ export default class SemanticAtomizer
 
     if (!json || json.length === 0) return new Uint32Array(0);
 
-    const tokens: { text: string; isOp: boolean }[] = [];
+    const tokens: { text: string; isOp: boolean; isPlural: boolean }[] = [];
 
     // Map natural language terms to Topological Tokens by iterating through sentences.
     for (const sentence of json) {
       const terms = sentence.terms;
       let tempEntity: string[] = [];
       let lastEntityType: string | null = null;
+      let tempIsPlural = false;
 
       // Helper to push a accumulated entity (noun phrase) into the token list.
       const pushTemp = () => {
@@ -105,15 +113,25 @@ export default class SemanticAtomizer
             .join(" ")
             .replace(/[.,?!]+$/, "")
             .trim();
-          if (cleanText) tokens.push({ text: cleanText, isOp: false });
+          if (cleanText)
+            tokens.push({
+              text: cleanText,
+              isOp: false,
+              isPlural: tempIsPlural,
+            });
           tempEntity = [];
           lastEntityType = null;
+          tempIsPlural = false;
         }
       };
 
       for (const term of terms) {
         const tags = term.tags || [];
         const normal = (term.normal || term.text).toLowerCase();
+
+        // Plurality detection
+        const isPlural =
+          tags.includes("Plural") || normal === "are" || normal === "were";
 
         // Determine if the term acts as a logical operator (Massive Body).
         const isVerb = tags.includes("Verb") || tags.includes("Copula");
@@ -136,7 +154,7 @@ export default class SemanticAtomizer
           // Push any pending entity before processing the operator.
           pushTemp();
           const cleanOp = term.text.replace(/[.,?!]+$/, "").trim();
-          if (cleanOp) tokens.push({ text: cleanOp, isOp: true });
+          if (cleanOp) tokens.push({ text: cleanOp, isOp: true, isPlural });
           continue;
         }
 
@@ -150,6 +168,7 @@ export default class SemanticAtomizer
           tempEntity.push(term.text.replace(/[.,?!]+$/, "").trim());
           lastEntityType = entityType;
         }
+        tempIsPlural = isPlural;
       }
       // Final push for the last entity in the sentence.
       pushTemp();
@@ -159,15 +178,22 @@ export default class SemanticAtomizer
 
     // Calculate Physical Interaction parameters for each token (Mass, Scope, Entropy).
     for (let i = 0; i < tokens.length; i++) {
-      const { text, isOp } = tokens[i];
+      const { text, isOp, isPlural } = tokens[i];
       const s = text.toLowerCase().trim();
 
       // 1. Calculate Logical Mass (Attraction toward concept).
       // Operators are massive attractors; semantic atoms are light particles.
-      const mass = isOp ? system.c ** 2 : system.epsilon;
+      let mass = isOp ? system.c ** 2 : system.epsilon;
+
+      // Plural constructs possess a higher semantic weight in the manifold.
+      if (isPlural) {
+        mass *= 1.5;
+      }
 
       // 2. Map the token to its unique Frequency Field (Scope).
-      const scope = this.getSymbolScope(text);
+      // Append a plural modifier to the scope hash so singular and plural forms occupy distinct sub-spaces.
+      const scopeText = isPlural ? `${text}_PLURAL` : text;
+      const scope = this.getSymbolScope(scopeText);
 
       // 3. Materialize the Precept in the System manifold.
       const id = system.createLocation(mass, scope);

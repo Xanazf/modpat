@@ -88,7 +88,7 @@ export async function executeSemanticSuite() {
     });
 
     await it("Testing Unsupported Inference (Void)", async () => {
-      const testString = "Albert Einstein and Nikola Tesla were friends |-";
+      const testString = "Albert Einstein and Nikola Tesla liked pie |-";
       const ids = env.atomizer.ingestSequence(testString, env.system);
       const resolvedIds = await env.resolver.resolveSequence(ids);
       const resultString = env.atomizer.decodeSequence(resolvedIds, env.system);

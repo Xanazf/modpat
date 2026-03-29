@@ -192,13 +192,22 @@ export default class Resolver implements Resolution.Engine {
       // Check if this logical interference pattern has already been crystallized.
       if (this.store) {
         const cached = await this.store.checkInterferencePattern(sequenceIds);
-        if (cached) return cached;
+        if (cached) {
+          console.log(
+            `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.join(",")}, words: ${this.atomizer.decodeSequence(cached, this.system)}`
+          );
+          return cached;
+        }
       }
 
       // Perform a multi-token semantic lookup in the manifold.
       const result = await this.resolveMultiTokenSemanticLookup(
         subjectIds,
         lastId
+      );
+
+      console.log(
+        `[DEBUG RESOLVER] Phase 0 matched IDs: ${result.join(",")}, words: ${this.atomizer.decodeSequence(result, this.system)}`
       );
 
       // Crystallize the new proof into memory if a valid result was found.
@@ -394,7 +403,7 @@ export default class Resolver implements Resolution.Engine {
 
     // Assemble the final conclusion (e.g. "Socrates is mortal").
     if (sourceNodeIdx !== -1) {
-      const originalOp = this.findDominantOperator(sequenceIds);
+      const originalOp = this.findDominantOperator(sequenceIds, sourceNodeIdx);
       pushWithModifiers(sourceNodeIdx);
       if (originalOp !== -1) resultIds[resultCount++] = originalOp;
       pushWithModifiers(targetNodeIdx);
@@ -423,12 +432,26 @@ export default class Resolver implements Resolution.Engine {
 
   /**
    * Helper to find the operator that bridged a transitive relationship.
-   * Scans backward to find the last active IdentityShift.
+   * Scans forward from the source node to find its immediate operator, ensuring grammatical agreement.
+   * Falls back to scanning backward if no source node is provided.
    *
    * @param sequenceIds The quantum sequence.
+   * @param sourceNodeIdx Optional index of the subject node to match its specific operator.
    * @returns The quantum ID of the dominant operator.
    */
-  private findDominantOperator(sequenceIds: Uint32Array): number {
+  private findDominantOperator(
+    sequenceIds: Uint32Array,
+    sourceNodeIdx?: number
+  ): number {
+    if (sourceNodeIdx !== undefined && sourceNodeIdx !== -1) {
+      for (let i = sourceNodeIdx + 1; i < sequenceIds.length; i++) {
+        const cls = this.system.operatorClass[sequenceIds[i]];
+        if (cls === OperatorClass.IdentityShift) return sequenceIds[i];
+        if (cls === OperatorClass.Conjunction || cls === OperatorClass.Sink)
+          break;
+      }
+    }
+
     for (let i = sequenceIds.length - 1; i >= 0; i--) {
       const cls = this.system.operatorClass[sequenceIds[i]];
       if (cls === OperatorClass.IdentityShift) return sequenceIds[i];
@@ -501,12 +524,30 @@ export default class Resolver implements Resolution.Engine {
         // Euclidean distance in 4D manifold space.
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
+        // Prevent 0-vector collisions for missing embeddings. If it's 0 but the scopes don't match, it's a false positive.
+        if (distSq < 0.0001) {
+          // Check if at least one subject word matches to allow exact 0 distance
+          let hasMatch = false;
+          for (let s of subjectIds) {
+            if (this.system.scope[s] === this.system.scope[i]) {
+              hasMatch = true;
+              break;
+            }
+          }
+          if (!hasMatch) continue;
+        }
+
         if (distSq < 250.0) {
           // Relaxed threshold for 4D fuzzy centroid match.
-          if (operatorIdClass === OperatorClass.IdentityShift) {
-            results.push({ id: i, score: distSq * 0.1 });
+          if (
+            i + 2 < length &&
+            this.system.posY[i + 2] > this.system.posY[i + 1]
+          ) {
+            if (operatorIdClass === OperatorClass.IdentityShift) {
+              results.push({ id: i, score: distSq * 0.1 });
+            }
+            results.push({ id: i + 2, score: distSq });
           }
-          results.push({ id: i + 2, score: distSq });
         }
       }
     }
@@ -570,13 +611,22 @@ export default class Resolver implements Resolution.Engine {
         const dw = this.system.time[i] - subW;
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
+        if (distSq < 0.0001 && memSubScope !== subjectScope) {
+          continue;
+        }
+
         if (memSubScope === subjectScope) {
-          results.push({ id: i + 2, score: 0.001 });
+          results.push({ id: i + 2, score: -1.0 }); // Guarantee exact matches win
         } else if (distSq < 250.0) {
-          if (operatorIdClass === OperatorClass.IdentityShift) {
-            results.push({ id: i, score: distSq * 0.1 });
+          if (
+            i + 2 < length &&
+            this.system.posY[i + 2] > this.system.posY[i + 1]
+          ) {
+            if (operatorIdClass === OperatorClass.IdentityShift) {
+              results.push({ id: i, score: distSq * 0.1 });
+            }
+            results.push({ id: i + 2, score: distSq });
           }
-          results.push({ id: i + 2, score: distSq });
         }
       }
     }

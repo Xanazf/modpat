@@ -49,11 +49,18 @@ export enum OperatorClass {
  * @returns The classified OperatorClass.
  */
 function classifyOperatorToken(token: string): OperatorClass {
+  // TODO: allow the Mapper to expand this list
+  // - needs "persistent identity" check;
+  //  - operators are immutable across contexts;
+  //  - if new_operator != immutable { new_operator != OperatorClass }
+  // - possibly needs human review;
   switch (token.trim().toLowerCase()) {
     case "implies":
     case "=>":
     case "is":
     case "are":
+    case "was":
+    case "were":
     case "can":
       return OperatorClass.IdentityShift;
     case "&&":

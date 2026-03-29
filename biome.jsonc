@@ -6,9 +6,9 @@
       "!!**/dist",
       "!**/node_modules",
       "!**/.yarn",
-      "!**/scripts/venv",
-      "!**/scratchpad",
-      "!**/scripts"
+      "!!**/scripts/venv",
+      "!!**/scripts/*.py",
+      "!!**/scripts/*.txt"
     ]
   },
   "formatter": {
