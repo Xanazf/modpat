@@ -604,16 +604,14 @@ export default class Resolver implements Resolution.Engine {
     subjectIds: Uint32Array,
     operatorId: number
   ): Uint32Array {
-    if (subjectIds.length === 1) {
-      return this.resolveSemanticLookup(subjectIds[0], operatorId);
-    }
+    if (subjectIds.length === 0) return new Uint32Array(0);
 
     const operatorScope = this.system.scope[operatorId];
     const operatorIdClass = this.system.operatorClass[operatorId];
     const length = this.system.length;
 
     // 1. Structural Scope Sequence Match (Highest Precision).
-    // Scans the manifold for an exact match of the scope sequence.
+    // Forward Match: Inquiry Subject matches Memory Subject
     for (let i = 0; i < length - subjectIds.length - 1; i++) {
       let match = true;
       for (let j = 0; j < subjectIds.length; j++) {
@@ -623,12 +621,31 @@ export default class Resolver implements Resolution.Engine {
         }
       }
       if (match && this.system.scope[i + subjectIds.length] === operatorScope) {
-        return new Uint32Array([i + subjectIds.length + 1]);
+        return this.collectSequence(i + subjectIds.length + 1, 1);
+      }
+    }
+
+    // Backward Match: Inquiry Subject matches Memory Object (Identity Shift only)
+    if (operatorIdClass === OperatorClass.IdentityShift) {
+      for (let i = 1; i < length - subjectIds.length; i++) {
+        if (this.system.scope[i] === operatorScope) {
+          let match = true;
+          for (let j = 0; j < subjectIds.length; j++) {
+            if (
+              this.system.scope[i + 1 + j] !== this.system.scope[subjectIds[j]]
+            ) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            return this.collectSequence(i - 1, -1);
+          }
+        }
       }
     }
 
     // 2. Fuzzy Centroid Match in 4D (Lower Precision fallback).
-    // Calculates the average topological position of the multi-token subject.
     let subX = 0,
       subY = 0,
       subZ = 0,
@@ -645,62 +662,129 @@ export default class Resolver implements Resolution.Engine {
     subZ /= subjectIds.length;
     subW /= subjectIds.length;
 
-    const results: { id: number; score: number }[] = [];
-    for (let i = 0; i < length - 2; i++) {
-      const memOpClass = this.system.operatorClass[i + 1];
+    const results: { ids: Uint32Array; score: number }[] = [];
+    for (let i = 0; i < length; i++) {
+      const opClass = this.system.operatorClass[i];
 
-      if (memOpClass === operatorIdClass) {
-        const dx = this.system.posX[i] - subX;
-        const dy = this.system.posY[i] - subY;
-        const dz = this.system.posZ[i] - subZ;
-        const dw = this.system.posW[i] - subW;
-        // Euclidean distance in 4D manifold space.
-        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (opClass === operatorIdClass) {
+        // Try Memory Subject Match
+        const memSub = this.getClusterCentroid(i - 1, -1);
+        if (memSub.count > 0) {
+          const dx = memSub.x - subX;
+          const dy = memSub.y - subY;
+          const dz = memSub.z - subZ;
+          const dw = memSub.w - subW;
+          const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
-        // Prevent 0-vector collisions for missing embeddings. If it's 0 but the scopes don't match, it's a false positive.
-        if (distSq < 0.0001) {
-          // Check if at least one subject word matches to allow exact 0 distance
-          let hasMatch = false;
-          for (let s of subjectIds) {
-            if (this.system.scope[s] === this.system.scope[i]) {
-              hasMatch = true;
-              break;
-            }
+          if (distSq < 250.0) {
+            results.push({
+              ids: this.collectSequence(i + 1, 1),
+              score: distSq,
+            });
           }
-          if (!hasMatch) continue;
         }
 
-        if (distSq < 250.0) {
-          // Relaxed threshold for 4D fuzzy centroid match.
-          if (
-            i + 2 < length &&
-            this.system.posY[i + 2] > this.system.posY[i + 1]
-          ) {
-            if (operatorIdClass === OperatorClass.IdentityShift) {
-              results.push({ id: i, score: distSq * 0.1 });
+        // Try Memory Object Match (Identity Shift)
+        if (opClass === OperatorClass.IdentityShift) {
+          const memObj = this.getClusterCentroid(i + 1, 1);
+          if (memObj.count > 0) {
+            const dx = memObj.x - subX;
+            const dy = memObj.y - subY;
+            const dz = memObj.z - subZ;
+            const dw = memObj.w - subW;
+            const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+
+            if (distSq < 250.0) {
+              results.push({
+                ids: this.collectSequence(i - 1, -1),
+                score: distSq * 0.1, // Identity objects get priority
+              });
             }
-            results.push({ id: i + 2, score: distSq });
           }
         }
       }
     }
 
     if (results.length > 0) {
-      // Sort by proximity and return unique scope results.
       results.sort((a, b) => a.score - b.score);
-      const uniqueIds: number[] = [];
-      const seenScopes = new Set<number>();
-      for (const res of results) {
-        const scope = this.system.scope[res.id];
-        if (!seenScopes.has(scope)) {
-          uniqueIds.push(res.id);
-          seenScopes.add(scope);
-        }
-      }
-      return new Uint32Array(uniqueIds);
+      return results[0].ids;
     }
 
     return new Uint32Array(0);
+  }
+
+  /**
+   * Helper to calculate the centroid of a contiguous cluster of non-operator tokens.
+   * Stops at operator boundaries or Kind coordinate (posY) discontinuities.
+   */
+  private getClusterCentroid(
+    startId: number,
+    direction: 1 | -1
+  ): { x: number; y: number; z: number; w: number; count: number } {
+    let x = 0,
+      y = 0,
+      z = 0,
+      w = 0,
+      count = 0;
+    const length = this.system.length;
+    let k = startId;
+    let lastY = -1;
+
+    while (k >= 0 && k < length) {
+      if (this.system.operatorClass[k] !== OperatorClass.None) break;
+
+      const currY = this.system.posY[k];
+      if (count > 0) {
+        // Continuity Check: stop if posY jumps (indicates a different sequence/sentence)
+        if (direction === 1 && currY <= lastY) break;
+        if (direction === -1 && currY >= lastY) break;
+      }
+
+      x += this.system.posX[k];
+      y += this.system.posY[k];
+      z += this.system.posZ[k];
+      w += this.system.posW[k];
+      count++;
+      lastY = currY;
+      k += direction;
+    }
+
+    if (count > 0) {
+      x /= count;
+      y /= count;
+      z /= count;
+      w /= count;
+    }
+    return { x, y, z, w, count };
+  }
+
+  /**
+   * Helper to collect a contiguous sequence of non-operator tokens.
+   * Stops at operator boundaries or Kind coordinate (posY) discontinuities.
+   */
+  private collectSequence(startId: number, direction: 1 | -1): Uint32Array {
+    const ids: number[] = [];
+    const length = this.system.length;
+    let k = startId;
+    let lastY = -1;
+
+    while (k >= 0 && k < length) {
+      if (this.system.operatorClass[k] !== OperatorClass.None) break;
+
+      const currY = this.system.posY[k];
+      if (ids.length > 0) {
+        // Continuity Check: stop if posY jumps
+        if (direction === 1 && currY <= lastY) break;
+        if (direction === -1 && currY >= lastY) break;
+      }
+
+      if (direction === 1) ids.push(k);
+      else ids.unshift(k);
+
+      lastY = currY;
+      k += direction;
+    }
+    return new Uint32Array(ids);
   }
 
   /**
@@ -715,70 +799,10 @@ export default class Resolver implements Resolution.Engine {
     subjectId: number,
     operatorId: number
   ): Uint32Array {
-    const subjectScope = this.system.scope[subjectId];
-    const operatorIdClass = this.system.operatorClass[operatorId];
-    const subX = this.system.posX[subjectId];
-    const subY = this.system.posY[subjectId];
-    const subZ = this.system.posZ[subjectId];
-    const subW = this.system.posW[subjectId];
-
-    const results: { id: number; score: number }[] = [];
-    const length = this.system.length;
-    const operatorScope = this.system.scope[operatorId];
-
-    for (let i = 0; i < length - 2; i++) {
-      const memSubScope = this.system.scope[i];
-      const memOpScope = this.system.scope[i + 1];
-      const memOpClass = this.system.operatorClass[i + 1];
-
-      // Exact Scope Match: perfect structural resonance.
-      if (memSubScope === subjectScope && memOpScope === operatorScope) {
-        return new Uint32Array([i + 2]);
-      }
-
-      // Fuzzy 4D Match: topological proximity in meaning.
-      if (memOpClass === operatorIdClass) {
-        const dx = this.system.posX[i] - subX;
-        const dy = this.system.posY[i] - subY;
-        const dz = this.system.posZ[i] - subZ;
-        const dw = this.system.posW[i] - subW;
-        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-
-        if (distSq < 0.0001 && memSubScope !== subjectScope) {
-          continue;
-        }
-
-        if (memSubScope === subjectScope) {
-          results.push({ id: i + 2, score: -1.0 }); // Guarantee exact matches win
-        } else if (distSq < 250.0) {
-          if (
-            i + 2 < length &&
-            this.system.posY[i + 2] > this.system.posY[i + 1]
-          ) {
-            if (operatorIdClass === OperatorClass.IdentityShift) {
-              results.push({ id: i, score: distSq * 0.1 });
-            }
-            results.push({ id: i + 2, score: distSq });
-          }
-        }
-      }
-    }
-
-    if (results.length > 0) {
-      results.sort((a, b) => a.score - b.score);
-      const uniqueIds: number[] = [];
-      const seenScopes = new Set<number>();
-      for (const res of results) {
-        const scope = this.system.scope[res.id];
-        if (!seenScopes.has(scope)) {
-          uniqueIds.push(res.id);
-          seenScopes.add(scope);
-        }
-      }
-      return new Uint32Array(uniqueIds);
-    }
-
-    return new Uint32Array(0);
+    return this.resolveMultiTokenSemanticLookup(
+      new Uint32Array([subjectId]),
+      operatorId
+    );
   }
 
   /**

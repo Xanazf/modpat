@@ -30,6 +30,8 @@ export class ManifoldManager {
 
   /** Flag to prevent race conditions during asynchronous self-healing hydration. */
   private isHydrating: boolean = false;
+  /** Promise tracking the current hydration process. */
+  private stabilityPromise: Promise<void> | null = null;
 
   /**
    * Initializes the Manifold Manager with primary and emergency systems.
@@ -125,7 +127,7 @@ export class ManifoldManager {
    * persistent store (DuckDB).
    */
   public async selfHealRoutine(): Promise<void> {
-    if (this.isHydrating) return;
+    if (this.isHydrating) return this.stabilityPromise || Promise.resolve();
 
     const corruptedIds = this.activeSystem.checkIntegrity();
     if (corruptedIds.length > 0) {
@@ -133,13 +135,16 @@ export class ManifoldManager {
         `[ManifoldManager] Detected ${corruptedIds.length} corrupted precepts. Initiating self-healing...`
       );
       this.isHydrating = true;
-      try {
-        // Perform a full hydrate from DuckDB for maximum safety
-        await this.activeSystem.hydrate(this.persistence);
-        console.log(`[ManifoldManager] Self-healing complete.`);
-      } finally {
-        this.isHydrating = false;
-      }
+      this.stabilityPromise = this.activeSystem
+        .hydrate(this.persistence)
+        .then(() => {
+          console.log(`[ManifoldManager] Self-healing complete.`);
+        })
+        .finally(() => {
+          this.isHydrating = false;
+          this.stabilityPromise = null;
+        });
+      await this.stabilityPromise;
     }
   }
 
@@ -151,15 +156,17 @@ export class ManifoldManager {
    *
    * @param reason - Descriptive reason for the interrupt.
    */
-  public triggerInterrupt(reason: string): void {
+  public async triggerInterrupt(reason: string): Promise<void> {
     console.error(
       `[ManifoldManager] CRITICAL INTERRUPT: ${reason}. Switching to Emergency Manifold!`
     );
     this.activeSystem = this.emergencySystem;
 
     // Attempt to hydrate emergency system from persistence to prevent operating on stale/empty state
+    if (this.isHydrating) return this.stabilityPromise || Promise.resolve();
+
     this.isHydrating = true;
-    this.activeSystem
+    this.stabilityPromise = this.activeSystem
       .hydrate(this.persistence)
       .then(() => {
         console.log(
@@ -174,7 +181,10 @@ export class ManifoldManager {
       })
       .finally(() => {
         this.isHydrating = false;
+        this.stabilityPromise = null;
       });
+
+    await this.stabilityPromise;
   }
 
   /**
@@ -183,7 +193,7 @@ export class ManifoldManager {
    * Anomalies are defined as logic atoms with excessive matter mass
    * and high decay rates, which can destabilize the surrounding topology.
    */
-  public monitorThreats(): void {
+  public async monitorThreats(): Promise<void> {
     const sys = this.activeSystem;
     for (let i = 0; i < sys.length; i++) {
       // Very high mass + high decay rate = anomaly/threat
@@ -191,7 +201,7 @@ export class ManifoldManager {
         Math.abs(sys.mass[i]) > sys.c ** 2 * 1000.0 &&
         sys.decayRate[i] > 50.0
       ) {
-        this.triggerInterrupt("High-mass anomaly detected");
+        await this.triggerInterrupt("High-mass anomaly detected");
         break;
       }
     }
@@ -213,10 +223,26 @@ export class ManifoldManager {
     this.activeSystem.decay(dt);
 
     // Scan for destabilizing anomalies
-    this.monitorThreats();
+    this.monitorThreats().catch(err => {
+      console.error(
+        "[ManifoldManager] Error monitoring threats during tick:",
+        err
+      );
+    });
 
     // Trigger background self-healing
-    this.selfHealRoutine().catch(console.error);
+    this.selfHealRoutine().catch(err => {
+      console.error("[ManifoldManager] Error during self-healing tick:", err);
+    });
+  }
+
+  /**
+   * Awaits all pending background stabilization tasks (hydration, self-healing).
+   */
+  public async waitForStability(): Promise<void> {
+    if (this.stabilityPromise) {
+      await this.stabilityPromise;
+    }
   }
 
   /**

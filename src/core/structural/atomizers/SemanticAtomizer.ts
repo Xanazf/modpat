@@ -70,64 +70,31 @@ export default class SemanticAtomizer
     // Ensure |- is NOT split.
     const preparedText = text
       .replace(/\|-/g, " SINK_MARKER ")
-      .replace(/([(){}:,+-])/g, " $1 ")
+      .replace(/([(){}\[\]:;.,+\-*/=<>])/g, " $1 ")
       .replace(/SINK_MARKER/g, "|-");
 
-    const doc = nlp(preparedText);
-    const json = doc.json();
+    const rawTokens = preparedText.split(/\s+/).filter(t => t.length > 0);
     const tokens: { text: string; isOp: boolean; isPlural: boolean }[] = [];
 
-    for (const sentence of json) {
-      const terms = sentence.terms;
-      let tempEntity: string[] = [];
-      let lastEntityType: string | null = null;
-      let tempIsPlural = false;
+    for (const token of rawTokens) {
+      const normal = token.toLowerCase();
+      const isStructural = ["(", ")", "{", "}", ":", ",", "+", "|-"].includes(normal);
+      const isHardOp = this.hardOperators.has(normal) || ["implies", "=>", "|-"].includes(normal);
+      const isMathAtom = ["x", "y", "z", "a", "b", "c", "number"].includes(normal);
+      const isKeyword = SYNTAX_ATTRACTORS.KEYWORDS.has(normal);
 
-      const pushTemp = () => {
-        if (tempEntity.length > 0) {
-          const cleanText = tempEntity.join(" ").trim();
-          if (cleanText) {
-            const normal = cleanText.toLowerCase();
-            const isHardOp = this.hardOperators.has(normal) || ["implies", "=>", "|-"].includes(normal);
-            const isMathAtom = ["x", "y", "z", "a", "b", "c", "number"].includes(normal);
-            
-            tokens.push({
-              text: cleanText,
-              isOp: isHardOp || isMathAtom || this.logicalAdverbs.has(normal),
-              isPlural: tempIsPlural,
-            });
-          }
-          tempEntity = []; lastEntityType = null; tempIsPlural = false;
-        }
-      };
+      // Simple NLP tagging per token to maintain identity but get basic metadata
+      const doc = nlp(token);
+      const term = doc.json()[0]?.terms[0] || {};
+      const tags = term.tags || [];
+      const isVerb = tags.includes("Verb") || tags.includes("Copula") || tags.includes("PastTense");
+      const isPlural = tags.includes("Plural") || normal === "are" || normal === "were";
 
-      for (const term of terms) {
-        const normal = (term.normal || term.text).toLowerCase();
-        const tags = term.tags || [];
-        const isPlural = tags.includes("Plural") || normal === "are" || normal === "were";
-        const isVerb = tags.includes("Verb") || tags.includes("Copula") || tags.includes("PastTense");
-        
-        const isStructural = ["(", ")", "{", "}", ":", ",", "+", "|-"].includes(normal);
-        
-        // Verbs and structural symbols act as entity boundaries
-        if (isStructural || isVerb) {
-          pushTemp();
-          tokens.push({ text: term.text.trim(), isOp: true, isPlural });
-          continue;
-        }
-
-        const entityType = this.getEntityType(tags);
-        if (lastEntityType === null || lastEntityType === entityType) {
-          tempEntity.push(term.text.trim());
-          lastEntityType = entityType;
-        } else {
-          pushTemp();
-          tempEntity.push(term.text.trim());
-          lastEntityType = entityType;
-        }
-        tempIsPlural = isPlural;
-      }
-      pushTemp();
+      tokens.push({
+        text: token,
+        isOp: isStructural || isHardOp || isMathAtom || isVerb || isKeyword || this.logicalAdverbs.has(normal),
+        isPlural
+      });
     }
 
     const sequenceIds = new Uint32Array(tokens.length);
@@ -185,12 +152,14 @@ export default class SemanticAtomizer
 
       // Triplet Inheritance: if preceded by "the", this particle becomes a specific landmark
       if (i > 0) {
-        const prevNorm = tokens[i-1].text.toLowerCase().trim();
+        const prevNorm = tokens[i - 1].text.toLowerCase().trim();
         // Check for "the [x]" or "the [x] [y]"
-        if (prevNorm === "the" || (i > 1 && tokens[i-2].text.toLowerCase().trim() === "the")) {
+        if (
+          prevNorm === "the" ||
+          (i > 1 && tokens[i - 2].text.toLowerCase().trim() === "the")
+        ) {
           system.mass[id] *= 4.0; // Significant triplet boost
           depth = 0.1; // Force high specificity
-          system.scope[id] *= 0.5; // Narrow logical reach
         }
       }
 

@@ -150,6 +150,8 @@ export async function executeSignalManagerSuite() {
         emergencySystem,
         "Manager must hot-swap to Emergency System when threat detected"
       );
+      
+      await manager.waitForStability();
     });
 
     await it("Test 5: Temporal Truth Decay (Matter Half-Life)", async () => {

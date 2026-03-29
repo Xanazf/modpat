@@ -73,9 +73,11 @@ export async function executeSemanticSuite() {
       );
 
       const testString = "if in 1827 Nikola Tesla studied electricity |-";
+      logger.log("[DEBUG]", testString);
       const ids = env.atomizer.ingestSequence(testString, env.system);
       const resolvedIds = await env.resolver.resolveSequence(ids);
       const resultString = env.atomizer.decodeSequence(resolvedIds, env.system);
+      logger.log("[DEBUG]", resultString);
 
       assert.strictEqual(
         resultString,
