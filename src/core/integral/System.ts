@@ -51,12 +51,12 @@ export enum OperatorClass {
  * @returns The classified OperatorClass.
  */
 function classifyOperatorToken(token: string): OperatorClass {
-  const norm = token.trim();
+  const norm = token.trim().toLowerCase();
 
   // TypeScript Physicalized Code Synthesis: check syntax attractors first.
   if (
-    SYNTAX_ATTRACTORS.KEYWORDS.includes(norm) ||
-    SYNTAX_ATTRACTORS.STRUCTURES.includes(norm)
+    SYNTAX_ATTRACTORS.KEYWORDS.has(norm) ||
+    SYNTAX_ATTRACTORS.STRUCTURES.has(norm)
   ) {
     return OperatorClass.SyntaxAnchor;
   }
@@ -66,7 +66,7 @@ function classifyOperatorToken(token: string): OperatorClass {
   //  - operators are immutable across contexts;
   //  - if new_operator != immutable { new_operator != OperatorClass }
   // - possibly needs human review;
-  switch (norm.toLowerCase()) {
+  switch (norm) {
     case "implies":
     case "=>":
     case "is":

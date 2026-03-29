@@ -91,8 +91,8 @@ const ATOMIC_PATTERNS = [
 ];
 
 export const SYNTAX_ATTRACTORS = {
-  KEYWORDS: ["function", "const", "let", "return", "if", "else", "import", "export", "class", "interface", "type", "await", "async"],
-  STRUCTURES: ["{", "}", "(", ")", "[", "]", "=>", ":", ";", "."]
+  KEYWORDS: new Set(["function", "const", "let", "return", "if", "else", "import", "export", "class", "interface", "type", "await", "async"]),
+  STRUCTURES: new Set(["{", "}", "(", ")", "[", "]", "=>", ":", ";", "."])
 };
 
 export {
