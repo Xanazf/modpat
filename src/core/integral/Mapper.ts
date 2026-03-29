@@ -1,6 +1,8 @@
 import logger from "@utils/SpectralLogger";
 import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
+import type Unfolder from "@core_s/Unfolder";
+import { DOPAT_CONFIG } from "@config";
 
 /**
  * The Mapper is responsible for finding the shortest logical path
@@ -15,18 +17,29 @@ class Mapper implements Mapping.Engine {
   private system: System;
   /** Optional GPU math engine for acceleration. */
   private gpu: TensorMath_GPU | null = null;
+  /** Optional Fractal Unfolder for expanding logical voids. */
+  private unfolder: Unfolder | null = null;
   /** WebGPU pipeline for geodesic calculations. */
   private geodesicPipeline: GPUComputePipeline | null = null;
+
+  /** Minimum density required before triggering an expansion. */
+  private static readonly MIN_DENSITY_THRESHOLD = 0.2;
 
   /**
    * Initializes the mapper with a reference to the active logical manifold.
    *
    * @param system The logical manifold.
    * @param gpu Optional GPU engine.
+   * @param unfolder Optional Unfolder engine.
    */
-  constructor(system: System, gpu: TensorMath_GPU | null = null) {
+  constructor(
+    system: System,
+    gpu: TensorMath_GPU | null = null,
+    unfolder: Unfolder | null = null
+  ) {
     this.system = system;
     this.gpu = gpu;
+    this.unfolder = unfolder;
   }
 
   /**
@@ -35,6 +48,13 @@ class Mapper implements Mapping.Engine {
   public setGPU(gpu: TensorMath_GPU | null): void {
     this.gpu = gpu;
     this.geodesicPipeline = null; // Reset pipeline to trigger re-init if needed.
+  }
+
+  /**
+   * Sets or updates the Unfolder engine used by the mapper.
+   */
+  public setUnfolder(unfolder: Unfolder | null): void {
+    this.unfolder = unfolder;
   }
 
   /**
@@ -131,6 +151,68 @@ class Mapper implements Mapping.Engine {
           penalties,
           verbose
         );
+      }
+
+      // Check for logical voids (areas of low density) and trigger expansion if needed.
+      if (this.unfolder) {
+        let voidDetected = false;
+        for (let i = 0; i <= steps; i++) {
+          const density = this.getDensity(
+            px[i],
+            py[i],
+            pz[i],
+            pw[i],
+            penalties,
+            boostScopes
+          );
+          if (density < Mapper.MIN_DENSITY_THRESHOLD) {
+            const voidPreceptId = this.findNearestPrecept(
+              px[i],
+              py[i],
+              pz[i],
+              pw[i]
+            );
+            if (voidPreceptId !== -1) {
+              logger.step(
+                `Mapper: Logical void detected near precept ${voidPreceptId}. Triggering expansion...`
+              );
+              await this.unfolder.expand(voidPreceptId, options.topic ?? "Logic");
+              voidDetected = true;
+              break; // Expand one void at a time to allow the path to warp.
+            }
+          }
+        }
+
+        if (voidDetected) {
+          // Re-run relaxation now that the manifold has new precepts.
+          if (this.gpu) {
+            await this.relaxPathGPU(
+              px,
+              py,
+              pz,
+              pw,
+              steps,
+              maxIterations,
+              learningRate,
+              boostScopes,
+              penalties,
+              verbose
+            );
+          } else {
+            this.relaxPath(
+              px,
+              py,
+              pz,
+              pw,
+              steps,
+              maxIterations,
+              learningRate,
+              boostScopes,
+              penalties,
+              verbose
+            );
+          }
+        }
       }
 
       // Review the relaxed path for logical stability.
@@ -445,59 +527,64 @@ class Mapper implements Mapping.Engine {
     }[],
     verbose: boolean = false
   ): void {
-    const c = this.system.c || 1.0;
-    const c2 = c * c;
-
     for (let iter = 0; iter < maxIterations; iter++) {
       let totalGradNorm = 0;
       for (let i = 1; i < steps; i++) {
         const h = 0.01; // Finite difference step for numerical gradient.
 
-        // densityAt calculates the "logical resistance" at a given point in the manifold.
-        // Higher density means more logical relevance/attraction.
-        const densityAt = (x: number, y: number, z: number, w: number) => {
-          let density = 1.0;
-          for (let j = 0; j < this.system.length; j++) {
-            const dx = x - this.system.posX[j],
-              dy = y - this.system.posY[j];
-            const dz = z - this.system.entropy[j],
-              dw = w - this.system.time[j];
-            const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-
-            // Only consider concepts within a reasonable influence radius.
-            if (distSq < 400.0) {
-              const massFactor = Math.abs(this.system.mass[j] / c2);
-              const entropyFactor = this.system.entropy[j] || 0.1;
-              const isBoosted = boostScopes?.has(this.system.scope[j]);
-
-              let influence = massFactor * 2.0 + entropyFactor * 1.5;
-              if (isBoosted) influence *= 10.0;
-
-              // Concept Attraction: Create a deep potential well at the location of high-mass concepts.
-              density -= influence * Math.exp(-distSq / 40.0);
-            }
-          }
-
-          // Trap Repulsion: Apply massive resistance at logic trap coordinates.
-          for (const p of penalties) {
-            const dx = x - p.x,
-              dy = y - p.y,
-              dz = z - p.z,
-              dw = w - p.w;
-            const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-            if (distSq < 100.0) {
-              density += p.strength * Math.exp(-distSq / 20.0);
-            }
-          }
-          return Math.max(0.01, density);
-        };
-
         // Numerical gradient calculation: find the direction of steepest logical descent.
-        const d0 = densityAt(px[i], py[i], pz[i], pw[i]);
-        const gx = (densityAt(px[i] + h, py[i], pz[i], pw[i]) - d0) / h;
-        const gy = (densityAt(px[i], py[i] + h, pz[i], pw[i]) - d0) / h;
-        const gz = (densityAt(px[i], py[i], pz[i] + h, pw[i]) - d0) / h;
-        const gw = (densityAt(px[i], py[i], pz[i], pw[i] + h) - d0) / h;
+        const d0 = this.getDensity(
+          px[i],
+          py[i],
+          pz[i],
+          pw[i],
+          penalties,
+          boostScopes
+        );
+        const gx =
+          (this.getDensity(
+            px[i] + h,
+            py[i],
+            pz[i],
+            pw[i],
+            penalties,
+            boostScopes
+          ) -
+            d0) /
+          h;
+        const gy =
+          (this.getDensity(
+            px[i],
+            py[i] + h,
+            pz[i],
+            pw[i],
+            penalties,
+            boostScopes
+          ) -
+            d0) /
+          h;
+        const gz =
+          (this.getDensity(
+            px[i],
+            py[i],
+            pz[i] + h,
+            pw[i],
+            penalties,
+            boostScopes
+          ) -
+            d0) /
+          h;
+        const gw =
+          (this.getDensity(
+            px[i],
+            py[i],
+            pz[i],
+            pw[i] + h,
+            penalties,
+            boostScopes
+          ) -
+            d0) /
+          h;
 
         // Spring Force: Maintains logical smoothness by pulling the node toward its neighbors.
         const sx = (px[i - 1] + px[i + 1]) / 2 - px[i];
@@ -521,6 +608,102 @@ class Mapper implements Mapping.Engine {
         );
       }
     }
+  }
+
+  /**
+   * Calculates the "logical resistance" or density at a given point in the manifold.
+   * Higher density means more logical relevance/attraction.
+   *
+   * @param x Path X coordinate.
+   * @param y Path Y coordinate.
+   * @param z Path Entropy (Z) coordinate.
+   * @param w Path Time (W) coordinate.
+   * @param penalties Repulsion nodes.
+   * @param boostScopes Scopes to prioritize.
+   * @returns The logical density value.
+   */
+  private getDensity(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    penalties: {
+      x: number;
+      y: number;
+      z: number;
+      w: number;
+      strength: number;
+    }[],
+    boostScopes: Set<number> | undefined
+  ): number {
+    const c = this.system.c || 1.0;
+    const c2 = c * c;
+    let density = 1.0;
+
+    for (let j = 0; j < this.system.length; j++) {
+      const dx = x - this.system.posX[j],
+        dy = y - this.system.posY[j],
+        dz = z - this.system.entropy[j],
+        dw = w - this.system.time[j];
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+
+      // Only consider concepts within a reasonable influence radius.
+      if (distSq < 400.0) {
+        const massFactor = Math.abs(this.system.mass[j] / c2);
+        const entropyFactor = this.system.entropy[j] || 0.1;
+        const isBoosted = boostScopes?.has(this.system.scope[j]);
+
+        let influence = massFactor * 2.0 + entropyFactor * 1.5;
+        if (isBoosted) influence *= 10.0;
+
+        // Concept Attraction: Create a deep potential well at the location of high-mass concepts.
+        density -= influence * Math.exp(-distSq / 40.0);
+      }
+    }
+
+    // Trap Repulsion: Apply massive resistance at logic trap coordinates.
+    for (const p of penalties) {
+      const dx = x - p.x,
+        dy = y - p.y,
+        dz = z - p.z,
+        dw = w - p.w;
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (distSq < 100.0) {
+        density += p.strength * Math.exp(-distSq / 20.0);
+      }
+    }
+    return Math.max(0.01, density);
+  }
+
+  /**
+   * Identifies the nearest precept ID in the manifold to a given coordinate.
+   *
+   * @param x Path X coordinate.
+   * @param y Path Y coordinate.
+   * @param z Path Entropy (Z) coordinate.
+   * @param w Path Time (W) coordinate.
+   * @returns The index of the nearest precept.
+   */
+  private findNearestPrecept(
+    x: number,
+    y: number,
+    z: number,
+    w: number
+  ): number {
+    let nearestDistSq = Infinity;
+    let nearestId = -1;
+    for (let j = 0; j < this.system.length; j++) {
+      const dx = this.system.posX[j] - x;
+      const dy = this.system.posY[j] - y;
+      const dz = this.system.entropy[j] - z;
+      const dw = this.system.time[j] - w;
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearestId = j;
+      }
+    }
+    return nearestId;
   }
 
   /**
