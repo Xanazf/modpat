@@ -1,4 +1,4 @@
-import { DOPAT_CONFIG } from "@config";
+import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
 
 /**
  * Enumeration of physical property buffers within the logical manifold.
@@ -40,6 +40,8 @@ export enum OperatorClass {
   Action = 7,
   /** Query-based operators used for logical interrogation. */
   Query = 8,
+  /** Syntactic landmarks for physicalized code synthesis. */
+  SyntaxAnchor = 9,
 }
 
 /**
@@ -49,12 +51,22 @@ export enum OperatorClass {
  * @returns The classified OperatorClass.
  */
 function classifyOperatorToken(token: string): OperatorClass {
+  const norm = token.trim();
+
+  // TypeScript Physicalized Code Synthesis: check syntax attractors first.
+  if (
+    SYNTAX_ATTRACTORS.KEYWORDS.includes(norm) ||
+    SYNTAX_ATTRACTORS.STRUCTURES.includes(norm)
+  ) {
+    return OperatorClass.SyntaxAnchor;
+  }
+
   // TODO: allow the Mapper to expand this list
   // - needs "persistent identity" check;
   //  - operators are immutable across contexts;
   //  - if new_operator != immutable { new_operator != OperatorClass }
   // - possibly needs human review;
-  switch (token.trim().toLowerCase()) {
+  switch (norm.toLowerCase()) {
     case "implies":
     case "=>":
     case "is":

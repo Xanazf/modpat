@@ -90,6 +90,11 @@ const ATOMIC_PATTERNS = [
   /\b[a-z]\b/i,
 ];
 
+export const SYNTAX_ATTRACTORS = {
+  KEYWORDS: ["function", "const", "let", "return", "if", "else", "import", "export", "class", "interface", "type", "await", "async"],
+  STRUCTURES: ["{", "}", "(", ")", "[", "]", "=>", ":", ";", "."]
+};
+
 export {
   ATOMIC_PATTERNS,
   BRAIN_CONFIG,
