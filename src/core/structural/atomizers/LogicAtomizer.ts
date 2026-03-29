@@ -73,11 +73,24 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
       system.operatorClass[id] = classifyOperatorToken(token);
       sequenceIds[i] = id;
 
-      // 4. Project the token into the Space-Time Manifold.
+      // 4. Project the token into the Dual-Layer Manifold.
+      // Matter Layer content:
+      // Depth (Energy) and Time (Age) for logic atoms.
+      system.depth[id] = isOperator ? 1.0 : 0.5;
+      system.time[id] = i * 0.01;
+
+      // Coordinate Layer positioning:
       // posX: Semantic relationship determined by UMAP 1D dimensionality reduction.
       system.posX[id] = this.loader.getScope(token);
-      // posY: Sequential Temporal Offset, placing tokens in order of appearance.
+      // posY: Structural kind coordinate.
       system.posY[id] = i * 0.1;
+      // posZ: Energy coordinate (matches Depth content).
+      system.posZ[id] = system.depth[id];
+      // posW: Age coordinate (matches Time content).
+      system.posW[id] = system.time[id];
+
+      // Finalize derived properties.
+      system.update(id);
     }
 
     return sequenceIds;

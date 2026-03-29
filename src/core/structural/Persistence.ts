@@ -36,11 +36,17 @@ export class SystemPersistence {
       appender.appendUInteger(i); // id
       appender.appendDouble(system.mass[i]);
       appender.appendDouble(system.scope[i]);
+      appender.appendDouble(system.depth[i]);
       appender.appendDouble(system.time[i]);
-      appender.appendDouble(system.density[i]);
-      appender.appendDouble(system.entropy[i]);
       appender.appendDouble(system.posX[i]);
       appender.appendDouble(system.posY[i]);
+      appender.appendDouble(system.posZ[i]);
+      appender.appendDouble(system.posW[i]);
+      appender.appendDouble(system.density[i]);
+      appender.appendDouble(system.entropyRate[i]);
+      appender.appendDouble(system.potency[i]);
+      appender.appendDouble(system.intensity[i]);
+      appender.appendDouble(system.decayRate[i]);
       appender.appendDouble(system.checksum[i]);
       appender.appendUInteger(system.PartLayer[i]);
       appender.appendUInteger(system.ComplexLayer[i]);
@@ -93,15 +99,21 @@ export class SystemPersistence {
       const id = Number(row[0]);
       system.mass[id] = Number(row[1]);
       system.scope[id] = Number(row[2]);
-      system.time[id] = Number(row[3]);
-      system.density[id] = Number(row[4]);
-      system.entropy[id] = Number(row[5]);
-      system.posX[id] = Number(row[6]);
-      system.posY[id] = Number(row[7]);
-      system.checksum[id] = Number(row[8]);
-      system.PartLayer[id] = Number(row[9]);
-      system.ComplexLayer[id] = Number(row[10]);
-      system.operatorClass[id] = Number(row[11]);
+      system.depth[id] = Number(row[3]);
+      system.time[id] = Number(row[4]);
+      system.posX[id] = Number(row[5]);
+      system.posY[id] = Number(row[6]);
+      system.posZ[id] = Number(row[7]);
+      system.posW[id] = Number(row[8]);
+      system.density[id] = Number(row[9]);
+      system.entropyRate[id] = Number(row[10]);
+      system.potency[id] = Number(row[11]);
+      system.intensity[id] = Number(row[12]);
+      system.decayRate[id] = Number(row[13]);
+      system.checksum[id] = Number(row[14]);
+      system.PartLayer[id] = Number(row[15]);
+      system.ComplexLayer[id] = Number(row[16]);
+      system.operatorClass[id] = Number(row[17]);
     }
 
     system.length = length;

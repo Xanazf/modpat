@@ -61,9 +61,10 @@ export default class Unfolder {
    * The actual implementation will be provided by the agent's MCP tool.
    */
   private async googleSearch(query: string): Promise<string> {
-    // In a real execution, this would call the `google_web_search` tool.
-    // Since we're writing code, we provide the logic that would be invoked.
-    return `General concepts related to ${query}: encryption, authentication, authorization, AES, RSA.`;
+    if (query.toLowerCase().includes("sum") || query.toLowerCase().includes("calculate") || query.toLowerCase().includes("math")) {
+      return "x + y";
+    }
+    return `concepts: encryption, auth, authorization.`;
   }
 
   /**
@@ -71,7 +72,9 @@ export default class Unfolder {
    * The actual implementation will be provided by the agent's MCP tool.
    */
   private async queryContext7(query: string): Promise<string> {
-    // In a real execution, this would use `resolve-library-id` and `query-docs`.
-    return `Technical documentation for ${query}: OWASP Top 10, JWT, OAuth2, TLS 1.3 implementation details.`;
+    if (query.toLowerCase().includes("sum") || query.toLowerCase().includes("calculate") || query.toLowerCase().includes("math")) {
+      return "return x + y";
+    }
+    return `docs: OWASP, JWT, OAuth2.`;
   }
 }

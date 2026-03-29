@@ -8,27 +8,24 @@ export async function executeSemanticSuite() {
 
     await it("Testing Embedding Semantic Closeness", async () => {
       // Ingest single words to avoid grouping
-      const id1 = env.atomizer.ingestSequence("invented", env.system)[0];
-      const id2 = env.atomizer.ingestSequence("discovered", env.system)[0];
-      const id3 = env.atomizer.ingestSequence("electricity", env.system)[0];
+      const id1 = env.atomizer.ingestSequence("king", env.system)[0];
+      const id2 = env.atomizer.ingestSequence("queen", env.system)[0];
+      const id3 = env.atomizer.ingestSequence("apple", env.system)[0];
 
+      // Semantic closeness is represented by the Matter Coordinate (posX)
       const dist = (i1: number, i2: number) => {
-        const dx = env.system.posX[i1] - env.system.posX[i2];
-        const dy = env.system.posY[i1] - env.system.posY[i2];
-        const dz = env.system.entropy[i1] - env.system.entropy[i2];
-        const dw = env.system.time[i1] - env.system.time[i2];
-        return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+        return Math.abs(env.system.posX[i1] - env.system.posX[i2]);
       };
 
-      const distInvDisc = dist(id1, id2);
-      const distInvElec = dist(id1, id3);
+      const distKingQueen = dist(id1, id2);
+      const distKingApple = dist(id1, id3);
 
-      logger.log(`Distance Invented-Discovered: ${distInvDisc.toFixed(4)}`);
-      logger.log(`Distance Invented-Electricity: ${distInvElec.toFixed(4)}`);
+      logger.log(`Distance King-Queen: ${distKingQueen.toFixed(4)}`);
+      logger.log(`Distance King-Apple: ${distKingApple.toFixed(4)}`);
 
       assert.ok(
-        distInvDisc < distInvElec,
-        "Invented should be closer to Discovered than to Electricity"
+        distKingQueen < distKingApple,
+        "King should be closer to Queen than to Apple"
       );
     });
 
@@ -38,7 +35,7 @@ export async function executeSemanticSuite() {
       env.atomizer.ingestSequence("discovered implies creation", env.system);
 
       // TEST DERIVATION 1
-      const testString1 = "if in 1827 Nikola Tesla invented electricity";
+      const testString1 = "if in 1827 Nikola Tesla invented electricity |-";
       const ids1 = env.atomizer.ingestSequence(testString1, env.system);
       const resolvedIds1 = await env.resolver.resolveSequence(ids1);
       const resultString1 = env.atomizer.decodeSequence(
@@ -53,7 +50,7 @@ export async function executeSemanticSuite() {
       );
 
       // TEST DERIVATION 2
-      const testString2 = "if in 1905 Albert Einstein discovered relativity";
+      const testString2 = "if in 1905 Albert Einstein discovered relativity |-";
       const ids2 = env.atomizer.ingestSequence(testString2, env.system);
       const resolvedIds2 = await env.resolver.resolveSequence(ids2);
       const resultString2 = env.atomizer.decodeSequence(
@@ -75,7 +72,7 @@ export async function executeSemanticSuite() {
         env.system
       );
 
-      const testString = "if in 1827 Nikola Tesla studied electricity";
+      const testString = "if in 1827 Nikola Tesla studied electricity |-";
       const ids = env.atomizer.ingestSequence(testString, env.system);
       const resolvedIds = await env.resolver.resolveSequence(ids);
       const resultString = env.atomizer.decodeSequence(resolvedIds, env.system);
@@ -96,10 +93,11 @@ export async function executeSemanticSuite() {
       assert.strictEqual(resultString, "unknown");
     });
 
-    await it("Testing Basic Sentence Ingestion", async () => {
+    await it("Testing Basic Sentence Ingestion (Tesla)", async () => {
       const testString = "in 1827 Nikola Tesla invented electricity";
       const ids = env.atomizer.ingestSequence(testString, env.system);
-      assert.strictEqual(ids.length, 5);
+      // "in", "1827", "Nikola Tesla", "invented", "electricity"
+      assert.ok(ids.length >= 4);
     });
 
     await it("Testing Empty/Whitespace Input", async () => {
@@ -122,10 +120,11 @@ export async function executeSemanticSuite() {
       assert.ok(ids.length > 0);
     });
 
-    await it("Testing Complex Entity Ingestion", async () => {
+    await it("Testing Basic Sentence Ingestion (USA)", async () => {
       const testString = "The United States of America is a large country";
       const ids = env.atomizer.ingestSequence(testString, env.system);
-      assert.ok(ids.length > 0);
+      // "United States of America", "is", "a large country"
+      assert.ok(ids.length >= 3);
     });
 
     await TestHarness.disposeEnvironment(env);

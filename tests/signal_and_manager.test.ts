@@ -140,7 +140,7 @@ export async function executeSignalManagerSuite() {
         "  [Manager] Injecting supermassive collision-imminent threat..."
       );
       const threatId = env.system.createLocation(env.system.c ** 2 * 5000.0, 0);
-      env.system.entropy[threatId] = 100.0;
+      env.system.decayRate[threatId] = 100.0;
 
       logger.log("  [Manager] Monitoring manifold for critical interrupts...");
       manager.monitorThreats();
@@ -152,44 +152,44 @@ export async function executeSignalManagerSuite() {
       );
     });
 
-    await it("Test 5: Temporal Truth Decay (Entropy Half-Life)", async () => {
+    await it("Test 5: Temporal Truth Decay (Matter Half-Life)", async () => {
       const startMass = env.system.c ** 2;
-      const startEntropy = 5.0;
+      const startAge = 5.0;
       const startX = 80.0;
       const decayingId = env.system.createLocation(startMass, 20);
-      env.system.entropy[decayingId] = startEntropy;
+      env.system.time[decayingId] = startAge;
       env.system.posX[decayingId] = startX;
 
       logger.log(
-        `  [Decay] Precept ${decayingId} - Initial Mass: ${startMass.toFixed(2)}, Entropy: ${startEntropy}`
+        `  [Decay] Precept ${decayingId} - Initial Mass: ${startMass.toFixed(2)}, Age: ${startAge}`
       );
-      logger.log("  [Decay] Advancing system time (dt=50.0, lambda=0.05)...");
-      env.system.decay(50.0, 0.05);
+      logger.log("  [Decay] Advancing system time (dt=50.0)...");
+      env.system.decay(50.0);
 
       const finalMass = env.system.mass[decayingId];
-      const finalEntropy = env.system.entropy[decayingId];
+      const finalAge = env.system.time[decayingId];
       const finalX = env.system.posX[decayingId];
 
       logger.log(
-        `  [Decay] Precept ${decayingId} - Final Mass: ${finalMass.toFixed(2)}, Entropy: ${finalEntropy.toFixed(2)}`
+        `  [Decay] Precept ${decayingId} - Final Mass: ${finalMass.toFixed(2)}, Age: ${finalAge.toFixed(2)}`
       );
       assert.ok(
         finalMass < startMass,
         "Mass must decrease according to exponential decay"
       );
       assert.ok(
-        finalEntropy > startEntropy,
-        "Entropy must increase linearly with time"
+        finalAge > startAge,
+        "Age must increase linearly with simulation time"
       );
 
-      env.system.entropy[decayingId] = 150.0;
-      env.system.decay(1.0, 0.1);
+      env.system.decayRate[decayingId] = 1.0;
+      env.system.decay(1.0);
       logger.log(
         `  [Decay] Spatial position drifted from ${startX} to ${env.system.posX[decayingId].toFixed(2)}`
       );
       assert.ok(
         env.system.posX[decayingId] < startX,
-        "Uncertain/Decayed truths must drift toward manifold origin"
+        "Decayed truths must drift toward manifold origin"
       );
     });
 

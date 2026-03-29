@@ -2,6 +2,7 @@ import type System from "@core_i/System";
 import { classifyOperatorToken } from "@core_i/System";
 import nlp from "compromise";
 import { BaseAtomizer } from "./BaseAtomizer";
+import { SYNTAX_ATTRACTORS } from "@config";
 
 /**
  * The SemanticAtomizer serves as the Natural Language Interface (NLI) for the logical manifold.
@@ -62,169 +63,156 @@ export default class SemanticAtomizer
 
   /**
    * Semantic Ingestion: Maps natural language input to the topological manifold.
-   * It performs entity recognition and part-of-speech tagging to group tokens
-   * into coherent physical entities.
-   *
-   * @param text The raw natural language string.
-   * @param system The logical manifold to populate.
-   * @returns A sequence of quantum IDs representing the materialized semantic tokens.
    */
   public ingestSequence(text: string, system: System): Uint32Array {
-    // TODO: distinguish plurality more granularly:
-    // - "one" = baseline;
-    // - "all" = "one" * "a lot";
-    //  - very broad scope && very high mass;
-    //  - "a lot" = maxilon * 0.5?;
-    // - "some" || "few" = "one" * 1.5;
+    // 1. Manual Atomic Preparation
+    // Ensure all structural signifiers are distinct tokens.
+    // Ensure |- is NOT split.
+    const preparedText = text
+      .replace(/\|-/g, " SINK_MARKER ")
+      .replace(/([(){}:,+-])/g, " $1 ")
+      .replace(/SINK_MARKER/g, "|-");
 
-    // Inject custom logical semantics into the NLP engine to improve classification.
-    const plugin = {
-      words: {
-        equals: "Verb",
-        plus: "Conjunction",
-        minus: "Conjunction",
-        then: "Conjunction",
-        if: "Conjunction",
-        all: "Conjunction",
-        "|-": "Conjunction",
-        not: "Adverb",
-      },
-    };
-    nlp.plugin(plugin);
-
-    const doc = nlp(text);
+    const doc = nlp(preparedText);
     const json = doc.json();
-
-    if (!json || json.length === 0) return new Uint32Array(0);
-
     const tokens: { text: string; isOp: boolean; isPlural: boolean }[] = [];
 
-    // Map natural language terms to Topological Tokens by iterating through sentences.
     for (const sentence of json) {
       const terms = sentence.terms;
       let tempEntity: string[] = [];
       let lastEntityType: string | null = null;
       let tempIsPlural = false;
 
-      // Helper to push a accumulated entity (noun phrase) into the token list.
       const pushTemp = () => {
         if (tempEntity.length > 0) {
-          const cleanText = tempEntity
-            .join(" ")
-            .replace(/[.,?!]+$/, "")
-            .trim();
-          if (cleanText)
+          const cleanText = tempEntity.join(" ").trim();
+          if (cleanText) {
+            const normal = cleanText.toLowerCase();
+            const isHardOp = this.hardOperators.has(normal) || ["implies", "=>", "|-"].includes(normal);
+            const isMathAtom = ["x", "y", "z", "a", "b", "c", "number"].includes(normal);
+            
             tokens.push({
               text: cleanText,
-              isOp: false,
+              isOp: isHardOp || isMathAtom || this.logicalAdverbs.has(normal),
               isPlural: tempIsPlural,
             });
-          tempEntity = [];
-          lastEntityType = null;
-          tempIsPlural = false;
+          }
+          tempEntity = []; lastEntityType = null; tempIsPlural = false;
         }
       };
 
       for (const term of terms) {
-        const tags = term.tags || [];
         const normal = (term.normal || term.text).toLowerCase();
-
-        // Plurality detection
-        const isPlural =
-          tags.includes("Plural") || normal === "are" || normal === "were";
-
-        // Determine if the term acts as a logical operator (Massive Body).
-        const isVerb = tags.includes("Verb") || tags.includes("Copula");
-        const isPrep = tags.includes("Preposition");
-        const isConj = tags.includes("Conjunction");
-        const isLogicAdverb =
-          tags.includes("Adverb") && this.logicalAdverbs.has(normal);
-        const isHardOp = this.hardOperators.has(normal);
-        const isSpecialOp = term.text.includes("|-");
-
-        const isOp =
-          isVerb ||
-          isPrep ||
-          isConj ||
-          isLogicAdverb ||
-          isSpecialOp ||
-          isHardOp;
-
-        if (isOp) {
-          // Push any pending entity before processing the operator.
+        const tags = term.tags || [];
+        const isPlural = tags.includes("Plural") || normal === "are" || normal === "were";
+        const isVerb = tags.includes("Verb") || tags.includes("Copula") || tags.includes("PastTense");
+        
+        const isStructural = ["(", ")", "{", "}", ":", ",", "+", "|-"].includes(normal);
+        
+        // Verbs and structural symbols act as entity boundaries
+        if (isStructural || isVerb) {
           pushTemp();
-          const cleanOp = term.text.replace(/[.,?!]+$/, "").trim();
-          if (cleanOp) tokens.push({ text: cleanOp, isOp: true, isPlural });
+          tokens.push({ text: term.text.trim(), isOp: true, isPlural });
           continue;
         }
 
-        // Entity recognition for stable grouping (e.g., "Albert Einstein" as one entity).
         const entityType = this.getEntityType(tags);
         if (lastEntityType === null || lastEntityType === entityType) {
-          tempEntity.push(term.text.replace(/[.,?!]+$/, "").trim());
+          tempEntity.push(term.text.trim());
           lastEntityType = entityType;
         } else {
           pushTemp();
-          tempEntity.push(term.text.replace(/[.,?!]+$/, "").trim());
+          tempEntity.push(term.text.trim());
           lastEntityType = entityType;
         }
         tempIsPlural = isPlural;
       }
-      // Final push for the last entity in the sentence.
       pushTemp();
     }
 
     const sequenceIds = new Uint32Array(tokens.length);
+    let currentLoom = 1.0; 
 
-    // Calculate Physical Interaction parameters for each token (Mass, Scope, Entropy).
+    // 2. Physical Materialization
     for (let i = 0; i < tokens.length; i++) {
       const { text, isOp, isPlural } = tokens[i];
-      const s = text.toLowerCase().trim();
+      const norm = text.toLowerCase().trim();
 
-      // 1. Calculate Logical Mass (Attraction toward concept).
-      // Operators are massive attractors; semantic atoms are light particles.
+      // Update current loom state based on structural signifiers
+      if (["function", "calculate", "class"].includes(norm)) currentLoom = 0.0;
+      else if (norm === "(") currentLoom = 0.5;
+      else if (norm === ")") currentLoom = 1.5;
+      else if (norm === "{") currentLoom = 2.0;
+      else if (norm === "}") currentLoom = 3.0;
+      else if (norm === "executable_code") currentLoom = 4.0;
+      else if (norm === "|-") currentLoom = 5.0;
+
       let mass = isOp ? system.c ** 2 : system.epsilon;
+      if (isPlural) mass *= 1.5;
 
-      // Plural constructs possess a higher semantic weight in the manifold.
-      if (isPlural) {
-        mass *= 1.5;
-      }
+      const scope = this.getSymbolScope(norm);
 
-      // 2. Map the token to its unique Frequency Field (Scope).
-      // Append a plural modifier to the scope hash so singular and plural forms occupy distinct sub-spaces.
-      const scopeText = isPlural ? `${text}_PLURAL` : text;
-      const scope = this.getSymbolScope(scopeText);
-
-      // 3. Materialize the Precept in the System manifold.
+      // We ALWAYS create a new location during sequence ingestion to preserve
+      // the unique physical identity of each token in the functional chain.
       const id = system.createLocation(mass, scope);
+      
       system.operatorClass[id] = classifyOperatorToken(text);
       sequenceIds[i] = id;
 
-      // 4. Project Coordinates into the Manifold.
-      // posX: Semantic proximity via UMAP.
-      // For multi-word entities, calculate the centroid of individual word scopes.
-      const words = text
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(w => !["the", "a", "an"].includes(w));
+      system.posY[id] = i * 0.1;
+      
+      let context = currentLoom;
+      let depth = 0.5;   // Default depth
+      let decay = 0.01;  // Default decay
+
+      // Task 11: Specificity-based Depth Projection & Triplet Logic
+      const isDefinite = (norm === "the");
+      const isIndefinite = (norm === "a" || norm === "an");
+
+      if (isDefinite) {
+        depth = 0.1; // High specificity = Low Depth
+        system.mass[id] *= 2.0; // "The" is a significant triplet initiator
+      } else if (isIndefinite) {
+        depth = 0.9; // Low specificity = High Depth
+      } else if (["function", "calculate", "class"].includes(norm)) {
+        depth = 1.0; decay = 0.001;
+      } else if (currentLoom >= 0.5 && currentLoom <= 1.5) { 
+        depth = 0.7; decay = 0.005; 
+      } else if (currentLoom >= 2.0 && currentLoom <= 3.0) { 
+        depth = 0.4; decay = 0.01; 
+        if (!["{", "}", "return"].includes(norm)) context = 2.5;
+      }
+
+      // Triplet Inheritance: if preceded by "the", this particle becomes a specific landmark
+      if (i > 0) {
+        const prevNorm = tokens[i-1].text.toLowerCase().trim();
+        // Check for "the [x]" or "the [x] [y]"
+        if (prevNorm === "the" || (i > 1 && tokens[i-2].text.toLowerCase().trim() === "the")) {
+          system.mass[id] *= 4.0; // Significant triplet boost
+          depth = 0.1; // Force high specificity
+          system.scope[id] *= 0.5; // Narrow logical reach
+        }
+      }
+
+      system.posZ[id] = depth;
+      system.posW[id] = context + (i * 0.001);
+      
+      // Sync Matter layer content
+      system.depth[id] = depth;
+      system.time[id] = system.posW[id];
+      system.decayRate[id] = decay;
+      
+      // Finalize 4D Coordinates.
+      const words = text.toLowerCase().split(/\s+/).filter(w => !["the", "a", "an"].includes(w));
       if (words.length > 0) {
         let avgPosX = 0;
-        for (const word of words) {
-          avgPosX += this.loader.getScope(word);
-        }
+        for (const word of words) avgPosX += this.loader.getScope(word);
         system.posX[id] = avgPosX / words.length;
       } else {
         system.posX[id] = this.loader.getScope(text);
       }
-
-      // posY: Temporal displacement based on sequence order.
-      system.posY[id] = i * 0.1;
-
-      // 5. Calculate Surprisal (Informational Entropy).      // Entropy = -log2(probability), representing the logical uncertainty of a symbol.
-      this.totalTokens++;
-      const freq = (this.symbolFrequency.get(s) || 0) + 1;
-      this.symbolFrequency.set(s, freq);
-      system.entropy[id] = -Math.log2(freq / this.totalTokens);
+      
+      system.update(id);
     }
 
     return sequenceIds;

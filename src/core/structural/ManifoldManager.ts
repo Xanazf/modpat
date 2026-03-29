@@ -180,16 +180,16 @@ export class ManifoldManager {
   /**
    * Scans the active manifold for high-mass anomalies.
    *
-   * Anomalies are defined as logic atoms with excessive gravitational mass
-   * and high entropy, which can destabilize the surrounding topology.
+   * Anomalies are defined as logic atoms with excessive matter mass
+   * and high decay rates, which can destabilize the surrounding topology.
    */
   public monitorThreats(): void {
     const sys = this.activeSystem;
     for (let i = 0; i < sys.length; i++) {
-      // Very high mass + high entropy = anomaly/threat
+      // Very high mass + high decay rate = anomaly/threat
       if (
         Math.abs(sys.mass[i]) > sys.c ** 2 * 1000.0 &&
-        sys.entropy[i] > 50.0
+        sys.decayRate[i] > 50.0
       ) {
         this.triggerInterrupt("High-mass anomaly detected");
         break;
@@ -200,7 +200,7 @@ export class ManifoldManager {
   /**
    * advances the temporal state of the manifold.
    *
-   * Applies entropy decay to all logic atoms and triggers regulatory
+   * Applies temporal decay to all logic atoms and triggers regulatory
    * routines like threat monitoring and self-healing.
    *
    * @param dt - The time delta (step size).
@@ -209,7 +209,7 @@ export class ManifoldManager {
     // Skip calculations if manifold is currently hydrating to prevent race conditions
     if (this.isHydrating) return;
 
-    // Apply entropy decay and mass reduction across the manifold
+    // Apply temporal decay across the manifold
     this.activeSystem.decay(dt);
 
     // Scan for destabilizing anomalies
