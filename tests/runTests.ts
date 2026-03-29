@@ -13,6 +13,7 @@ import { executeComplexSemanticSuite } from "./semantic_reasoning_perf.test";
 import { executeSignalManagerSuite } from "./signal_and_manager.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { executeUMAPSuite } from "./umap_loader.test";
+import { executeUnfolderSuite } from "./unfolder.test";
 import { TestHarness } from "./utils/harness";
 import { runRigorousTraps as executeLogicTrapsSuite } from "./verbose_logic_traps.test";
 
@@ -32,6 +33,7 @@ async function run() {
   try {
     await executeSystemSuite();
     await executeUMAPSuite();
+    await executeUnfolderSuite();
     await executePersistenceSuite();
     await executeLogicSuite();
     await executeSemanticSuite();
