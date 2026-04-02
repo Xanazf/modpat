@@ -30,10 +30,21 @@
     "paths": {
       "@src/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
+      /* Integral */
       "@core_i/*": ["./src/core/integral/*"],
+
+      /* Recursive */
+      "@core_r/*": ["./src/core/recursive/*"],
+      "@environments/*": ["./src/core/recursive/environments/*"],
+      "@explorers/*": ["./src/core/recursive/explorers/*"],
+
+      /* Structural */
       "@core_s/*": ["./src/core/structural/*"],
       "@atomics/*": ["./src/core/structural/atomizers/*"],
+
+      /* Utility */
       "@utils/*": ["./src/utils/*"],
+      "@tests/*": ["./tests/*"],
       "@config": ["./src/config.ts"]
     }
   },
