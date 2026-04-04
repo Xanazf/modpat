@@ -150,7 +150,7 @@ export async function executeSignalManagerSuite() {
         emergencySystem,
         "Manager must hot-swap to Emergency System when threat detected"
       );
-      
+
       await manager.waitForStability();
     });
 

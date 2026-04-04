@@ -18,9 +18,10 @@ async function executeE2ETest() {
     await it("Should autonomously structure a coherent TypeScript function via 4D Contextual Looming", async () => {
       // 1. Unified Sequential Seeding
       // Everything is seeded in a single pass to guarantee monotonic posY.
-      const seed = "function calculate ( x : number , y : number ) { return x + y } executable_code |-";
+      const seed =
+        "function calculate ( x : number , y : number ) { return x + y } executable_code |-";
       const atomIds = atomizer.ingestSequence(seed, system);
-      
+
       for (const id of Array.from(atomIds)) {
         system.mass[id] = 1000.0;
         system.update(id);
@@ -32,7 +33,7 @@ async function executeE2ETest() {
         atomIds[1], // calculate
         atomIds[3], // x
         atomIds[7], // y
-        atomIds[18] // |-
+        atomIds[18], // |-
       ]);
 
       // 3. Resolve
@@ -44,13 +45,16 @@ async function executeE2ETest() {
 
       // 5. Verify Coherence
       assert(code !== "unknown", "Resolver failed to synthesize code");
-      
+
       const normalizedCode = code.replace(/\s+/g, "");
       const expected = "functioncalculate(x:number,y:number){returnx+y}";
-      
+
       console.log("[DEBUG E2E] Normalized Code:", normalizedCode);
-      
-      assert(normalizedCode === expected, `Coherence Failure!\nGot:      ${normalizedCode}\nExpected: ${expected}`);
+
+      assert(
+        normalizedCode === expected,
+        `Coherence Failure!\nGot:      ${normalizedCode}\nExpected: ${expected}`
+      );
     });
 
     await TestHarness.disposeEnvironment(env);

@@ -29,7 +29,12 @@ export async function executeUMAPSuite() {
         // Coordinate Layer check
         assert.notStrictEqual(env.system.posX[id], 0, "posX missing");
         // posY can be 0 for the first token (i=0)
-        if (i > 0) assert.notStrictEqual(env.system.posY[id], 0, `posY missing for token ${i}`);
+        if (i > 0)
+          assert.notStrictEqual(
+            env.system.posY[id],
+            0,
+            `posY missing for token ${i}`
+          );
         assert.notStrictEqual(env.system.posZ[id], 0, "posZ missing");
         // posW can be 0 for the first context
         if (i > 0) assert.ok(env.system.posW[id] >= 0, "posW invalid");

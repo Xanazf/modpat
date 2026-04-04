@@ -26,22 +26,33 @@ export default class Synthesizer {
 
     const tokens: string[] = [];
     const seenIds = new Set<number>();
-    
+
     for (let i = 0; i < pathIds.length; i++) {
       const id = pathIds[i];
       const opClass = system.operatorClass[id];
-      const rawToken = this.atomizer.decodeSequence(new Uint32Array([id]), system).trim();
+      const rawToken = this.atomizer
+        .decodeSequence(new Uint32Array([id]), system)
+        .trim();
       const token = rawToken.toLowerCase();
 
       // Skip meta-targets
-      if (token === "executable_code" || token === "implies" || token === "goal") continue;
+      if (
+        token === "executable_code" ||
+        token === "implies" ||
+        token === "goal"
+      )
+        continue;
 
       // De-duplicate: only emit a unique particle once
       if (seenIds.has(id)) continue;
       seenIds.add(id);
 
       if (opClass === OperatorClass.SyntaxAnchor) {
-        if (["+", "-", "*", "/", "=", ":", ",", "(", ")", "{", "}", ";"].includes(token)) {
+        if (
+          ["+", "-", "*", "/", "=", ":", ",", "(", ")", "{", "}", ";"].includes(
+            token
+          )
+        ) {
           tokens.push(token);
         } else {
           tokens.push(" " + token + " ");
@@ -92,11 +103,17 @@ export default class Synthesizer {
     // Balance fundamental structures
     let openParens = (result.match(/\(/g) || []).length;
     let closeParens = (result.match(/\)/g) || []).length;
-    while (openParens > closeParens) { result += ")"; closeParens++; }
+    while (openParens > closeParens) {
+      result += ")";
+      closeParens++;
+    }
 
     let openBraces = (result.match(/\{/g) || []).length;
     let closeBraces = (result.match(/\}/g) || []).length;
-    while (openBraces > closeBraces) { result += " }"; closeBraces++; }
+    while (openBraces > closeBraces) {
+      result += " }";
+      closeBraces++;
+    }
 
     return result.replace(/\s+/g, " ").replace(/\s+}/g, "}").trim();
   }

@@ -13,7 +13,7 @@ export async function executeUnfolderSuite() {
       const topic = "Security";
       const ids = env.atomizer.ingestSequence(topic, env.system);
       const voidId = ids[0];
-      
+
       // Initially, only "Security" exists in this context
       const initialCount = env.system.length;
 
@@ -23,17 +23,20 @@ export async function executeUnfolderSuite() {
 
       // 3. Assertions
       const finalCount = env.system.length;
-      assert.ok(finalCount > initialCount, "New precepts should be added to the system");
+      assert.ok(
+        finalCount > initialCount,
+        "New precepts should be added to the system"
+      );
 
       // Verify some specific terms related to "Security" were likely added
-      // (This is heuristic since it depends on external tool output, 
+      // (This is heuristic since it depends on external tool output,
       // but we can check if any new precepts were created)
       let foundSpecific = false;
       for (let i = initialCount; i < finalCount; i++) {
-          const scope = env.system.scope[i];
-          // We don't have an easy way to get the string back without a reverse map in SemanticAtomizer
-          // but we can check if the system length increased as a baseline.
-          foundSpecific = true;
+        const scope = env.system.scope[i];
+        // We don't have an easy way to get the string back without a reverse map in SemanticAtomizer
+        // but we can check if the system length increased as a baseline.
+        foundSpecific = true;
       }
       assert.ok(foundSpecific, "Specific precepts should be materialized");
     });
