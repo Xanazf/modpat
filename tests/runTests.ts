@@ -6,6 +6,7 @@ import { executeSuite as executeSystemSuite } from "./dod_system.test";
 import { executeGPUOffloadTest } from "./gpu_offload.test";
 import { executeLiveInferenceSuite } from "./live_inference.test";
 import { runMapperReviewTest } from "./mapper_review.test";
+import { executeE2ETest } from "./pcs_e2e.test";
 import { executePersistenceSuite } from "./persistence.test";
 import { runRigorousTests as executeRigorousLogicSuite } from "./rigorous_logic.test";
 import { executeSemanticSuite } from "./semantic_atomizer.test";
@@ -13,6 +14,7 @@ import { executeComplexSemanticSuite } from "./semantic_reasoning_perf.test";
 import { executeSignalManagerSuite } from "./signal_and_manager.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { executeUMAPSuite } from "./umap_loader.test";
+import { executeUnfolderSuite } from "./unfolder.test";
 import { TestHarness } from "./utils/harness";
 import { runRigorousTraps as executeLogicTrapsSuite } from "./verbose_logic_traps.test";
 
@@ -32,11 +34,13 @@ async function run() {
   try {
     await executeSystemSuite();
     await executeUMAPSuite();
+    await executeUnfolderSuite();
     await executePersistenceSuite();
     await executeLogicSuite();
     await executeSemanticSuite();
     await executeSignalManagerSuite();
     await runMapperReviewTest();
+    await executeE2ETest();
     await executeComplexSemanticSuite();
     await executeStressSuite();
     await executeGPUOffloadTest();

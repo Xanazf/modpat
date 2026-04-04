@@ -11,11 +11,25 @@ export async function executeComplexSemanticSuite() {
 
     await it("Complex semantic reasoning and fuzzy matching", async () => {
       logger.step("Knowledge Ingestion: Fire properties");
-      env.atomizer.ingestSequence("fire is hot", env.system);
-      env.atomizer.ingestSequence("fire is red", env.system);
+      const idsFire = env.atomizer.ingestSequence(
+        "fire is hot and red",
+        env.system
+      );
+      for (const id of idsFire) {
+        env.system.posZ[id] = 0.2; // Low depth
+        env.system.update(id);
+      }
 
       logger.step("Knowledge Ingestion: Mars similarity");
-      env.atomizer.ingestSequence("Mars is similar to fire", env.system);
+      const idsMars = env.atomizer.ingestSequence(
+        "Mars is the red planet",
+        env.system
+      );
+      for (const id of idsMars) {
+        env.system.mass[id] *= 5.0; // Massive planetary body
+        env.system.posZ[id] = 0.9; // High logic depth
+        env.system.update(id);
+      }
 
       logger.step("Query: What is Mars?");
       const query = "Mars is";
