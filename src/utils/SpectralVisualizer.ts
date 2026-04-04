@@ -73,9 +73,12 @@ export class SpectralVisualizer {
   /**
    * Renders a specific atom from the system state with its associated text.
    */
+  /**
+   * Renders a specific atom from the system state with its associated text.
+   */
   public renderAtom(system: System, id: number, text: string): string {
     const mass = system.mass[id];
-    const entropy = system.entropy[id];
+    const entropy = system.entropyRate[id];
     const density = system.density[id];
     const isOperator = Math.abs(mass) >= system.c ** 2;
     const isSink = mass < 0;

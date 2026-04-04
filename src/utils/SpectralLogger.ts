@@ -220,10 +220,15 @@ export const logger = {
    * Logs a spectral header for major system transitions.
    */
   header: (title: string) => {
+    const spacingBase = 8;
     const text = title.toUpperCase();
-    const line = "━".repeat(text.length + 8);
+    const line = "━".repeat(text.length + spacingBase);
+    const space = " ".repeat(spacingBase / 2);
     const top = visualizer.render({ type: "formal" }, `┏${line}┓`);
-    const mid = visualizer.render({ type: "formal" }, `┃   ${text}   ┃`);
+    const mid = visualizer.render(
+      { type: "formal" },
+      `┃${space}${text}${space}┃`
+    );
     const bot = visualizer.render({ type: "formal" }, `┗${line}┛`);
 
     console.log(`\n${top}\n${mid}\n${bot}\n`);

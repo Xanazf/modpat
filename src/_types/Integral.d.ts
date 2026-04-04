@@ -67,6 +67,8 @@ declare namespace Mapping {
     maxIterations?: number;
     /** Whether to output detailed routing logs. */
     verbose?: boolean;
+    /** The semantic topic to expand if a void is detected. */
+    topic?: string;
   }
 
   /**
@@ -83,6 +85,7 @@ declare namespace Mapping {
 
   interface Engine {
     setGPU(gpu: PMath.Engine | null): void;
+    setUnfolder(unfolder: any): void;
     route(
       sourceId: number,
       targetId: number,
