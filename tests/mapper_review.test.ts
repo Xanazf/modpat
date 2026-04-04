@@ -13,17 +13,20 @@ export async function runMapperReviewTest() {
 
       env.system.posX[alphaId] = 0;
       env.system.posY[alphaId] = 0;
-      env.system.entropy[alphaId] = 0.5;
+      env.system.posZ[alphaId] = 0.5;
 
       env.system.posX[betaId] = 100;
       env.system.posY[betaId] = 0;
-      env.system.entropy[betaId] = 0.5;
+      env.system.posZ[betaId] = 0.5;
 
       const trapId = env.atomizer.ingestSequence("trap", env.system)[0];
       env.system.posX[trapId] = 50;
       env.system.posY[trapId] = 0;
       env.system.mass[trapId] = env.system.c ** 2 * 1000.0;
-      env.system.entropy[trapId] = 0.0;
+      // High mass + low entropyRate = Logic Trap
+      env.system.time[trapId] = 0.0;
+      env.system.scope[trapId] = 1.0;
+      env.system.update(trapId);
 
       const mapper = new Mapper(env.system);
       const path = await mapper.route(alphaId, betaId, {

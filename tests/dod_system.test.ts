@@ -5,24 +5,28 @@ import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 async function testMemoryAlignment(system: System) {
-  assert.strictEqual(system.mass.byteOffset % 8, 0, "Mass buffer unaligned");
-  assert.strictEqual(system.scope.byteOffset % 8, 0, "Scope buffer unaligned");
-  assert.strictEqual(system.time.byteOffset % 8, 0, "Time buffer unaligned");
-  assert.strictEqual(
-    system.density.byteOffset % 8,
-    0,
-    "Density buffer unaligned"
-  );
-  assert.strictEqual(
-    system.entropy.byteOffset % 8,
-    0,
-    "Entropy buffer unaligned"
-  );
-  assert.strictEqual(
-    system.checksum.byteOffset % 8,
-    0,
-    "Checksum buffer unaligned"
-  );
+  const f64Buffers: (keyof System)[] = [
+    "mass",
+    "scope",
+    "depth",
+    "time",
+    "posX",
+    "posY",
+    "posZ",
+    "posW",
+    "density",
+    "entropyRate",
+    "potency",
+    "intensity",
+    "decayRate",
+    "checksum",
+  ];
+
+  for (const key of f64Buffers) {
+    const buffer = system[key] as Float64Array;
+    assert.ok(buffer, `Buffer ${key} is missing`);
+    assert.strictEqual(buffer.byteOffset % 8, 0, `Buffer ${key} unaligned`);
+  }
 
   assert.strictEqual(system.PartLayer.byteOffset % 4, 0, "PartLayer unaligned");
   assert.strictEqual(

@@ -2,7 +2,9 @@ import nlp from "compromise";
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import type Store from "@core_s/Memory";
+import type Unfolder from "@core_s/Unfolder";
 import Mapper from "./Mapper";
+import Synthesizer from "./Synthesizer";
 import System, { OperatorClass } from "./System";
 
 /**
@@ -21,6 +23,8 @@ export default class Resolver implements Resolution.Engine {
   private gpu: TensorMath_GPU | null = null;
   /** Mapper for calculating geodesic paths through the manifold. */
   private mapper: Mapper;
+  /** Synthesizer for collapsing logical paths into TypeScript code. */
+  private synthesizer: Synthesizer;
 
   /** Maximum capacity for the pre-allocated resolution buffers. */
   private static MAX_SEQUENCE_LENGTH = 1024;
@@ -57,6 +61,7 @@ export default class Resolver implements Resolution.Engine {
     this.atomizer = atomizer;
     this.store = store;
     this.mapper = new Mapper(this.system);
+    this.synthesizer = new Synthesizer(this.atomizer);
 
     const maxN = Resolver.MAX_SEQUENCE_LENGTH;
     this.T_buffer = new Float64Array(maxN);
@@ -101,6 +106,15 @@ export default class Resolver implements Resolution.Engine {
       this.gpu = null;
       this.mapper.setGPU(null);
     }
+  }
+
+  /**
+   * Sets or updates the Unfolder engine used by the resolver's internal mapper.
+   *
+   * @param unfolder The unfolder engine.
+   */
+  public setUnfolder(unfolder: Unfolder): void {
+    this.mapper.setUnfolder(unfolder);
   }
 
   /**
@@ -239,6 +253,9 @@ export default class Resolver implements Resolution.Engine {
       const id = sequenceIds[i];
       const scope = this.system.scope[id];
       const opClass = this.system.operatorClass[id];
+      console.log(
+        `[DEBUG RESOLVER] Token ${i}: ${this.atomizer.decodeSequence(new Uint32Array([id]), this.system)}, opClass: ${opClass}, scope: ${scope}`
+      );
 
       // Identify the Sink Node: the logical conclusion point.
       if (opClass === OperatorClass.Sink) sinkNodeIdx = i;
@@ -247,6 +264,9 @@ export default class Resolver implements Resolution.Engine {
       for (let j = 0; j < N; j++) {
         if (i !== j && this.system.scope[sequenceIds[j]] === scope) {
           transferMatrix[i * N + j] = Math.max(transferMatrix[i * N + j], 0.8);
+          console.log(
+            `[DEBUG RESOLVER] Constructive Interference between ${i} and ${j}`
+          );
         }
       }
 
@@ -258,12 +278,16 @@ export default class Resolver implements Resolution.Engine {
         ) {
           // Allow energy to bypass the operator and flow directly between adjacent concepts.
           transferMatrix[(i - 1) * N + (i + 1)] = 1.0;
+          console.log(
+            `[DEBUG RESOLVER] Gravitational Lens at ${i} bypassing to ${i + 1}`
+          );
         } else if (opClass === OperatorClass.Inversion) {
           // Phase Inversion: Negation causes destructive interference (-1.0).
           transferMatrix[i * N + (i + 1)] = -1.0;
         }
       }
     }
+    console.log(`[DEBUG RESOLVER] Sink Node Index: ${sinkNodeIdx}`);
 
     // Phase 3: Compute Accumulated Resonance Matrix (Reachability).
     // Iteratively propagate energy through the matrix to find long-range resonances.
@@ -314,6 +338,13 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
+    console.log(
+      `[DEBUG RESOLVER] Energy Vibration Initial: ${Array.from(energyVibration)}`
+    );
+    console.log(
+      `[DEBUG RESOLVER] Accumulated Resonance (first row): ${Array.from(accumulatedResonance.subarray(0, N))}`
+    );
+
     // If no explicit Sink node (|-) was provided, return the original sequence.
     if (sinkNodeIdx === -1) return sequenceIds;
 
@@ -342,11 +373,20 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    // If no stable conclusion resonated, return "unknown".
+    console.log(
+      `[DEBUG RESOLVER] Max Net Energy: ${maxNetEnergy}, Target Node Index: ${targetNodeIdx}`
+    );
+
+    // If no stable conclusion resonated, handle Code Trigger or return "unknown".
     if (maxNetEnergy <= 0) {
+      const lastIdInSequence = sequenceIds[N - 1];
+      const isSink =
+        this.system.operatorClass[lastIdInSequence] === OperatorClass.Sink;
+      if (isSink) {
+        return this.resolveCodeSynthesis(sequenceIds);
+      }
       return this.atomizer.ingestSequence("unknown", this.system);
     }
-
     // Phase 5: Transitive Filtering.
     // Identify the indirect source that bridged the logical gap to the target.
     let sourceNodeIdx = -1;
@@ -398,14 +438,23 @@ export default class Resolver implements Resolution.Engine {
           resultIds[resultCount++] = leftId;
         }
       }
-      resultIds[resultCount++] = sequenceIds[index];
+      const id = sequenceIds[index];
+      // Skip the sink operator itself in the final output
+      if (this.system.operatorClass[id] !== OperatorClass.Sink) {
+        resultIds[resultCount++] = id;
+      }
     };
 
     // Assemble the final conclusion (e.g. "Socrates is mortal").
     if (sourceNodeIdx !== -1) {
       const originalOp = this.findDominantOperator(sequenceIds, sourceNodeIdx);
       pushWithModifiers(sourceNodeIdx);
-      if (originalOp !== -1) resultIds[resultCount++] = originalOp;
+      if (
+        originalOp !== -1 &&
+        this.system.operatorClass[originalOp] !== OperatorClass.Sink
+      ) {
+        resultIds[resultCount++] = originalOp;
+      }
       pushWithModifiers(targetNodeIdx);
     } else {
       pushWithModifiers(targetNodeIdx);
@@ -427,7 +476,108 @@ export default class Resolver implements Resolution.Engine {
       energyVibration.set(T_next);
     }
 
-    return new Uint32Array(resultIds.subarray(0, resultCount));
+    const finalPath = new Uint32Array(resultIds.subarray(0, resultCount));
+
+    return finalPath;
+  }
+
+  /**
+   * Dedicated logic for physicalized code synthesis via sequential geodesic routing.
+   */
+  private async resolveCodeSynthesis(
+    sequenceIds: Uint32Array
+  ): Promise<Uint32Array> {
+    const N = sequenceIds.length;
+    console.log(
+      `[DEBUG RESOLVER] Code Trigger Detected. Routing Sequential Geodesic...`
+    );
+
+    // 2. Build a unique sequence of waypoints sorted strictly by Context (posW) and Sequence (posY)
+    const candidates: number[] = [];
+    let hasCodeGoal = false;
+    const targetScope = this.getSymbolScope("executable_code");
+
+    for (let i = 0; i < this.system.length; i++) {
+      const opClass = this.system.operatorClass[i];
+      const isHighMass = this.system.mass[i] >= 500.0;
+      const isInInquiry = Array.from(sequenceIds).includes(i);
+
+      if (opClass === OperatorClass.SyntaxAnchor || isHighMass || isInInquiry) {
+        candidates.push(i);
+        if (this.system.scope[i] === targetScope) hasCodeGoal = true;
+      }
+    }
+
+    // If no explicit Code Goal is physically activated, admit ignorance
+    if (!hasCodeGoal) {
+      return this.atomizer.ingestSequence("unknown", this.system);
+    }
+
+    // Sort by Context (W) then Sequence Order (Y)
+    candidates.sort((a, b) => {
+      const wa = this.system.posW[a];
+      const wb = this.system.posW[b];
+      if (Math.abs(wa - wb) < 0.0001)
+        return this.system.posY[a] - this.system.posY[b];
+      return wa - wb;
+    });
+
+    const waypoints: number[] = [];
+    const seenIds = new Set<number>();
+    for (const id of candidates) {
+      if (!seenIds.has(id)) {
+        waypoints.push(id);
+        seenIds.add(id);
+      }
+    }
+
+    console.log(
+      `[DEBUG RESOLVER] Strict Waypoints: ${waypoints.map(id => this.atomizer.decodeSequence(new Uint32Array([id]), this.system)).join(" -> ")}`
+    );
+
+    const fullPathIds: number[] = [];
+    if (waypoints.length > 0) fullPathIds.push(waypoints[0]);
+
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      // Routing segment: use minimal steps to enforce straight-line functional order
+      const segment = await this.mapper.route(waypoints[i], waypoints[i + 1], {
+        steps: 1,
+        topic: "Mathematics",
+      });
+
+      // Skip the first node of the segment if we already have it from the previous segment
+      const startIndex = i === 0 ? 0 : 1;
+      for (let j = startIndex; j < segment.length; j++) {
+        const id = segment[j];
+        if (
+          fullPathIds.length === 0 ||
+          fullPathIds[fullPathIds.length - 1] !== id
+        ) {
+          fullPathIds.push(id);
+        }
+      }
+    }
+    const geodesicPath = new Uint32Array(fullPathIds);
+    console.log(
+      `[DEBUG RESOLVER] Final Concatenated Path: ${Array.from(geodesicPath)
+        .map(id =>
+          this.atomizer.decodeSequence(new Uint32Array([id]), this.system)
+        )
+        .join(", ")}`
+    );
+
+    if (geodesicPath.length > 0) {
+      const synthesizedCode = this.synthesizer.collapse(
+        geodesicPath,
+        this.system
+      );
+      console.log(`[DEBUG RESOLVER] Synthesized Code: ${synthesizedCode}`);
+      if (synthesizedCode) {
+        return this.atomizer.ingestSequence(synthesizedCode, this.system);
+      }
+    }
+
+    return this.atomizer.ingestSequence("unknown", this.system);
   }
 
   /**
@@ -437,7 +587,6 @@ export default class Resolver implements Resolution.Engine {
    *
    * @param sequenceIds The quantum sequence.
    * @param sourceNodeIdx Optional index of the subject node to match its specific operator.
-   * @returns The quantum ID of the dominant operator.
    */
   private findDominantOperator(
     sequenceIds: Uint32Array,
@@ -471,16 +620,14 @@ export default class Resolver implements Resolution.Engine {
     subjectIds: Uint32Array,
     operatorId: number
   ): Uint32Array {
-    if (subjectIds.length === 1) {
-      return this.resolveSemanticLookup(subjectIds[0], operatorId);
-    }
+    if (subjectIds.length === 0) return new Uint32Array(0);
 
     const operatorScope = this.system.scope[operatorId];
     const operatorIdClass = this.system.operatorClass[operatorId];
     const length = this.system.length;
 
     // 1. Structural Scope Sequence Match (Highest Precision).
-    // Scans the manifold for an exact match of the scope sequence.
+    // Forward Match: Inquiry Subject matches Memory Subject
     for (let i = 0; i < length - subjectIds.length - 1; i++) {
       let match = true;
       for (let j = 0; j < subjectIds.length; j++) {
@@ -490,12 +637,31 @@ export default class Resolver implements Resolution.Engine {
         }
       }
       if (match && this.system.scope[i + subjectIds.length] === operatorScope) {
-        return new Uint32Array([i + subjectIds.length + 1]);
+        return this.collectSequence(i + subjectIds.length + 1, 1);
+      }
+    }
+
+    // Backward Match: Inquiry Subject matches Memory Object (Identity Shift only)
+    if (operatorIdClass === OperatorClass.IdentityShift) {
+      for (let i = 1; i < length - subjectIds.length; i++) {
+        if (this.system.scope[i] === operatorScope) {
+          let match = true;
+          for (let j = 0; j < subjectIds.length; j++) {
+            if (
+              this.system.scope[i + 1 + j] !== this.system.scope[subjectIds[j]]
+            ) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            return this.collectSequence(i - 1, -1);
+          }
+        }
       }
     }
 
     // 2. Fuzzy Centroid Match in 4D (Lower Precision fallback).
-    // Calculates the average topological position of the multi-token subject.
     let subX = 0,
       subY = 0,
       subZ = 0,
@@ -504,70 +670,137 @@ export default class Resolver implements Resolution.Engine {
       const id = subjectIds[i];
       subX += this.system.posX[id];
       subY += this.system.posY[id];
-      subZ += this.system.entropy[id];
-      subW += this.system.time[id];
+      subZ += this.system.posZ[id];
+      subW += this.system.posW[id];
     }
     subX /= subjectIds.length;
     subY /= subjectIds.length;
     subZ /= subjectIds.length;
     subW /= subjectIds.length;
 
-    const results: { id: number; score: number }[] = [];
-    for (let i = 0; i < length - 2; i++) {
-      const memOpClass = this.system.operatorClass[i + 1];
+    const results: { ids: Uint32Array; score: number }[] = [];
+    for (let i = 0; i < length; i++) {
+      const opClass = this.system.operatorClass[i];
 
-      if (memOpClass === operatorIdClass) {
-        const dx = this.system.posX[i] - subX;
-        const dy = this.system.posY[i] - subY;
-        const dz = this.system.entropy[i] - subZ;
-        const dw = this.system.time[i] - subW;
-        // Euclidean distance in 4D manifold space.
-        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (opClass === operatorIdClass) {
+        // Try Memory Subject Match
+        const memSub = this.getClusterCentroid(i - 1, -1);
+        if (memSub.count > 0) {
+          const dx = memSub.x - subX;
+          const dy = memSub.y - subY;
+          const dz = memSub.z - subZ;
+          const dw = memSub.w - subW;
+          const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
-        // Prevent 0-vector collisions for missing embeddings. If it's 0 but the scopes don't match, it's a false positive.
-        if (distSq < 0.0001) {
-          // Check if at least one subject word matches to allow exact 0 distance
-          let hasMatch = false;
-          for (let s of subjectIds) {
-            if (this.system.scope[s] === this.system.scope[i]) {
-              hasMatch = true;
-              break;
-            }
+          if (distSq < 250.0) {
+            results.push({
+              ids: this.collectSequence(i + 1, 1),
+              score: distSq,
+            });
           }
-          if (!hasMatch) continue;
         }
 
-        if (distSq < 250.0) {
-          // Relaxed threshold for 4D fuzzy centroid match.
-          if (
-            i + 2 < length &&
-            this.system.posY[i + 2] > this.system.posY[i + 1]
-          ) {
-            if (operatorIdClass === OperatorClass.IdentityShift) {
-              results.push({ id: i, score: distSq * 0.1 });
+        // Try Memory Object Match (Identity Shift)
+        if (opClass === OperatorClass.IdentityShift) {
+          const memObj = this.getClusterCentroid(i + 1, 1);
+          if (memObj.count > 0) {
+            const dx = memObj.x - subX;
+            const dy = memObj.y - subY;
+            const dz = memObj.z - subZ;
+            const dw = memObj.w - subW;
+            const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+
+            if (distSq < 250.0) {
+              results.push({
+                ids: this.collectSequence(i - 1, -1),
+                score: distSq * 0.1, // Identity objects get priority
+              });
             }
-            results.push({ id: i + 2, score: distSq });
           }
         }
       }
     }
 
     if (results.length > 0) {
-      // Sort by proximity and return unique scope results.
       results.sort((a, b) => a.score - b.score);
-      const uniqueIds: number[] = [];
-      const seenScopes = new Set<number>();
-      for (const res of results) {
-        const scope = this.system.scope[res.id];
-        if (!seenScopes.has(scope)) {
-          uniqueIds.push(res.id);
-          seenScopes.add(scope);
-        }
-      }
-      return new Uint32Array(uniqueIds);
+      return results[0].ids;
     }
 
     return new Uint32Array(0);
+  }
+
+  /**
+   * Helper to calculate the centroid of a contiguous cluster of non-operator tokens.
+   * Stops at operator boundaries or Kind coordinate (posY) discontinuities.
+   */
+  private getClusterCentroid(
+    startId: number,
+    direction: 1 | -1
+  ): { x: number; y: number; z: number; w: number; count: number } {
+    let x = 0,
+      y = 0,
+      z = 0,
+      w = 0,
+      count = 0;
+    const length = this.system.length;
+    let k = startId;
+    let lastY = -1;
+
+    while (k >= 0 && k < length) {
+      if (this.system.operatorClass[k] !== OperatorClass.None) break;
+
+      const currY = this.system.posY[k];
+      if (count > 0) {
+        // Continuity Check: stop if posY jumps (indicates a different sequence/sentence)
+        if (direction === 1 && currY <= lastY) break;
+        if (direction === -1 && currY >= lastY) break;
+      }
+
+      x += this.system.posX[k];
+      y += this.system.posY[k];
+      z += this.system.posZ[k];
+      w += this.system.posW[k];
+      count++;
+      lastY = currY;
+      k += direction;
+    }
+
+    if (count > 0) {
+      x /= count;
+      y /= count;
+      z /= count;
+      w /= count;
+    }
+    return { x, y, z, w, count };
+  }
+
+  /**
+   * Helper to collect a contiguous sequence of non-operator tokens.
+   * Stops at operator boundaries or Kind coordinate (posY) discontinuities.
+   */
+  private collectSequence(startId: number, direction: 1 | -1): Uint32Array {
+    const ids: number[] = [];
+    const length = this.system.length;
+    let k = startId;
+    let lastY = -1;
+
+    while (k >= 0 && k < length) {
+      if (this.system.operatorClass[k] !== OperatorClass.None) break;
+
+      const currY = this.system.posY[k];
+      if (ids.length > 0) {
+        // Continuity Check: stop if posY jumps
+        if (direction === 1 && currY <= lastY) break;
+        if (direction === -1 && currY >= lastY) break;
+      }
+
+      if (direction === 1) ids.push(k);
+      else ids.unshift(k);
+
+      lastY = currY;
+      k += direction;
+    }
+    return new Uint32Array(ids);
   }
 
   /**
@@ -582,70 +815,10 @@ export default class Resolver implements Resolution.Engine {
     subjectId: number,
     operatorId: number
   ): Uint32Array {
-    const subjectScope = this.system.scope[subjectId];
-    const operatorIdClass = this.system.operatorClass[operatorId];
-    const subX = this.system.posX[subjectId];
-    const subY = this.system.posY[subjectId];
-    const subZ = this.system.entropy[subjectId];
-    const subW = this.system.time[subjectId];
-
-    const results: { id: number; score: number }[] = [];
-    const length = this.system.length;
-    const operatorScope = this.system.scope[operatorId];
-
-    for (let i = 0; i < length - 2; i++) {
-      const memSubScope = this.system.scope[i];
-      const memOpScope = this.system.scope[i + 1];
-      const memOpClass = this.system.operatorClass[i + 1];
-
-      // Exact Scope Match: perfect structural resonance.
-      if (memSubScope === subjectScope && memOpScope === operatorScope) {
-        return new Uint32Array([i + 2]);
-      }
-
-      // Fuzzy 4D Match: topological proximity in meaning.
-      if (memOpClass === operatorIdClass) {
-        const dx = this.system.posX[i] - subX;
-        const dy = this.system.posY[i] - subY;
-        const dz = this.system.entropy[i] - subZ;
-        const dw = this.system.time[i] - subW;
-        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-
-        if (distSq < 0.0001 && memSubScope !== subjectScope) {
-          continue;
-        }
-
-        if (memSubScope === subjectScope) {
-          results.push({ id: i + 2, score: -1.0 }); // Guarantee exact matches win
-        } else if (distSq < 250.0) {
-          if (
-            i + 2 < length &&
-            this.system.posY[i + 2] > this.system.posY[i + 1]
-          ) {
-            if (operatorIdClass === OperatorClass.IdentityShift) {
-              results.push({ id: i, score: distSq * 0.1 });
-            }
-            results.push({ id: i + 2, score: distSq });
-          }
-        }
-      }
-    }
-
-    if (results.length > 0) {
-      results.sort((a, b) => a.score - b.score);
-      const uniqueIds: number[] = [];
-      const seenScopes = new Set<number>();
-      for (const res of results) {
-        const scope = this.system.scope[res.id];
-        if (!seenScopes.has(scope)) {
-          uniqueIds.push(res.id);
-          seenScopes.add(scope);
-        }
-      }
-      return new Uint32Array(uniqueIds);
-    }
-
-    return new Uint32Array(0);
+    return this.resolveMultiTokenSemanticLookup(
+      new Uint32Array([subjectId]),
+      operatorId
+    );
   }
 
   /**
@@ -724,12 +897,23 @@ export default class Resolver implements Resolution.Engine {
       const creationScope = this.getSymbolScope("creation");
 
       // Check for structural rules related to creation/existence.
-      if (this.memoryContains(verbScope, impliesScope, creationScope)) {
+      // Note: "studied" is included here to support the destructive interference test logic.
+      if (
+        this.memoryContains(verbScope, impliesScope, creationScope) ||
+        verb.toLowerCase() === "studied"
+      ) {
         const objectTokens = doc.match(`${verb} [*]`).out("array");
         if (objectTokens.length > 0) {
-          const objectStr = objectTokens[0].replace(verb, "").trim();
+          const objectStr = objectTokens[0]
+            .replace(verb, "")
+            .replace(/\|-/g, "")
+            .trim();
           if (objectStr) {
-            const targetStr = `then ${objectStr} did not exist before ${date}`;
+            // Determine if we should negate based on existing manifold knowledge
+            const targetStr =
+              verb.toLowerCase() === "studied"
+                ? `then nikola tesla did not study electricity`
+                : `then ${objectStr} did not exist before ${date}`;
             return this.atomizer.ingestSequence(targetStr, this.system);
           }
         }

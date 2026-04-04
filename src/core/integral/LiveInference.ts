@@ -336,7 +336,7 @@ export class LiveInference {
     if (inferredMeaning && inferredMeaning !== "unknown") {
       let totalEntropy = 0;
       for (let i = 0; i < derivationPath.length; i++) {
-        totalEntropy += this.system.entropy[derivationPath[i]];
+        totalEntropy += this.system.entropyRate[derivationPath[i]];
       }
       const avgEntropy = totalEntropy / (derivationPath.length || 1);
       if (avgEntropy > 5) {

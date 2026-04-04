@@ -1,32 +1,40 @@
 import logger from "@utils/SpectralLogger";
 import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
+import type Unfolder from "@core_s/Unfolder";
+import { DOPAT_CONFIG } from "@config";
 
 /**
- * The Mapper is responsible for finding the shortest logical path
- * through the non-Euclidean manifold of concepts.
+ * The Mapper is responsible for finding the shortest logical path (Geodesic)
+ * through the Dual-Layer Manifold. It treats logical derivation as a
+ * physical process of "falling" through a potential field defined by:
  *
- * It treats logical derivation as a physical process of "falling" through
- * a density field of meaning, avoiding contradictions (Logic Traps) while
- * being pulled toward relevant high-mass nodes.
+ * 1. Matter Coordinates (posX): The semantic location of content.
+ * 2. Kind Coordinates (posY): The structural category of the precept.
+ * 3. Energy Coordinates (posZ): The logical potential/consequence depth.
+ * 4. Age Coordinates (posW): The temporal context/loom.
  */
 class Mapper implements Mapping.Engine {
   /** The logical manifold providing the physical state of all precepts. */
   private system: System;
   /** Optional GPU math engine for acceleration. */
   private gpu: TensorMath_GPU | null = null;
+  /** Optional Fractal Unfolder for expanding logical voids. */
+  private unfolder: Unfolder | null = null;
   /** WebGPU pipeline for geodesic calculations. */
   private geodesicPipeline: GPUComputePipeline | null = null;
 
   /**
-   * Initializes the mapper with a reference to the active logical manifold.
-   *
-   * @param system The logical manifold.
-   * @param gpu Optional GPU engine.
+   * Initializes the mapper with a reference to the dual-layer manifold.
    */
-  constructor(system: System, gpu: TensorMath_GPU | null = null) {
+  constructor(
+    system: System,
+    gpu: TensorMath_GPU | null = null,
+    unfolder: Unfolder | null = null
+  ) {
     this.system = system;
     this.gpu = gpu;
+    this.unfolder = unfolder;
   }
 
   /**
@@ -34,18 +42,22 @@ class Mapper implements Mapping.Engine {
    */
   public setGPU(gpu: TensorMath_GPU | null): void {
     this.gpu = gpu;
-    this.geodesicPipeline = null; // Reset pipeline to trigger re-init if needed.
+    this.geodesicPipeline = null;
+  }
+
+  /**
+   * Sets or updates the Unfolder engine used by the mapper.
+   */
+  public setUnfolder(unfolder: Unfolder | null): void {
+    this.unfolder = unfolder;
   }
 
   /**
    * Calculates the optimal geodesic path through the logic manifold.
-   * This uses a physics-inspired relaxation technique where the path is
-   * pulled towards high-mass/high-entropy "bodies" (concepts) while
-   * avoiding "logic traps" (contradictions or irrelevant high-mass nodes).
    *
    * @param sourceId Starting quantum ID.
    * @param targetId Destination quantum ID.
-   * @param options Routing parameters including steps and keyword boosts.
+   * @param options Routing parameters.
    * @returns A sequence of quantum IDs representing the logical derivation.
    */
   public async route(
@@ -59,20 +71,13 @@ class Mapper implements Mapping.Engine {
     const maxIterations = options.maxIterations ?? 100;
     const verbose = options.verbose ?? false;
 
-    if (verbose) {
-      logger.step(
-        `Mapper: Starting route from ${sourceId} to ${targetId} (Steps: ${steps}, MaxIter: ${maxIterations})`
-      );
-    }
+    // 1. Initialize 4D Path State (Matter, Kind, Energy, Age).
+    const px = new Float32Array(steps + 1); // posX
+    const py = new Float32Array(steps + 1); // posY
+    const pe = new Float32Array(steps + 1); // posZ (Energy)
+    const pa = new Float32Array(steps + 1); // posW (Age)
 
-    // 1. Initialize 4D Path State (X, Y, Entropy, Time).
-    // The path exists in a multi-dimensional space beyond simple coordinates.
-    const px = new Float32Array(steps + 1);
-    const py = new Float32Array(steps + 1);
-    const pz = new Float32Array(steps + 1); // Entropy (Z)
-    const pw = new Float32Array(steps + 1); // Time (W)
-
-    // Linear interpolation for initial guess: start with a straight line between concepts.
+    // Linear interpolation for initial guess across the dual-layer coordinates.
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       px[i] =
@@ -81,12 +86,12 @@ class Mapper implements Mapping.Engine {
       py[i] =
         this.system.posY[sourceId] +
         t * (this.system.posY[targetId] - this.system.posY[sourceId]);
-      pz[i] =
-        this.system.entropy[sourceId] +
-        t * (this.system.entropy[targetId] - this.system.entropy[sourceId]);
-      pw[i] =
-        this.system.time[sourceId] +
-        t * (this.system.time[targetId] - this.system.time[sourceId]);
+      pe[i] =
+        this.system.posZ[sourceId] +
+        t * (this.system.posZ[targetId] - this.system.posZ[sourceId]);
+      pa[i] =
+        this.system.posW[sourceId] +
+        t * (this.system.posW[targetId] - this.system.posW[sourceId]);
     }
 
     const penalties: {
@@ -98,75 +103,98 @@ class Mapper implements Mapping.Engine {
     }[] = [];
     let finalIds: Uint32Array | null = null;
 
-    // 2. Iterative Refinement with Self-Review.
-    // The path is "relaxed" through gradient descent to find the actual geodesic.
+    // 2. Iterative Relaxation using Manifold Potential Field.
     for (let attempt = 0; attempt < 3; attempt++) {
-      if (verbose && attempt > 0)
-        logger.log(`Mapper: Retrying relaxation (Attempt ${attempt + 1})...`);
-
-      // Relax the path based on concept attraction and trap repulsion.
       if (this.gpu) {
         await this.relaxPathGPU(
           px,
           py,
-          pz,
-          pw,
+          pe,
+          pa,
           steps,
           maxIterations,
           learningRate,
           boostScopes,
-          penalties,
-          verbose
+          penalties
         );
       } else {
         this.relaxPath(
           px,
           py,
-          pz,
-          pw,
+          pe,
+          pa,
           steps,
           maxIterations,
           learningRate,
           boostScopes,
-          penalties,
-          verbose
+          penalties
         );
       }
 
-      // Review the relaxed path for logical stability.
-      const report = this.review(px, py, pz, pw, steps);
-      if (report.passed) {
-        if (attempt > 0 || verbose) logger.log("Mapper: Path passed review.");
-        finalIds = this.extractIds(px, py, pz, pw, steps);
-        break;
-      } else {
-        logger.warn(
-          `Mapper: Path review failed on attempt ${attempt + 1}. Reason: ${report.reason}`
-        );
-        // If a trap was detected, add a repulsion penalty at that location and retry.
-        if (report.trapIndex !== undefined) {
-          const tx = px[report.trapIndex];
-          const ty = py[report.trapIndex];
-          penalties.push({
-            x: tx,
-            y: ty,
-            z: pz[report.trapIndex],
-            w: pw[report.trapIndex],
-            strength: 1000.0, // Massive repulsion for logic traps.
-          });
+      // Check for logical voids and trigger the Unfolder.
+      if (this.unfolder) {
+        let voidDetected = false;
+        for (let i = 0; i <= steps; i++) {
+          const { potential, nearestId } = this.getPotentialAndNearest(
+            px[i],
+            py[i],
+            pe[i],
+            pa[i],
+            penalties,
+            boostScopes
+          );
+          if (potential > DOPAT_CONFIG.PHYSICS.VOID_POTENTIAL_THRESHOLD) {
+            if (nearestId !== -1) {
+              await this.unfolder.expand(nearestId, options.topic ?? "Logic");
+              voidDetected = true;
+              break;
+            }
+          }
+        }
+        if (voidDetected) {
+          if (this.gpu)
+            await this.relaxPathGPU(
+              px,
+              py,
+              pe,
+              pa,
+              steps,
+              maxIterations,
+              learningRate,
+              boostScopes,
+              penalties
+            );
+          else
+            this.relaxPath(
+              px,
+              py,
+              pe,
+              pa,
+              steps,
+              maxIterations,
+              learningRate,
+              boostScopes,
+              penalties
+            );
         }
       }
+
+      const report = this.review(px, py, pe, pa, steps);
+      if (report.passed) {
+        finalIds = this.extractIds(px, py, pe, pa, steps);
+        break;
+      } else if (report.trapIndex !== undefined) {
+        penalties.push({
+          x: px[report.trapIndex],
+          y: py[report.trapIndex],
+          z: pe[report.trapIndex],
+          w: pa[report.trapIndex],
+          strength: 1000.0,
+        });
+      }
     }
 
-    // Fallback if no perfect path could be found.
-    if (!finalIds) {
-      logger.warn(
-        "Mapper: Failed to find a coherent path after max attempts. Returning best effort."
-      );
-      finalIds = this.extractIds(px, py, pz, pw, steps);
-    }
-
-    return finalIds;
+    return finalIds || this.extractIds(px, py, pe, pa, steps);
   }
 
   /**
@@ -175,116 +203,100 @@ class Mapper implements Mapping.Engine {
   private async relaxPathGPU(
     px: Float32Array,
     py: Float32Array,
-    pz: Float32Array,
-    pw: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
     steps: number,
     maxIterations: number,
     learningRate: number,
     boostScopes: Set<number> | undefined,
-    penalties: {
-      x: number;
-      y: number;
-      z: number;
-      w: number;
-      strength: number;
-    }[],
-    verbose: boolean = false
+    penalties: any[]
   ): Promise<void> {
-    if (!this.geodesicPipeline) {
-      await this.initGPUPipeline();
-    }
-
+    if (!this.geodesicPipeline) await this.initGPUPipeline();
     const device = await TensorMath_GPU.getDevice();
     const sysLength = this.system.length;
 
-    const createBuffer = (
-      data: GPUAllowSharedBufferSource | undefined,
-      size: number,
-      usage: GPUBufferUsageFlags
-    ) => {
-      const buffer = device.createBuffer({ size, usage });
-      if (data) device.queue.writeBuffer(buffer, 0, data);
-      return buffer;
-    };
-
-    const c = this.system.c || 1.0;
-    const c2 = c * c;
+    const c2 = this.system.c * this.system.c;
     const sysInfluence = new Float32Array(sysLength);
     for (let j = 0; j < sysLength; j++) {
-      const massFactor = Math.abs(this.system.mass[j] / c2);
-      const entropyFactor = this.system.entropy[j] || 0.1;
-      const isBoosted = boostScopes?.has(this.system.scope[j]);
-
-      let influence = massFactor * 2.0 + entropyFactor * 1.5;
-      if (isBoosted) influence *= 10.0;
+      // Influence is derived from Matter Density and Energy Intensity
+      let influence =
+        this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
+      if (boostScopes?.has(this.system.scope[j])) influence *= 100.0;
       sysInfluence[j] = influence;
     }
 
-    const penaltyData = new Float32Array(Math.max(1, penalties.length) * 8); // Pad to 8 floats
-    if (penalties.length > 0) {
-      for (let i = 0; i < penalties.length; i++) {
-        penaltyData[i * 8 + 0] = penalties[i].x;
-        penaltyData[i * 8 + 1] = penalties[i].y;
-        penaltyData[i * 8 + 2] = penalties[i].z;
-        penaltyData[i * 8 + 3] = penalties[i].w;
-        penaltyData[i * 8 + 4] = penalties[i].strength;
-      }
-    } else {
-      penaltyData.fill(0);
-    }
+    const penaltyData = new Float32Array(Math.max(1, penalties.length) * 8);
+    penalties.forEach((p, i) => {
+      penaltyData[i * 8 + 0] = p.x;
+      penaltyData[i * 8 + 1] = p.y;
+      penaltyData[i * 8 + 2] = p.z;
+      penaltyData[i * 8 + 3] = p.w;
+      penaltyData[i * 8 + 4] = p.strength;
+    });
 
     const pathData = new Float32Array((steps + 1) * 4);
     for (let i = 0; i <= steps; i++) {
       pathData[i * 4 + 0] = px[i];
       pathData[i * 4 + 1] = py[i];
-      pathData[i * 4 + 2] = pz[i];
-      pathData[i * 4 + 3] = pw[i];
+      pathData[i * 4 + 2] = pe[i];
+      pathData[i * 4 + 3] = pa[i];
     }
 
     const sysPosData = new Float32Array(sysLength * 4);
     for (let j = 0; j < sysLength; j++) {
       sysPosData[j * 4 + 0] = this.system.posX[j];
       sysPosData[j * 4 + 1] = this.system.posY[j];
-      sysPosData[j * 4 + 2] = this.system.entropy[j];
-      sysPosData[j * 4 + 3] = this.system.time[j];
+      sysPosData[j * 4 + 2] = this.system.posZ[j];
+      sysPosData[j * 4 + 3] = this.system.posW[j];
     }
 
-    const bPath = createBuffer(
+    const createB = (data: any, size: number, usage: number) => {
+      const b = device.createBuffer({ size, usage });
+      if (data) device.queue.writeBuffer(b, 0, data);
+      return b;
+    };
+
+    const bPath = createB(
       pathData,
       pathData.byteLength,
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     );
-    const bSysPos = createBuffer(
+    const bSysPos = createB(
       sysPosData,
       sysPosData.byteLength,
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
-    const bSysInfluence = createBuffer(
+    const bSysInfluence = createB(
       sysInfluence,
       sysInfluence.byteLength,
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
-    const bPenalties = createBuffer(
+    const bPenalties = createB(
       penaltyData,
       penaltyData.byteLength,
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
 
-    const params = new ArrayBuffer(32);
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const params = new ArrayBuffer(48);
     const view = new DataView(params);
     view.setUint32(0, steps, true);
     view.setUint32(4, sysLength, true);
     view.setFloat32(8, learningRate, true);
     view.setUint32(12, penalties.length, true);
     view.setUint32(16, maxIterations, true);
-    view.setFloat32(20, 0.01, true); // h
-    const bParams = createBuffer(
+    view.setFloat32(20, phys.GRADIENT_STEP, true);
+    view.setFloat32(24, phys.INFLUENCE_RADIUS, true);
+    view.setFloat32(28, phys.INFLUENCE_FALLOFF, true);
+    view.setFloat32(32, phys.PENALTY_RADIUS, true);
+    view.setFloat32(36, phys.PENALTY_FALLOFF, true);
+
+    const bParams = createB(
       params,
-      32,
+      48,
       GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     );
-
-    const bReadPath = createBuffer(
+    const bReadPath = createB(
       undefined,
       pathData.byteLength,
       GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
@@ -315,19 +327,18 @@ class Mapper implements Mapping.Engine {
     bReadPath.unmap();
 
     for (let i = 0; i <= steps; i++) {
-      px[i] = resPath[i * 4 + 0];
+      px[i] = resPath[i * 4];
       py[i] = resPath[i * 4 + 1];
-      pz[i] = resPath[i * 4 + 2];
-      pw[i] = resPath[i * 4 + 3];
+      pe[i] = resPath[i * 4 + 2];
+      pa[i] = resPath[i * 4 + 3];
     }
-
     [bPath, bSysPos, bSysInfluence, bPenalties, bParams, bReadPath].forEach(b =>
       b.destroy()
     );
   }
 
   /**
-   * Initializes the GPU compute pipeline for geodesic calculations.
+   * Initializes the GPU compute pipeline for 4D geodesic calculations.
    */
   private async initGPUPipeline(): Promise<void> {
     const device = await TensorMath_GPU.getDevice();
@@ -336,43 +347,28 @@ class Mapper implements Mapping.Engine {
         @group(0) @binding(0) var<storage, read_write> pathData: array<vec4<f32>>;
         @group(0) @binding(1) var<storage, read> sysPos: array<vec4<f32>>;
         @group(0) @binding(2) var<storage, read> sysInfluence: array<f32>;
-        
-        struct Penalty {
-            pos: vec4<f32>,
-            strength: f32,
-            _pad1: f32,
-            _pad2: f32,
-            _pad3: f32,
-        };
+        struct Penalty { pos: vec4<f32>, strength: f32, _p1: f32, _p2: f32, _p3: f32 };
         @group(0) @binding(3) var<storage, read> penalties: array<Penalty>;
-
-        struct Params {
-            steps: u32,
-            sysLength: u32,
-            learningRate: f32,
-            penaltyCount: u32,
-            iterations: u32,
-            h: f32,
-        };
+        struct Params { steps: u32, sysLength: u32, lr: f32, penCount: u32, iter: u32, h: f32, iR: f32, iF: f32, pR: f32, pF: f32 };
         @group(0) @binding(4) var<uniform> params: Params;
 
-        fn densityAt(p: vec4<f32>) -> f32 {
+        fn potentialAt(p: vec4<f32>) -> f32 {
             var d = 1.0;
             for (var j = 0u; j < params.sysLength; j = j + 1u) {
                 let diff = p - sysPos[j];
                 let distSq = dot(diff, diff);
-                
-                if (distSq < 400.0) {
-                    d = d - sysInfluence[j] * exp(-distSq / 40.0);
+                if (distSq < params.iR) {
+                    var influence = sysInfluence[j];
+                    let dw = diff.w; // Age Context
+                    influence = influence * exp(-(dw * 50.0) * (dw * 50.0)); // Context Anisotropy
+                    if (sysPos[j].w < p.w - 0.01) { influence = influence * 0.01; } // Arrow of Logic
+                    d = d - influence * exp(-distSq / params.iF);
                 }
             }
-            for (var k = 0u; k < params.penaltyCount; k = k + 1u) {
-                let pen = penalties[k];
-                let diff = p - pen.pos;
+            for (var k = 0u; k < params.penCount; k = k + 1u) {
+                let diff = p - penalties[k].pos;
                 let distSq = dot(diff, diff);
-                if (distSq < 100.0) {
-                    d = d + pen.strength * exp(-distSq / 20.0);
-                }
+                if (distSq < params.pR) { d = d + penalties[k].strength * exp(-distSq / params.pF); }
             }
             return max(0.01, d);
         }
@@ -380,29 +376,30 @@ class Mapper implements Mapping.Engine {
         @compute @workgroup_size(64)
         fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             let i = id.x;
-
-            for (var iter = 0u; iter < params.iterations; iter = iter + 1u) {
+            for (var it = 0u; it < params.iter; it = it + 1u) {
                 if (i > 0u && i < params.steps) {
                     let curr = pathData[i];
                     let h = params.h;
-
-                    let d0 = densityAt(curr);
-                    let gradX = (densityAt(vec4<f32>(curr.x + h, curr.y, curr.z, curr.w)) - d0) / h;
-                    let gradY = (densityAt(vec4<f32>(curr.x, curr.y + h, curr.z, curr.w)) - d0) / h;
-                    let gradZ = (densityAt(vec4<f32>(curr.x, curr.y, curr.z + h, curr.w)) - d0) / h;
-                    let gradW = (densityAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w + h)) - d0) / h;
-                    let grad = vec4<f32>(gradX, gradY, gradZ, gradW);
-
-                    let spring = (pathData[i - 1u] + pathData[i + 1u]) / 2.0 - curr;
-
-                    pathData[i] = curr + params.learningRate * (spring - grad);
+                    let d0 = potentialAt(curr);
+                    let grad = vec4<f32>(
+                        (potentialAt(vec4<f32>(curr.x+h, curr.y, curr.z, curr.w)) - d0)/h,
+                        (potentialAt(vec4<f32>(curr.x, curr.y+h, curr.z, curr.w)) - d0)/h,
+                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z+h, curr.w)) - d0)/h,
+                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w+h)) - d0)/h
+                    );
+                    let spring = (pathData[i-1u] + pathData[i+1u])/2.0 - curr;
+                    let displacement = params.lr * (spring * 2.0 - grad);
+                    
+                    var next = curr + displacement;
+                    // Monotonic Age Constraint
+                    next.w = max(pathData[i-1u].w, min(curr.w, next.w));
+                    pathData[i] = next;
                 }
                 storageBarrier();
             }
         }
       `,
     });
-
     this.geodesicPipeline = device.createComputePipeline({
       layout: "auto",
       compute: { module: geodesicShader, entryPoint: "main" },
@@ -411,167 +408,177 @@ class Mapper implements Mapping.Engine {
 
   /**
    * Performs gradient descent on the logic density field.
-   * Minimizes the path's total energy by balancing:
-   * 1. Attraction toward high-mass concepts (Potential Wells).
-   * 2. Spring force (Continuity) between nodes to ensure logical flow.
-   * 3. Repulsion from identified logic traps.
-   *
-   * @param px Path X coordinates.
-   * @param py Path Y coordinates.
-   * @param pz Path Entropy (Z) coordinates.
-   * @param pw Path Time (W) coordinates.
-   * @param steps Path resolution.
-   * @param maxIterations Relaxation depth.
-   * @param learningRate Gradient step size.
-   * @param boostScopes Scopes to prioritize.
-   * @param penalties Repulsion nodes.
-   * @param verbose Logging flag.
    */
   private relaxPath(
     px: Float32Array,
     py: Float32Array,
-    pz: Float32Array,
-    pw: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
     steps: number,
     maxIterations: number,
-    learningRate: number,
-    boostScopes: Set<number> | undefined,
-    penalties: {
-      x: number;
-      y: number;
-      z: number;
-      w: number;
-      strength: number;
-    }[],
-    verbose: boolean = false
+    lr: number,
+    boost: Set<number> | undefined,
+    penalties: any[]
   ): void {
-    const c = this.system.c || 1.0;
-    const c2 = c * c;
-
+    const phys = DOPAT_CONFIG.PHYSICS;
     for (let iter = 0; iter < maxIterations; iter++) {
-      let totalGradNorm = 0;
       for (let i = 1; i < steps; i++) {
-        const h = 0.01; // Finite difference step for numerical gradient.
+        const h = phys.GRADIENT_STEP;
+        const d0 = this.getPotential(
+          px[i],
+          py[i],
+          pe[i],
+          pa[i],
+          penalties,
+          boost
+        );
+        const gx =
+          (this.getPotential(px[i] + h, py[i], pe[i], pa[i], penalties, boost) -
+            d0) /
+          h;
+        const gy =
+          (this.getPotential(px[i], py[i] + h, pe[i], pa[i], penalties, boost) -
+            d0) /
+          h;
+        const ge =
+          (this.getPotential(px[i], py[i], pe[i] + h, pa[i], penalties, boost) -
+            d0) /
+          h;
+        const ga =
+          (this.getPotential(px[i], py[i], pe[i], pa[i] + h, penalties, boost) -
+            d0) /
+          h;
 
-        // densityAt calculates the "logical resistance" at a given point in the manifold.
-        // Higher density means more logical relevance/attraction.
-        const densityAt = (x: number, y: number, z: number, w: number) => {
-          let density = 1.0;
-          for (let j = 0; j < this.system.length; j++) {
-            const dx = x - this.system.posX[j],
-              dy = y - this.system.posY[j];
-            const dz = z - this.system.entropy[j],
-              dw = w - this.system.time[j];
-            const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-
-            // Only consider concepts within a reasonable influence radius.
-            if (distSq < 400.0) {
-              const massFactor = Math.abs(this.system.mass[j] / c2);
-              const entropyFactor = this.system.entropy[j] || 0.1;
-              const isBoosted = boostScopes?.has(this.system.scope[j]);
-
-              let influence = massFactor * 2.0 + entropyFactor * 1.5;
-              if (isBoosted) influence *= 10.0;
-
-              // Concept Attraction: Create a deep potential well at the location of high-mass concepts.
-              density -= influence * Math.exp(-distSq / 40.0);
-            }
-          }
-
-          // Trap Repulsion: Apply massive resistance at logic trap coordinates.
-          for (const p of penalties) {
-            const dx = x - p.x,
-              dy = y - p.y,
-              dz = z - p.z,
-              dw = w - p.w;
-            const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-            if (distSq < 100.0) {
-              density += p.strength * Math.exp(-distSq / 20.0);
-            }
-          }
-          return Math.max(0.01, density);
-        };
-
-        // Numerical gradient calculation: find the direction of steepest logical descent.
-        const d0 = densityAt(px[i], py[i], pz[i], pw[i]);
-        const gx = (densityAt(px[i] + h, py[i], pz[i], pw[i]) - d0) / h;
-        const gy = (densityAt(px[i], py[i] + h, pz[i], pw[i]) - d0) / h;
-        const gz = (densityAt(px[i], py[i], pz[i] + h, pw[i]) - d0) / h;
-        const gw = (densityAt(px[i], py[i], pz[i], pw[i] + h) - d0) / h;
-
-        // Spring Force: Maintains logical smoothness by pulling the node toward its neighbors.
         const sx = (px[i - 1] + px[i + 1]) / 2 - px[i];
         const sy = (py[i - 1] + py[i + 1]) / 2 - py[i];
-        const sz = (pz[i - 1] + pz[i + 1]) / 2 - pz[i];
-        const sw = (pw[i - 1] + pw[i + 1]) / 2 - pw[i];
+        const se = (pe[i - 1] + pe[i + 1]) / 2 - pe[i];
+        const sa = (pa[i - 1] + pa[i + 1]) / 2 - pa[i];
 
-        // Update Position: Balance the spring force with the gradient of the density field.
-        px[i] += learningRate * (sx - gx);
-        py[i] += learningRate * (sy - gy);
-        pz[i] += learningRate * (sz - gz);
-        pw[i] += learningRate * (sw - gw);
+        px[i] += lr * (sx * 2.0 - gx);
+        py[i] += lr * (sy * 2.0 - gy);
+        pe[i] += lr * (se * 2.0 - ge);
 
-        if (verbose && iter % 10 === 0) {
-          totalGradNorm += Math.sqrt(gx * gx + gy * gy + gz * gz + gw * gw);
-        }
-      }
-      if (verbose && iter % 10 === 0) {
-        logger.log(
-          `  [Relaxation] Iteration ${iter}: Avg Gradient Norm = ${(totalGradNorm / steps).toFixed(4)}`
-        );
+        // Monotonic Age Traversal
+        const da_move = lr * (sa * 2.0 - ga);
+        pa[i] = Math.max(pa[i - 1], Math.min(pa[i], pa[i] + da_move));
+        if (i < steps) pa[i] = Math.min(pa[i], pa[i + 1]);
       }
     }
   }
 
-  /**
-   * Reviews the relaxed path for "Logic Traps" - high-mass distraction nodes
-   * that lack logical entropy/certainty and could destabilize the derivation.
-   *
-   * @param px Path X coordinates.
-   * @param py Path Y coordinates.
-   * @param pz Path Entropy (Z) coordinates.
-   * @param pw Path Time (W) coordinates.
-   * @param steps Path resolution.
-   * @returns A report indicating if the path is logically sound.
-   */
+  private getPotential(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    pens: any[],
+    boost: Set<number> | undefined
+  ): number {
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const c2 = this.system.c * this.system.c;
+    let pot = 1.0;
+    for (let j = 0; j < this.system.length; j++) {
+      const dx = x - this.system.posX[j],
+        dy = y - this.system.posY[j],
+        dz = z - this.system.posZ[j],
+        dw = w - this.system.posW[j];
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (distSq < phys.INFLUENCE_RADIUS) {
+        let infl =
+          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
+        if (boost?.has(this.system.scope[j])) infl *= 100.0;
+        infl *= Math.exp(-Math.pow(dw * 50.0, 2)); // Contextual Anisotropy
+        if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Arrow of Logic
+        pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
+      }
+    }
+    if (pens) {
+      pens.forEach(p => {
+        const dx = x - p.x,
+          dy = y - p.y,
+          dz = z - p.z,
+          dw = w - p.w;
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (distSq < phys.PENALTY_RADIUS)
+          pot += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
+      });
+    }
+    return Math.max(0.01, pot);
+  }
+
+  private getPotentialAndNearest(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    pens: any[],
+    boost: Set<number> | undefined
+  ): { potential: number; nearestId: number } {
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const c2 = this.system.c * this.system.c;
+    let pot = 1.0,
+      minDistSq = Infinity,
+      nearestId = -1;
+    for (let j = 0; j < this.system.length; j++) {
+      const dx = x - this.system.posX[j],
+        dy = y - this.system.posY[j],
+        dz = z - this.system.posZ[j],
+        dw = w - this.system.posW[j];
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+        nearestId = j;
+      }
+      if (distSq < phys.INFLUENCE_RADIUS) {
+        let infl =
+          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
+        if (boost?.has(this.system.scope[j])) infl *= 100.0;
+        infl *= Math.exp(-Math.pow(dw * 50.0, 2));
+        if (this.system.posW[j] < w - 0.01) infl *= 0.01;
+        pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
+      }
+    }
+    if (pens) {
+      pens.forEach(p => {
+        const dx = x - p.x,
+          dy = y - p.y,
+          dz = z - p.z,
+          dw = w - p.w;
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (distSq < phys.PENALTY_RADIUS)
+          pot += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
+      });
+    }
+    return { potential: Math.max(0.01, pot), nearestId };
+  }
+
   private review(
     px: Float32Array,
     py: Float32Array,
-    pz: Float32Array,
-    pw: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
     steps: number
   ): Mapping.ReviewReport {
-    // TODO: clarifying questions should probably go here.
-    // - broad queries result in traps and paradoxes;
-    //  - "what's up?" => "ceiling && sky && greeting";
-    //  - at the same time, "ceiling != sky != greeting", a paradox;
-    // - if the Mapper cannot bypass a paradox, trigger an "ask";
-    // - not bypassing a paradox means the query is too general;
-    // - at present, paradoxical queries are being resolved to "unknown";
-    const c = this.system.c || 1.0;
-    const c2 = c * c;
-
+    const phys = DOPAT_CONFIG.PHYSICS;
     for (let i = 1; i < steps; i++) {
       let nearestDistSq = Infinity,
         nearestId = -1;
-      // Identify the nearest manifold concept to this path node.
       for (let j = 0; j < this.system.length; j++) {
-        const dx = this.system.posX[j] - px[i];
-        const dy = this.system.posY[j] - py[i];
-        const dz = this.system.entropy[j] - pz[i];
-        const dw = this.system.time[j] - pw[i];
-        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-        if (distSq < nearestDistSq) {
-          nearestDistSq = distSq;
+        const dSq =
+          Math.pow(px[i] - this.system.posX[j], 2) +
+          Math.pow(py[i] - this.system.posY[j], 2) +
+          Math.pow(pe[i] - this.system.posZ[j], 2) +
+          Math.pow(pa[i] - this.system.posW[j], 2);
+        if (dSq < nearestDistSq) {
+          nearestDistSq = dSq;
           nearestId = j;
         }
       }
-
-      // Check if the nearest concept is a logic trap (Supermassive with no entropy).
-      if (nearestId !== -1 && nearestDistSq < 25.0) {
-        const massFactor = Math.abs(this.system.mass[nearestId] / c2);
-        const entropy = this.system.entropy[nearestId];
-        if (massFactor > 500.0 && entropy < 0.1) {
+      if (nearestId !== -1 && nearestDistSq < phys.TRAP_DISTANCE_THRESHOLD) {
+        if (
+          this.system.density[nearestId] > phys.TRAP_MASS_THRESHOLD &&
+          this.system.entropyRate[nearestId] < phys.TRAP_ENTROPY_THRESHOLD
+        ) {
           return { passed: false, reason: "Logic Trap detected", trapIndex: i };
         }
       }
@@ -579,59 +586,43 @@ class Mapper implements Mapping.Engine {
     return { passed: true };
   }
 
-  /**
-   * Snapshots the continuous relaxed path into the nearest discrete quantum IDs.
-   * This discretization process converts the "physical" path back into logical steps.
-   *
-   * @param px Path X coordinates.
-   * @param py Path Y coordinates.
-   * @param pz Path Entropy (Z) coordinates.
-   * @param pw Path Time (W) coordinates.
-   * @param steps Path resolution.
-   * @returns A discrete sequence of quantum IDs.
-   */
   private extractIds(
     px: Float32Array,
     py: Float32Array,
-    pz: Float32Array,
-    pw: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
     steps: number
   ): Uint32Array {
-    const c = this.system.c || 1.0;
-    const c2 = c * c;
     const resultIds: number[] = [];
-
     for (let i = 0; i <= steps; i++) {
       let bestId = -1,
         minDiff = Infinity;
-      // Find the best discrete match in the manifold for this continuous path point.
       for (let j = 0; j < this.system.length; j++) {
-        const dx = this.system.posX[j] - px[i];
-        const dy = this.system.posY[j] - py[i];
-        const dz = this.system.entropy[j] - pz[i];
-        const dw = this.system.time[j] - pw[i];
-        const diffSq = dx * dx + dy * dy + dz * dz + dw * dw;
-
-        if (diffSq < minDiff) {
-          const massFactor = Math.abs(this.system.mass[j] / c2);
-          // Explicitly avoid snapping to identified Logic Traps.
-          const isTrap = massFactor > 500.0 && this.system.entropy[j] < 0.1;
-
-          if (!isTrap) {
-            minDiff = diffSq;
+        const dx = this.system.posX[j] - px[i],
+          dy = this.system.posY[j] - py[i],
+          dz = this.system.posZ[j] - pe[i],
+          dw = this.system.posW[j] - pa[i];
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        const totalDiff = distSq + dw * dw * 1000000.0; // Massive context snapping penalty
+        if (totalDiff < minDiff) {
+          if (
+            !(
+              this.system.density[j] >
+                DOPAT_CONFIG.PHYSICS.TRAP_MASS_THRESHOLD &&
+              this.system.entropyRate[j] <
+                DOPAT_CONFIG.PHYSICS.TRAP_ENTROPY_THRESHOLD
+            )
+          ) {
+            minDiff = totalDiff;
             bestId = j;
           }
         }
       }
-      // Only push unique consecutive IDs to maintain logical progression.
-      if (bestId !== -1) {
-        if (
-          resultIds.length === 0 ||
-          resultIds[resultIds.length - 1] !== bestId
-        ) {
-          resultIds.push(bestId);
-        }
-      }
+      if (
+        bestId !== -1 &&
+        (resultIds.length === 0 || resultIds[resultIds.length - 1] !== bestId)
+      )
+        resultIds.push(bestId);
     }
     return new Uint32Array(resultIds);
   }

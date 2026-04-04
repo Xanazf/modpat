@@ -1,20 +1,38 @@
-import { DOPAT_CONFIG } from "@config";
+import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
 
 /**
  * Enumeration of physical property buffers within the logical manifold.
  * These buffers correspond to the different dimensions of a logical precept's existence.
  */
 enum TargetBuffer {
-  /** The logical importance or certainty of a precept. */
+  /** Matter: The logical importance or content of posX. */
   Mass = 0,
-  /** The structural identifier or reach of a precept. */
+  /** Kind: The structural identifier or content of posY. */
   Scope = 1,
-  /** The logical vibration or temporal state of a precept. */
-  Time = 2,
-  /** The information concentration within a logical area. */
-  Density = 3,
-  /** The degree of logical uncertainty or decay over time. */
-  Entropy = 4,
+  /** Energy: The logical potential or content of posZ. */
+  Depth = 2,
+  /** Age: The temporal state or content of posW. */
+  Time = 3,
+  /** Topological X-coordinate (Matter). */
+  PosX = 4,
+  /** Topological Y-coordinate (Kind). */
+  PosY = 5,
+  /** Topological Z-coordinate (Energy). */
+  PosZ = 6,
+  /** Topological W-coordinate (Age). */
+  PosW = 7,
+  /** Matter Density (Mass / Scope) at posX:posY. */
+  Density = 8,
+  /** Temporal Decay Rate (Time / Scope) at posW:posY. */
+  EntropyRate = 9,
+  /** Logical Potency (Depth / Mass) at posZ:posX. */
+  Potency = 10,
+  /** Logical Intensity (Depth / Scope) at posZ:posY. */
+  Intensity = 11,
+  /** Per-precept rate of logical decay. */
+  DecayRate = 12,
+  /** Physical hash of the precept's state for integrity. */
+  Checksum = 13,
 }
 
 /**
@@ -40,6 +58,8 @@ export enum OperatorClass {
   Action = 7,
   /** Query-based operators used for logical interrogation. */
   Query = 8,
+  /** Syntactic landmarks for physicalized code synthesis. */
+  SyntaxAnchor = 9,
 }
 
 /**
@@ -49,12 +69,22 @@ export enum OperatorClass {
  * @returns The classified OperatorClass.
  */
 function classifyOperatorToken(token: string): OperatorClass {
+  const norm = token.trim().toLowerCase();
+
+  // TypeScript Physicalized Code Synthesis: check syntax attractors first.
+  if (
+    SYNTAX_ATTRACTORS.KEYWORDS.has(norm) ||
+    SYNTAX_ATTRACTORS.STRUCTURES.has(norm)
+  ) {
+    return OperatorClass.SyntaxAnchor;
+  }
+
   // TODO: allow the Mapper to expand this list
   // - needs "persistent identity" check;
   //  - operators are immutable across contexts;
   //  - if new_operator != immutable { new_operator != OperatorClass }
   // - possibly needs human review;
-  switch (token.trim().toLowerCase()) {
+  switch (norm) {
     case "implies":
     case "=>":
     case "is":
@@ -107,12 +137,36 @@ function classifyOperatorToken(token: string): OperatorClass {
 /**
  * Internal mapping of TargetBuffer indices to property keys on the System class.
  */
-const BufferMap: ("mass" | "scope" | "time" | "density" | "entropy")[] = [
+const BufferMap: (
+  | "mass"
+  | "scope"
+  | "depth"
+  | "time"
+  | "posX"
+  | "posY"
+  | "posZ"
+  | "posW"
+  | "density"
+  | "entropyRate"
+  | "potency"
+  | "intensity"
+  | "decayRate"
+  | "checksum"
+)[] = [
   "mass",
   "scope",
+  "depth",
   "time",
+  "posX",
+  "posY",
+  "posZ",
+  "posW",
   "density",
-  "entropy",
+  "entropyRate",
+  "potency",
+  "intensity",
+  "decayRate",
+  "checksum",
 ];
 
 /**
@@ -170,8 +224,8 @@ const LogicOperations = {
 
 /**
  * The System represents the core logical manifold: a contiguous block of memory
- * where logical "precepts" are stored as physical entities with properties like
- * mass, scope, density, and entropy.
+ * where logical "precepts" are stored as physical entities within a dual-layer
+ * manifold of matter and coordinates.
  *
  * It acts as a Direct Memory Access (DMA) buffer for high-performance
  * topological calculations, allowing for efficient geodesic pathfinding.
@@ -195,26 +249,44 @@ class System {
   /** Cache for reactive property signals to prevent redundant allocations. */
   private viewCache: (Root.Signal | undefined)[] = [];
 
-  /** Buffer view for 'mass': represents logical importance or certainty. (F64) */
+  /** Matter: represents logical importance or content of posX. (F64) */
   public readonly mass: Float64Array;
 
-  /** Buffer view for 'scope': represents structural reach or unique identifiers. (F64) */
+  /** Kind: represents structural reach or content of posY. (F64) */
   public readonly scope: Float64Array;
 
-  /** Buffer view for 'density': represents information concentration (mass / scope). (F64) */
-  public readonly density: Float64Array;
+  /** Energy: represents logical potential or content of posZ. (F64) */
+  public readonly depth: Float64Array;
 
-  /** Buffer view for 'entropy': represents logical uncertainty or decay. (F64) */
-  public readonly entropy: Float64Array;
+  /** Age: represents the temporal state or content of posW. (F64) */
+  public readonly time: Float64Array;
 
-  /** Buffer view for 'posX': topological X-coordinate in the manifold. (F64) */
+  /** Buffer view for 'posX': matter coordinate. (F64) */
   public readonly posX: Float64Array;
 
-  /** Buffer view for 'posY': topological Y-coordinate in the manifold. (F64) */
+  /** Buffer view for 'posY': kind coordinate. (F64) */
   public readonly posY: Float64Array;
 
-  /** Buffer view for 'time': logical vibration or temporal state of a precept. (F64) */
-  public readonly time: Float64Array;
+  /** Buffer view for 'posZ': energy coordinate. (F64) */
+  public readonly posZ: Float64Array;
+
+  /** Buffer view for 'posW': age coordinate. (F64) */
+  public readonly posW: Float64Array;
+
+  /** Buffer view for 'density': mass / scope. (F64) */
+  public readonly density: Float64Array;
+
+  /** Buffer view for 'entropyRate': time / scope. (F64) */
+  public readonly entropyRate: Float64Array;
+
+  /** Buffer view for 'potency': depth / mass. (F64) */
+  public readonly potency: Float64Array;
+
+  /** Buffer view for 'intensity': depth / scope. (F64) */
+  public readonly intensity: Float64Array;
+
+  /** Buffer view for 'decayRate': custom rate of logical decay per precept. (F64) */
+  public readonly decayRate: Float64Array;
 
   /** Buffer view for 'checksum': physical hash of the precept's state for integrity. (F64) */
   public readonly checksum: Float64Array;
@@ -238,8 +310,8 @@ class System {
     this.length = 0;
     const maxP = DOPAT_CONFIG.MAX_PRECEPTS;
 
-    // View Cache initialization (7 properties * max precepts)
-    this.viewCache = new Array(maxP * 7).fill(undefined);
+    // View Cache initialization (14 properties * max precepts)
+    this.viewCache = new Array(maxP * 14).fill(undefined);
 
     const bytesF64 = Float64Array.BYTES_PER_ELEMENT; // 8
     const bytesU32 = Uint32Array.BYTES_PER_ELEMENT; // 4
@@ -251,7 +323,7 @@ class System {
 
     // Calculate total buffer size required for all views.
     const totalBytes =
-      blockF64 * 8 + // mass, scope, time, density, entropy, posX, posY, checksum
+      blockF64 * 14 + // mass, scope, depth, time, posX, posY, posZ, posW, density, entropyRate, potency, intensity, decayRate, checksum
       blockU32 * 2 + // PartLayer, ComplexLayer
       blockU8;
 
@@ -262,32 +334,36 @@ class System {
     // Map 64-bit physical properties into the buffer.
     this.mass = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
-
     this.scope = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
-
+    this.depth = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
     this.time = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
-
-    this.density = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-
-    this.entropy = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-
     this.posX = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
-
     this.posY = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
-
+    this.posZ = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.posW = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.density = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.entropyRate = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.potency = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.intensity = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.decayRate = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
     this.checksum = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
 
     // Map 32-bit structural layers into the buffer.
     this.PartLayer = new Uint32Array(this.buffer, offset, maxP);
     offset += blockU32;
-
     this.ComplexLayer = new Uint32Array(this.buffer, offset, maxP);
     offset += blockU32;
 
@@ -307,8 +383,8 @@ class System {
   /**
    * Registers a new logical location (precept) within the manifold.
    *
-   * @param initialMass The starting logical importance/certainty.
-   * @param initialScope The unique structural identifier.
+   * @param initialMass The starting matter content.
+   * @param initialScope The starting structural kind.
    * @returns The internal ID (index) of the new location.
    */
   public createLocation(initialMass: number, initialScope: number): number {
@@ -329,8 +405,9 @@ class System {
     // Set initial physical state.
     this.mass[id] = initialMass;
     this.scope[id] = initialScope;
+    this.decayRate[id] = 0.01; // Default decay rate.
 
-    // Trigger update to calculate derived properties (Density, Time, Checksum).
+    // Trigger update to calculate derived properties.
     this.update(id);
     return id;
   }
@@ -346,11 +423,17 @@ class System {
     // Zero out all physical properties to prevent stale data.
     this.mass[id] = 0;
     this.scope[id] = 0;
-    this.density[id] = 0;
-    this.entropy[id] = 0;
+    this.depth[id] = 0;
+    this.time[id] = 0;
     this.posX[id] = 0;
     this.posY[id] = 0;
-    this.time[id] = 0;
+    this.posZ[id] = 0;
+    this.posW[id] = 0;
+    this.density[id] = 0;
+    this.entropyRate[id] = 0;
+    this.potency[id] = 0;
+    this.intensity[id] = 0;
+    this.decayRate[id] = 0;
     this.checksum[id] = 0;
     this.operatorClass[id] = OperatorClass.None;
 
@@ -359,31 +442,24 @@ class System {
 
   /**
    * Re-calculates derived physical properties for a specific ID.
-   * Derived properties define how a precept interacts with the logical topology.
+   * Derived properties sit at the specific cross-dimensional intersections.
    *
    * @param id The index of the precept to update.
    */
   public update(id: number): void {
-    const massVal = this.mass[id];
-    const scopeVal = this.scope[id];
-    // Ensure scope is non-zero to prevent division by zero (Singularity).
-    const safeScope = scopeVal === 0 ? this.epsilon : scopeVal;
+    const m = this.mass[id];
+    const s = Math.max(this.scope[id], this.epsilon);
+    const d = this.depth[id];
+    const t = this.time[id];
 
-    // Density represents the concentration of logical mass over scope.
-    const newDensity = massVal / safeScope;
-
-    // Clamp density at the stability threshold (Maxilon).
-    if (newDensity >= this.maxilon) {
-      this.density[id] = this.maxilon;
-      return;
-    }
-
-    this.density[id] = newDensity;
-
-    // Time represents the "vibration" or temporal energy of the precept.
-    // Derived from the logarithmic concentration of mass.
-    const vibrationAmplitude = Math.log(Math.abs(massVal / safeScope) + 1) + 1;
-    this.time[id] = vibrationAmplitude * this.c;
+    // Matter Layer Intersection (posX:posY)
+    this.density[id] = Math.min(m / s, this.maxilon);
+    // Temporal Layer Intersection (posW:posY)
+    this.entropyRate[id] = Math.min(t / s, this.maxilon);
+    // Energy Layer Intersection (posZ:posX)
+    this.potency[id] = Math.min(d / Math.max(m, this.epsilon), this.maxilon);
+    // Intensity Layer Intersection (posZ:posY)
+    this.intensity[id] = Math.min(d / s, this.maxilon);
 
     // Update integrity checksum.
     this.checksum[id] = this.calculateChecksum(id);
@@ -399,11 +475,23 @@ class System {
   private calculateChecksum(id: number): number {
     const m = this.mass[id] || 0;
     const s = this.scope[id] || 0;
+    const d = this.depth[id] || 0;
     const t = this.time[id] || 0;
-    const d = this.density[id] || 0;
-    const e = this.entropy[id] || 0;
+    const x = this.posX[id] || 0;
+    const y = this.posY[id] || 0;
+    const z = this.posZ[id] || 0;
+    const w = this.posW[id] || 0;
 
-    return m * 0.1 + s * 0.2 + t * 0.3 + d * 0.4 + e * 0.5;
+    return (
+      m * 0.1 +
+      s * 0.2 +
+      d * 0.3 +
+      t * 0.4 +
+      x * 0.5 +
+      y * 0.6 +
+      z * 0.7 +
+      w * 0.8
+    );
   }
 
   /**
@@ -423,8 +511,7 @@ class System {
       return false;
     }
 
-    // Detect Singularities: High mass with near-zero scope.
-    // These entities warp the logical field uncontrollably.
+    // Detect Singularities: High matter with near-zero kind.
     const m = this.mass[id];
     const s = this.scope[id];
     if (m > DOPAT_CONFIG.BLACKBODY_LIMIT && s <= this.epsilon) {
@@ -451,24 +538,28 @@ class System {
 
   /**
    * Temporal Manifold Dynamics: simulates the passage of time and logical friction.
-   * Precepts naturally lose mass (forgetting) and increase entropy (uncertainty).
+   * Matter decays exponentially while Age (time) increases based on per-precept rate.
    *
    * @param deltaTime Elapsed simulation time.
-   * @param decayConstant Speed of decay (defaults to 0.01).
    */
-  public decay(deltaTime: number, decayConstant: number = 0.01): void {
+  public decay(deltaTime: number): void {
     for (let i = 0; i < this.length; i++) {
       // Skip deallocated locations.
       if (this.mass[i] === 0 && this.scope[i] === 0) continue;
 
-      // Entropy increases linearly, while mass decays exponentially.
-      this.entropy[i] += decayConstant * deltaTime;
-      this.mass[i] *= Math.exp(-decayConstant * deltaTime);
+      const rate = this.decayRate[i] || 0.01;
+
+      // Age increases based on the decay constant.
+      this.time[i] += rate * deltaTime;
+      // Matter decays over time.
+      this.mass[i] *= Math.exp(-rate * deltaTime);
 
       // Natural Drift: dead or forgotten precepts drift towards the manifold origin.
-      if (this.entropy[i] > 100.0 || Math.abs(this.mass[i]) < this.epsilon) {
+      if (Math.abs(this.mass[i]) < 100.0) {
         this.posX[i] *= 0.9;
         this.posY[i] *= 0.9;
+        this.posZ[i] *= 0.9;
+        this.posW[i] *= 0.9;
       }
 
       // Re-calculate derived properties after decay.

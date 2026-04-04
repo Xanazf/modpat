@@ -83,37 +83,42 @@ Rules and axioms are not stored as a list, but as a topography.
 
 ## System Architecture
 
-### 1. Contiguous Memory Manifold
+### 1. Contiguous Memory Manifold (DOPAT)
 
-The core state is managed in a contiguous system buffer (DMA) for high-performance calculations. Every logical "complex" is stored with the following physical properties:
+The core state is managed in a contiguous system buffer (DMA) for high-performance topological calculations. Every logical "precept" is stored as a physical entity within a dual-layer manifold with the following properties:
 
-* **Mass:** Representing the logical certainty or weight of the concept.
-* **Scope:** A unique identifier mapped to the frequency domain.
-* **4D Position:** Coordinates in Space (X, Y), Entropy (Z), and Time (W).
+*   **Matter (Mass):** The logical importance or content density of the precept.
+*   **Kind (Scope):** The structural reach or category identifier.
+*   **Energy (Depth):** The logical potential or consequence depth.
+*   **Age (Time):** The temporal state or context within the logical loom.
+*   **4D Position:** Coordinates in Matter (X), Kind (Y), Energy (Z), and Age (W).
 
-### 2. Spectral Logic (Based on Wave-Particle Duality)
+### 2. Spectral Logic (Resonance Propagation)
 
-The engine utilizes Fast Fourier Transforms (FFT) to process logical operations as interference patterns:
+The engine models logical operations as energy vibrations propagating through a manifold. This is implemented via a Transfer Matrix (W) that defines the conductivity of logic between precepts:
 
-* **Constructive (AND):** Logical conjunctions result in signal amplification.
-* **Normalized (OR):** Disjunctions act as a signal mixer, maintaining level without runaway amplification.
-* **Phase Shift (NOT):** Negation is modeled as a 180-degree phase shift, creating destructive interference that repels logical pathing.
+*   **Constructive Interference (AND):** Logical conjunctions result in signal amplification through shared semantic scopes.
+*   **Destructive Interference (NOT):** Negation is modeled as a 180-degree phase shift, creating repelling potential fields.
+*   **Gravitational Lensing:** Identity shifts (e.g., "is", "are") and quantifiers act as lenses that bend the logical path, allowing energy to bypass structural operators.
 
 ### 3. Geodesic Pathfinding
 
-Deduction is performed by finding the "geodesic" (the shortest or most efficient path) through the manifold.
+Deduction is performed by finding the "geodesic" (the shortest logical path) through the 4D manifold potential field.
 
-* **Relaxation:** The system uses gradient descent (in the context of differential geometry) to move path nodes toward high-density areas (logical attractors) while maintaining path smoothness through spring forces.
-* **Trap Detection:** A self-review mechanism identifies "Logic Traps"—zones of high mass but low entropy that often indicate circular reasoning or logical distractors.
+*   **Iterative Relaxation:** The system uses gradient descent to move path nodes toward high-density logic attractors while maintaining path smoothness through simulated spring forces.
+*   **Monotonic Age Traversal:** Paths are constrained by the "Arrow of Logic," ensuring temporal consistency in derivations.
+*   **Trap Detection:** A self-review mechanism identifies "Logic Traps"—zones of high mass but low entropy that indicate circular reasoning or semantic dead-ends.
 
 ## Implementation Details
 
 ### Core Components
 
-* **Resolver:** Manages the physics simulation of "precept" ( "particle" or "complex") propagation and "waveform collapse" into a final state.
-* **Mapper:** Handles the iterative calculation of geodesic routes between concepts.
-* **Atomizers:** Convert natural language (via NLP) or RF signals (via spectral peaks) into physical precepts.
-* **Memory Vault:** Uses DuckDB to "crystallize" proven logical paths, allowing them to be recalled by their topological signature without re-running the simulation.
+*   **LiveInference:** The real-time intent-routing engine. It bridges natural language with the manifold by determining if an input is an interrogation (Question) or ingestion (Command), and resolves it via memory resonance or external retrieval (Wikipedia/DuckDB).
+*   **Resolver:** The primary logical engine. It executes the physics simulation of resonance propagation, utilizing a Transfer Matrix to calculate reachability and waveform collapse into a final discrete state.
+*   **Mapper:** Handles the 4D pathfinding algorithms. It manages the iterative relaxation of geodesics and detects logical voids, triggering the Unfolder to expand the manifold as needed.
+*   **Synthesizer:** Responsible for "collapsing" a logical geodesic path into structured TypeScript code. It performs topological serialization and syntactic cleanup to produce valid identifiers.
+*   **Atomizers:** Convert natural language or external signals into atomic logical quanta, mapping them to specific coordinates in the manifold.
+*   **Memory Vault:** Uses DuckDB to "crystallize" proven logical paths, allowing them to be recalled by their topological signature.
 
 ### Computation
 
