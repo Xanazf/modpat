@@ -24,7 +24,7 @@ export async function runMapperReviewTest() {
       env.system.posY[trapId] = 0;
       env.system.mass[trapId] = env.system.c ** 2 * 1000.0;
       // High mass + low entropyRate = Logic Trap
-      env.system.time[trapId] = 0.0; 
+      env.system.time[trapId] = 0.0;
       env.system.scope[trapId] = 1.0;
       env.system.update(trapId);
 

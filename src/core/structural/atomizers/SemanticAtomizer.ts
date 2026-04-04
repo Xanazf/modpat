@@ -78,27 +78,43 @@ export default class SemanticAtomizer
 
     for (const token of rawTokens) {
       const normal = token.toLowerCase();
-      const isStructural = ["(", ")", "{", "}", ":", ",", "+", "|-"].includes(normal);
-      const isHardOp = this.hardOperators.has(normal) || ["implies", "=>", "|-"].includes(normal);
-      const isMathAtom = ["x", "y", "z", "a", "b", "c", "number"].includes(normal);
+      const isStructural = ["(", ")", "{", "}", ":", ",", "+", "|-"].includes(
+        normal
+      );
+      const isHardOp =
+        this.hardOperators.has(normal) ||
+        ["implies", "=>", "|-"].includes(normal);
+      const isMathAtom = ["x", "y", "z", "a", "b", "c", "number"].includes(
+        normal
+      );
       const isKeyword = SYNTAX_ATTRACTORS.KEYWORDS.has(normal);
 
       // Simple NLP tagging per token to maintain identity but get basic metadata
       const doc = nlp(token);
       const term = doc.json()[0]?.terms[0] || {};
       const tags = term.tags || [];
-      const isVerb = tags.includes("Verb") || tags.includes("Copula") || tags.includes("PastTense");
-      const isPlural = tags.includes("Plural") || normal === "are" || normal === "were";
+      const isVerb =
+        tags.includes("Verb") ||
+        tags.includes("Copula") ||
+        tags.includes("PastTense");
+      const isPlural =
+        tags.includes("Plural") || normal === "are" || normal === "were";
 
       tokens.push({
         text: token,
-        isOp: isStructural || isHardOp || isMathAtom || isVerb || isKeyword || this.logicalAdverbs.has(normal),
-        isPlural
+        isOp:
+          isStructural ||
+          isHardOp ||
+          isMathAtom ||
+          isVerb ||
+          isKeyword ||
+          this.logicalAdverbs.has(normal),
+        isPlural,
       });
     }
 
     const sequenceIds = new Uint32Array(tokens.length);
-    let currentLoom = 1.0; 
+    let currentLoom = 1.0;
 
     // 2. Physical Materialization
     for (let i = 0; i < tokens.length; i++) {
@@ -122,19 +138,19 @@ export default class SemanticAtomizer
       // We ALWAYS create a new location during sequence ingestion to preserve
       // the unique physical identity of each token in the functional chain.
       const id = system.createLocation(mass, scope);
-      
+
       system.operatorClass[id] = classifyOperatorToken(text);
       sequenceIds[i] = id;
 
       system.posY[id] = i * 0.1;
-      
+
       let context = currentLoom;
-      let depth = 0.5;   // Default depth
-      let decay = 0.01;  // Default decay
+      let depth = 0.5; // Default depth
+      let decay = 0.01; // Default decay
 
       // Task 11: Specificity-based Depth Projection & Triplet Logic
-      const isDefinite = (norm === "the");
-      const isIndefinite = (norm === "a" || norm === "an");
+      const isDefinite = norm === "the";
+      const isIndefinite = norm === "a" || norm === "an";
 
       if (isDefinite) {
         depth = 0.1; // High specificity = Low Depth
@@ -142,11 +158,14 @@ export default class SemanticAtomizer
       } else if (isIndefinite) {
         depth = 0.9; // Low specificity = High Depth
       } else if (["function", "calculate", "class"].includes(norm)) {
-        depth = 1.0; decay = 0.001;
-      } else if (currentLoom >= 0.5 && currentLoom <= 1.5) { 
-        depth = 0.7; decay = 0.005; 
-      } else if (currentLoom >= 2.0 && currentLoom <= 3.0) { 
-        depth = 0.4; decay = 0.01; 
+        depth = 1.0;
+        decay = 0.001;
+      } else if (currentLoom >= 0.5 && currentLoom <= 1.5) {
+        depth = 0.7;
+        decay = 0.005;
+      } else if (currentLoom >= 2.0 && currentLoom <= 3.0) {
+        depth = 0.4;
+        decay = 0.01;
         if (!["{", "}", "return"].includes(norm)) context = 2.5;
       }
 
@@ -164,15 +183,18 @@ export default class SemanticAtomizer
       }
 
       system.posZ[id] = depth;
-      system.posW[id] = context + (i * 0.001);
-      
+      system.posW[id] = context + i * 0.001;
+
       // Sync Matter layer content
       system.depth[id] = depth;
       system.time[id] = system.posW[id];
       system.decayRate[id] = decay;
-      
+
       // Finalize 4D Coordinates.
-      const words = text.toLowerCase().split(/\s+/).filter(w => !["the", "a", "an"].includes(w));
+      const words = text
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(w => !["the", "a", "an"].includes(w));
       if (words.length > 0) {
         let avgPosX = 0;
         for (const word of words) avgPosX += this.loader.getScope(word);
@@ -180,7 +202,7 @@ export default class SemanticAtomizer
       } else {
         system.posX[id] = this.loader.getScope(text);
       }
-      
+
       system.update(id);
     }
 

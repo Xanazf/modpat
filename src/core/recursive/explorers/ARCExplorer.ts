@@ -126,11 +126,12 @@ export class ARCExplorer extends BaseExplorer<
    * This identifies which shapes are "playable" (move or change in response to input).
    */
   protected async calibrate(currentResponse: FrameResponse): Promise<void> {
-    this.log(`\n=== Physical Calibration Phase (Exhaustive) ===`);
+    this.log(`\n=== Calibration Phase ===`);
 
     // 1. RECOGNIZE ALL SHAPES
     const initialShapes = this.atomizer.findShapes(currentResponse.frame);
     this.log(`[Explore] Identified ${initialShapes.length} potential shapes.`);
+    console.log(initialShapes);
 
     // 2. TEST EVERY AVAILABLE ACTION
     const availableActions = currentResponse.available_actions.filter(
@@ -146,6 +147,7 @@ export class ARCExplorer extends BaseExplorer<
       for (const shape of initialShapes) {
         const sig = this.getShapeSignature(shape);
         if (!this.calibratedSignatures[act].has(sig)) {
+          this.log(`[Signature] To calibrate: ${sig}`);
           needsCalibration = true;
           break;
         }
@@ -260,7 +262,9 @@ export class ARCExplorer extends BaseExplorer<
       sig: this.getShapeSignature(p.target),
     }));
 
-    const getHeuristic = (positions: { x: number; y: number; sig: string }[]) => {
+    const getHeuristic = (
+      positions: { x: number; y: number; sig: string }[]
+    ) => {
       let h = 0;
       for (let i = 0; i < positions.length; i++) {
         h += Math.sqrt(
@@ -281,7 +285,9 @@ export class ARCExplorer extends BaseExplorer<
     const openSet: SearchNode[] = [startNode];
     const closedSet = new Set<string>();
 
-    const getStateKey = (positions: { x: number; y: number; sig: string }[]) => {
+    const getStateKey = (
+      positions: { x: number; y: number; sig: string }[]
+    ) => {
       return positions.map(p => `${p.x},${p.y},${p.sig}`).join("|");
     };
 
@@ -316,7 +322,11 @@ export class ARCExplorer extends BaseExplorer<
           const dy = vec ? vec.dy : 0;
           const nextSig = vec && vec.nextSig ? vec.nextSig : pos.sig;
 
-          if (Math.round(dx) !== 0 || Math.round(dy) !== 0 || nextSig !== pos.sig) {
+          if (
+            Math.round(dx) !== 0 ||
+            Math.round(dy) !== 0 ||
+            nextSig !== pos.sig
+          ) {
             actionDoesSomething = true;
           }
 

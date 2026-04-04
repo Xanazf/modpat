@@ -6,20 +6,26 @@ import { describe, it, TestHarness } from "./utils/harness";
 
 async function testMemoryAlignment(system: System) {
   const f64Buffers: (keyof System)[] = [
-    "mass", "scope", "depth", "time", 
-    "posX", "posY", "posZ", "posW",
-    "density", "entropyRate", "potency", "intensity",
-    "decayRate", "checksum"
+    "mass",
+    "scope",
+    "depth",
+    "time",
+    "posX",
+    "posY",
+    "posZ",
+    "posW",
+    "density",
+    "entropyRate",
+    "potency",
+    "intensity",
+    "decayRate",
+    "checksum",
   ];
 
   for (const key of f64Buffers) {
     const buffer = system[key] as Float64Array;
     assert.ok(buffer, `Buffer ${key} is missing`);
-    assert.strictEqual(
-      buffer.byteOffset % 8,
-      0,
-      `Buffer ${key} unaligned`
-    );
+    assert.strictEqual(buffer.byteOffset % 8, 0, `Buffer ${key} unaligned`);
   }
 
   assert.strictEqual(system.PartLayer.byteOffset % 4, 0, "PartLayer unaligned");

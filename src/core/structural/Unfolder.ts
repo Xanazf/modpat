@@ -2,8 +2,8 @@ import type System from "@core_i/System";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 
 /**
- * The Fractal Unfolder is responsible for identifying "Logical Voids" 
- * (areas with low density/information) and filling them by harvesting 
+ * The Fractal Unfolder is responsible for identifying "Logical Voids"
+ * (areas with low density/information) and filling them by harvesting
  * data from external sources like Google and Context7 technical docs.
  */
 export default class Unfolder {
@@ -37,7 +37,10 @@ export default class Unfolder {
     const fullContent = `${searchResult}\n${technicalData}`;
 
     // 3. Ingest this text into the manifold via SemanticAtomizer
-    const newPreceptIds = this.atomizer.ingestSequence(fullContent, this.system);
+    const newPreceptIds = this.atomizer.ingestSequence(
+      fullContent,
+      this.system
+    );
 
     // 4. Assign physical parameters to create a "Sub-Gradient" that bridges the void
     const basePosX = this.system.posX[voidPreceptId];
@@ -46,7 +49,7 @@ export default class Unfolder {
     for (const id of Array.from(newPreceptIds)) {
       // Assign high mass to ensure these new precepts are authoritative
       this.system.mass[id] = this.system.c * 10;
-      
+
       // Position them spatially near the parent void, but with unique displacement
       this.system.posX[id] = basePosX + (Math.random() - 0.5) * 5.0;
       this.system.posY[id] = basePosY + (Math.random() - 0.5) * 5.0;
@@ -61,7 +64,11 @@ export default class Unfolder {
    * The actual implementation will be provided by the agent's MCP tool.
    */
   private async googleSearch(query: string): Promise<string> {
-    if (query.toLowerCase().includes("sum") || query.toLowerCase().includes("calculate") || query.toLowerCase().includes("math")) {
+    if (
+      query.toLowerCase().includes("sum") ||
+      query.toLowerCase().includes("calculate") ||
+      query.toLowerCase().includes("math")
+    ) {
       return "x + y";
     }
     return `concepts: encryption, auth, authorization.`;
@@ -72,7 +79,11 @@ export default class Unfolder {
    * The actual implementation will be provided by the agent's MCP tool.
    */
   private async queryContext7(query: string): Promise<string> {
-    if (query.toLowerCase().includes("sum") || query.toLowerCase().includes("calculate") || query.toLowerCase().includes("math")) {
+    if (
+      query.toLowerCase().includes("sum") ||
+      query.toLowerCase().includes("calculate") ||
+      query.toLowerCase().includes("math")
+    ) {
       return "return x + y";
     }
     return `docs: OWASP, JWT, OAuth2.`;

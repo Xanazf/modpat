@@ -6,9 +6,9 @@ import { DOPAT_CONFIG } from "@config";
 
 /**
  * The Mapper is responsible for finding the shortest logical path (Geodesic)
- * through the Dual-Layer Manifold. It treats logical derivation as a 
+ * through the Dual-Layer Manifold. It treats logical derivation as a
  * physical process of "falling" through a potential field defined by:
- * 
+ *
  * 1. Matter Coordinates (posX): The semantic location of content.
  * 2. Kind Coordinates (posY): The structural category of the precept.
  * 3. Energy Coordinates (posZ): The logical potential/consequence depth.
@@ -54,7 +54,7 @@ class Mapper implements Mapping.Engine {
 
   /**
    * Calculates the optimal geodesic path through the logic manifold.
-   * 
+   *
    * @param sourceId Starting quantum ID.
    * @param targetId Destination quantum ID.
    * @param options Routing parameters.
@@ -80,28 +80,69 @@ class Mapper implements Mapping.Engine {
     // Linear interpolation for initial guess across the dual-layer coordinates.
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      px[i] = this.system.posX[sourceId] + t * (this.system.posX[targetId] - this.system.posX[sourceId]);
-      py[i] = this.system.posY[sourceId] + t * (this.system.posY[targetId] - this.system.posY[sourceId]);
-      pe[i] = this.system.posZ[sourceId] + t * (this.system.posZ[targetId] - this.system.posZ[sourceId]);
-      pa[i] = this.system.posW[sourceId] + t * (this.system.posW[targetId] - this.system.posW[sourceId]);
+      px[i] =
+        this.system.posX[sourceId] +
+        t * (this.system.posX[targetId] - this.system.posX[sourceId]);
+      py[i] =
+        this.system.posY[sourceId] +
+        t * (this.system.posY[targetId] - this.system.posY[sourceId]);
+      pe[i] =
+        this.system.posZ[sourceId] +
+        t * (this.system.posZ[targetId] - this.system.posZ[sourceId]);
+      pa[i] =
+        this.system.posW[sourceId] +
+        t * (this.system.posW[targetId] - this.system.posW[sourceId]);
     }
 
-    const penalties: { x: number; y: number; z: number; w: number; strength: number }[] = [];
+    const penalties: {
+      x: number;
+      y: number;
+      z: number;
+      w: number;
+      strength: number;
+    }[] = [];
     let finalIds: Uint32Array | null = null;
 
     // 2. Iterative Relaxation using Manifold Potential Field.
     for (let attempt = 0; attempt < 3; attempt++) {
       if (this.gpu) {
-        await this.relaxPathGPU(px, py, pe, pa, steps, maxIterations, learningRate, boostScopes, penalties);
+        await this.relaxPathGPU(
+          px,
+          py,
+          pe,
+          pa,
+          steps,
+          maxIterations,
+          learningRate,
+          boostScopes,
+          penalties
+        );
       } else {
-        this.relaxPath(px, py, pe, pa, steps, maxIterations, learningRate, boostScopes, penalties);
+        this.relaxPath(
+          px,
+          py,
+          pe,
+          pa,
+          steps,
+          maxIterations,
+          learningRate,
+          boostScopes,
+          penalties
+        );
       }
 
       // Check for logical voids and trigger the Unfolder.
       if (this.unfolder) {
         let voidDetected = false;
         for (let i = 0; i <= steps; i++) {
-          const { potential, nearestId } = this.getPotentialAndNearest(px[i], py[i], pe[i], pa[i], penalties, boostScopes);
+          const { potential, nearestId } = this.getPotentialAndNearest(
+            px[i],
+            py[i],
+            pe[i],
+            pa[i],
+            penalties,
+            boostScopes
+          );
           if (potential > DOPAT_CONFIG.PHYSICS.VOID_POTENTIAL_THRESHOLD) {
             if (nearestId !== -1) {
               await this.unfolder.expand(nearestId, options.topic ?? "Logic");
@@ -111,8 +152,30 @@ class Mapper implements Mapping.Engine {
           }
         }
         if (voidDetected) {
-          if (this.gpu) await this.relaxPathGPU(px, py, pe, pa, steps, maxIterations, learningRate, boostScopes, penalties);
-          else this.relaxPath(px, py, pe, pa, steps, maxIterations, learningRate, boostScopes, penalties);
+          if (this.gpu)
+            await this.relaxPathGPU(
+              px,
+              py,
+              pe,
+              pa,
+              steps,
+              maxIterations,
+              learningRate,
+              boostScopes,
+              penalties
+            );
+          else
+            this.relaxPath(
+              px,
+              py,
+              pe,
+              pa,
+              steps,
+              maxIterations,
+              learningRate,
+              boostScopes,
+              penalties
+            );
         }
       }
 
@@ -122,8 +185,11 @@ class Mapper implements Mapping.Engine {
         break;
       } else if (report.trapIndex !== undefined) {
         penalties.push({
-          x: px[report.trapIndex], y: py[report.trapIndex], z: pe[report.trapIndex], w: pa[report.trapIndex],
-          strength: 1000.0
+          x: px[report.trapIndex],
+          y: py[report.trapIndex],
+          z: pe[report.trapIndex],
+          w: pa[report.trapIndex],
+          strength: 1000.0,
         });
       }
     }
@@ -134,7 +200,17 @@ class Mapper implements Mapping.Engine {
   /**
    * Performs gradient descent on the logic density field using GPU acceleration.
    */
-  private async relaxPathGPU(px: Float32Array, py: Float32Array, pe: Float32Array, pa: Float32Array, steps: number, maxIterations: number, learningRate: number, boostScopes: Set<number> | undefined, penalties: any[]): Promise<void> {
+  private async relaxPathGPU(
+    px: Float32Array,
+    py: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
+    steps: number,
+    maxIterations: number,
+    learningRate: number,
+    boostScopes: Set<number> | undefined,
+    penalties: any[]
+  ): Promise<void> {
     if (!this.geodesicPipeline) await this.initGPUPipeline();
     const device = await TensorMath_GPU.getDevice();
     const sysLength = this.system.length;
@@ -143,25 +219,35 @@ class Mapper implements Mapping.Engine {
     const sysInfluence = new Float32Array(sysLength);
     for (let j = 0; j < sysLength; j++) {
       // Influence is derived from Matter Density and Energy Intensity
-      let influence = this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
+      let influence =
+        this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
       if (boostScopes?.has(this.system.scope[j])) influence *= 100.0;
       sysInfluence[j] = influence;
     }
 
     const penaltyData = new Float32Array(Math.max(1, penalties.length) * 8);
-    penalties.forEach((p, i) => { 
-      penaltyData[i*8+0]=p.x; penaltyData[i*8+1]=p.y; penaltyData[i*8+2]=p.z; penaltyData[i*8+3]=p.w; penaltyData[i*8+4]=p.strength; 
+    penalties.forEach((p, i) => {
+      penaltyData[i * 8 + 0] = p.x;
+      penaltyData[i * 8 + 1] = p.y;
+      penaltyData[i * 8 + 2] = p.z;
+      penaltyData[i * 8 + 3] = p.w;
+      penaltyData[i * 8 + 4] = p.strength;
     });
 
     const pathData = new Float32Array((steps + 1) * 4);
-    for (let i = 0; i <= steps; i++) { 
-      pathData[i*4+0]=px[i]; pathData[i*4+1]=py[i]; pathData[i*4+2]=pe[i]; pathData[i*4+3]=pa[i]; 
+    for (let i = 0; i <= steps; i++) {
+      pathData[i * 4 + 0] = px[i];
+      pathData[i * 4 + 1] = py[i];
+      pathData[i * 4 + 2] = pe[i];
+      pathData[i * 4 + 3] = pa[i];
     }
 
     const sysPosData = new Float32Array(sysLength * 4);
-    for (let j = 0; j < sysLength; j++) { 
-      sysPosData[j*4+0]=this.system.posX[j]; sysPosData[j*4+1]=this.system.posY[j]; 
-      sysPosData[j*4+2]=this.system.posZ[j]; sysPosData[j*4+3]=this.system.posW[j]; 
+    for (let j = 0; j < sysLength; j++) {
+      sysPosData[j * 4 + 0] = this.system.posX[j];
+      sysPosData[j * 4 + 1] = this.system.posY[j];
+      sysPosData[j * 4 + 2] = this.system.posZ[j];
+      sysPosData[j * 4 + 3] = this.system.posW[j];
     }
 
     const createB = (data: any, size: number, usage: number) => {
@@ -170,32 +256,69 @@ class Mapper implements Mapping.Engine {
       return b;
     };
 
-    const bPath = createB(pathData, pathData.byteLength, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST);
-    const bSysPos = createB(sysPosData, sysPosData.byteLength, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-    const bSysInfluence = createB(sysInfluence, sysInfluence.byteLength, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-    const bPenalties = createB(penaltyData, penaltyData.byteLength, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
+    const bPath = createB(
+      pathData,
+      pathData.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    );
+    const bSysPos = createB(
+      sysPosData,
+      sysPosData.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    );
+    const bSysInfluence = createB(
+      sysInfluence,
+      sysInfluence.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    );
+    const bPenalties = createB(
+      penaltyData,
+      penaltyData.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    );
 
     const phys = DOPAT_CONFIG.PHYSICS;
     const params = new ArrayBuffer(48);
     const view = new DataView(params);
-    view.setUint32(0, steps, true); view.setUint32(4, sysLength, true); view.setFloat32(8, learningRate, true);
-    view.setUint32(12, penalties.length, true); view.setUint32(16, maxIterations, true);
-    view.setFloat32(20, phys.GRADIENT_STEP, true); view.setFloat32(24, phys.INFLUENCE_RADIUS, true);
-    view.setFloat32(28, phys.INFLUENCE_FALLOFF, true); view.setFloat32(32, phys.PENALTY_RADIUS, true);
+    view.setUint32(0, steps, true);
+    view.setUint32(4, sysLength, true);
+    view.setFloat32(8, learningRate, true);
+    view.setUint32(12, penalties.length, true);
+    view.setUint32(16, maxIterations, true);
+    view.setFloat32(20, phys.GRADIENT_STEP, true);
+    view.setFloat32(24, phys.INFLUENCE_RADIUS, true);
+    view.setFloat32(28, phys.INFLUENCE_FALLOFF, true);
+    view.setFloat32(32, phys.PENALTY_RADIUS, true);
     view.setFloat32(36, phys.PENALTY_FALLOFF, true);
 
-    const bParams = createB(params, 48, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
-    const bReadPath = createB(undefined, pathData.byteLength, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ);
+    const bParams = createB(
+      params,
+      48,
+      GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    );
+    const bReadPath = createB(
+      undefined,
+      pathData.byteLength,
+      GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    );
 
-    const bg = device.createBindGroup({ layout: this.geodesicPipeline!.getBindGroupLayout(0), entries: [
-      { binding: 0, resource: { buffer: bPath } }, { binding: 1, resource: { buffer: bSysPos } },
-      { binding: 2, resource: { buffer: bSysInfluence } }, { binding: 3, resource: { buffer: bPenalties } },
-      { binding: 4, resource: { buffer: bParams } }
-    ]});
+    const bg = device.createBindGroup({
+      layout: this.geodesicPipeline!.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: bPath } },
+        { binding: 1, resource: { buffer: bSysPos } },
+        { binding: 2, resource: { buffer: bSysInfluence } },
+        { binding: 3, resource: { buffer: bPenalties } },
+        { binding: 4, resource: { buffer: bParams } },
+      ],
+    });
 
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginComputePass();
-    pass.setPipeline(this.geodesicPipeline!); pass.setBindGroup(0, bg); pass.dispatchWorkgroups(1); pass.end();
+    pass.setPipeline(this.geodesicPipeline!);
+    pass.setBindGroup(0, bg);
+    pass.dispatchWorkgroups(1);
+    pass.end();
     encoder.copyBufferToBuffer(bPath, 0, bReadPath, 0, pathData.byteLength);
     device.queue.submit([encoder.finish()]);
 
@@ -203,8 +326,15 @@ class Mapper implements Mapping.Engine {
     const resPath = new Float32Array(bReadPath.getMappedRange().slice(0));
     bReadPath.unmap();
 
-    for (let i = 0; i <= steps; i++) { px[i]=resPath[i*4]; py[i]=resPath[i*4+1]; pe[i]=resPath[i*4+2]; pa[i]=resPath[i*4+3]; }
-    [bPath, bSysPos, bSysInfluence, bPenalties, bParams, bReadPath].forEach(b => b.destroy());
+    for (let i = 0; i <= steps; i++) {
+      px[i] = resPath[i * 4];
+      py[i] = resPath[i * 4 + 1];
+      pe[i] = resPath[i * 4 + 2];
+      pa[i] = resPath[i * 4 + 3];
+    }
+    [bPath, bSysPos, bSysInfluence, bPenalties, bParams, bReadPath].forEach(b =>
+      b.destroy()
+    );
   }
 
   /**
@@ -270,47 +400,92 @@ class Mapper implements Mapping.Engine {
         }
       `,
     });
-    this.geodesicPipeline = device.createComputePipeline({ layout: "auto", compute: { module: geodesicShader, entryPoint: "main" } });
+    this.geodesicPipeline = device.createComputePipeline({
+      layout: "auto",
+      compute: { module: geodesicShader, entryPoint: "main" },
+    });
   }
 
   /**
    * Performs gradient descent on the logic density field.
    */
-  private relaxPath(px: Float32Array, py: Float32Array, pe: Float32Array, pa: Float32Array, steps: number, maxIterations: number, lr: number, boost: Set<number> | undefined, penalties: any[]): void {
+  private relaxPath(
+    px: Float32Array,
+    py: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
+    steps: number,
+    maxIterations: number,
+    lr: number,
+    boost: Set<number> | undefined,
+    penalties: any[]
+  ): void {
     const phys = DOPAT_CONFIG.PHYSICS;
     for (let iter = 0; iter < maxIterations; iter++) {
       for (let i = 1; i < steps; i++) {
         const h = phys.GRADIENT_STEP;
-        const d0 = this.getPotential(px[i], py[i], pe[i], pa[i], penalties, boost);
-        const gx = (this.getPotential(px[i]+h, py[i], pe[i], pa[i], penalties, boost) - d0)/h;
-        const gy = (this.getPotential(px[i], py[i]+h, pe[i], pa[i], penalties, boost) - d0)/h;
-        const ge = (this.getPotential(px[i], py[i], pe[i]+h, pa[i], penalties, boost) - d0)/h;
-        const ga = (this.getPotential(px[i], py[i], pe[i], pa[i]+h, penalties, boost) - d0)/h;
+        const d0 = this.getPotential(
+          px[i],
+          py[i],
+          pe[i],
+          pa[i],
+          penalties,
+          boost
+        );
+        const gx =
+          (this.getPotential(px[i] + h, py[i], pe[i], pa[i], penalties, boost) -
+            d0) /
+          h;
+        const gy =
+          (this.getPotential(px[i], py[i] + h, pe[i], pa[i], penalties, boost) -
+            d0) /
+          h;
+        const ge =
+          (this.getPotential(px[i], py[i], pe[i] + h, pa[i], penalties, boost) -
+            d0) /
+          h;
+        const ga =
+          (this.getPotential(px[i], py[i], pe[i], pa[i] + h, penalties, boost) -
+            d0) /
+          h;
 
-        const sx = (px[i-1] + px[i+1])/2 - px[i];
-        const sy = (py[i-1] + py[i+1])/2 - py[i];
-        const se = (pe[i-1] + pe[i+1])/2 - pe[i];
-        const sa = (pa[i-1] + pa[i+1])/2 - pa[i];
+        const sx = (px[i - 1] + px[i + 1]) / 2 - px[i];
+        const sy = (py[i - 1] + py[i + 1]) / 2 - py[i];
+        const se = (pe[i - 1] + pe[i + 1]) / 2 - pe[i];
+        const sa = (pa[i - 1] + pa[i + 1]) / 2 - pa[i];
 
-        px[i]+=lr*(sx*2.0 - gx); py[i]+=lr*(sy*2.0 - gy); pe[i]+=lr*(se*2.0 - ge);
-        
+        px[i] += lr * (sx * 2.0 - gx);
+        py[i] += lr * (sy * 2.0 - gy);
+        pe[i] += lr * (se * 2.0 - ge);
+
         // Monotonic Age Traversal
         const da_move = lr * (sa * 2.0 - ga);
-        pa[i] = Math.max(pa[i-1], Math.min(pa[i], pa[i] + da_move));
-        if (i < steps) pa[i] = Math.min(pa[i], pa[i+1]);
+        pa[i] = Math.max(pa[i - 1], Math.min(pa[i], pa[i] + da_move));
+        if (i < steps) pa[i] = Math.min(pa[i], pa[i + 1]);
       }
     }
   }
 
-  private getPotential(x: number, y: number, z: number, w: number, pens: any[], boost: Set<number> | undefined): number {
+  private getPotential(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    pens: any[],
+    boost: Set<number> | undefined
+  ): number {
     const phys = DOPAT_CONFIG.PHYSICS;
     const c2 = this.system.c * this.system.c;
     let pot = 1.0;
     for (let j = 0; j < this.system.length; j++) {
-      const dx=x-this.system.posX[j], dy=y-this.system.posY[j], dz=z-this.system.posZ[j], dw=w-this.system.posW[j];
-      const distSq = dx*dx + dy*dy + dz*dz + dw*dw;
+      const dx = x - this.system.posX[j],
+        dy = y - this.system.posY[j],
+        dz = z - this.system.posZ[j],
+        dw = w - this.system.posW[j];
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
       if (distSq < phys.INFLUENCE_RADIUS) {
-        let infl = this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
+        let infl =
+          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
         if (boost?.has(this.system.scope[j])) infl *= 100.0;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2)); // Contextual Anisotropy
         if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Arrow of Logic
@@ -318,25 +493,45 @@ class Mapper implements Mapping.Engine {
       }
     }
     if (pens) {
-      pens.forEach(p => { 
-        const dx=x-p.x, dy=y-p.y, dz=z-p.z, dw=w-p.w; 
-        const distSq = dx*dx+dy*dy+dz*dz+dw*dw;
-        if (distSq < phys.PENALTY_RADIUS) pot += p.strength * Math.exp(-distSq/phys.PENALTY_FALLOFF); 
+      pens.forEach(p => {
+        const dx = x - p.x,
+          dy = y - p.y,
+          dz = z - p.z,
+          dw = w - p.w;
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (distSq < phys.PENALTY_RADIUS)
+          pot += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
       });
     }
     return Math.max(0.01, pot);
   }
 
-  private getPotentialAndNearest(x: number, y: number, z: number, w: number, pens: any[], boost: Set<number> | undefined): { potential: number, nearestId: number } {
+  private getPotentialAndNearest(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    pens: any[],
+    boost: Set<number> | undefined
+  ): { potential: number; nearestId: number } {
     const phys = DOPAT_CONFIG.PHYSICS;
     const c2 = this.system.c * this.system.c;
-    let pot = 1.0, minDistSq = Infinity, nearestId = -1;
+    let pot = 1.0,
+      minDistSq = Infinity,
+      nearestId = -1;
     for (let j = 0; j < this.system.length; j++) {
-      const dx=x-this.system.posX[j], dy=y-this.system.posY[j], dz=z-this.system.posZ[j], dw=w-this.system.posW[j];
-      const distSq = dx*dx + dy*dy + dz*dz + dw*dw;
-      if (distSq < minDistSq) { minDistSq = distSq; nearestId = j; }
+      const dx = x - this.system.posX[j],
+        dy = y - this.system.posY[j],
+        dz = z - this.system.posZ[j],
+        dw = w - this.system.posW[j];
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+        nearestId = j;
+      }
       if (distSq < phys.INFLUENCE_RADIUS) {
-        let infl = this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
+        let infl =
+          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
         if (boost?.has(this.system.scope[j])) infl *= 100.0;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2));
         if (this.system.posW[j] < w - 0.01) infl *= 0.01;
@@ -344,26 +539,46 @@ class Mapper implements Mapping.Engine {
       }
     }
     if (pens) {
-      pens.forEach(p => { 
-        const dx=x-p.x, dy=y-p.y, dz=z-p.z, dw=w-p.w; 
-        const distSq = dx*dx+dy*dy+dz*dz+dw*dw;
-        if (distSq < phys.PENALTY_RADIUS) pot += p.strength * Math.exp(-distSq/phys.PENALTY_FALLOFF); 
+      pens.forEach(p => {
+        const dx = x - p.x,
+          dy = y - p.y,
+          dz = z - p.z,
+          dw = w - p.w;
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (distSq < phys.PENALTY_RADIUS)
+          pot += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
       });
     }
     return { potential: Math.max(0.01, pot), nearestId };
   }
 
-  private review(px: Float32Array, py: Float32Array, pe: Float32Array, pa: Float32Array, steps: number): Mapping.ReviewReport {
+  private review(
+    px: Float32Array,
+    py: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
+    steps: number
+  ): Mapping.ReviewReport {
     const phys = DOPAT_CONFIG.PHYSICS;
     for (let i = 1; i < steps; i++) {
-      let nearestDistSq = Infinity, nearestId = -1;
+      let nearestDistSq = Infinity,
+        nearestId = -1;
       for (let j = 0; j < this.system.length; j++) {
-        const dSq = Math.pow(px[i]-this.system.posX[j],2) + Math.pow(py[i]-this.system.posY[j],2) + 
-                    Math.pow(pe[i]-this.system.posZ[j],2) + Math.pow(pa[i]-this.system.posW[j],2);
-        if (dSq < nearestDistSq) { nearestDistSq = dSq; nearestId = j; }
+        const dSq =
+          Math.pow(px[i] - this.system.posX[j], 2) +
+          Math.pow(py[i] - this.system.posY[j], 2) +
+          Math.pow(pe[i] - this.system.posZ[j], 2) +
+          Math.pow(pa[i] - this.system.posW[j], 2);
+        if (dSq < nearestDistSq) {
+          nearestDistSq = dSq;
+          nearestId = j;
+        }
       }
       if (nearestId !== -1 && nearestDistSq < phys.TRAP_DISTANCE_THRESHOLD) {
-        if (this.system.density[nearestId] > phys.TRAP_MASS_THRESHOLD && this.system.entropyRate[nearestId] < phys.TRAP_ENTROPY_THRESHOLD) {
+        if (
+          this.system.density[nearestId] > phys.TRAP_MASS_THRESHOLD &&
+          this.system.entropyRate[nearestId] < phys.TRAP_ENTROPY_THRESHOLD
+        ) {
           return { passed: false, reason: "Logic Trap detected", trapIndex: i };
         }
       }
@@ -371,21 +586,43 @@ class Mapper implements Mapping.Engine {
     return { passed: true };
   }
 
-  private extractIds(px: Float32Array, py: Float32Array, pe: Float32Array, pa: Float32Array, steps: number): Uint32Array {
+  private extractIds(
+    px: Float32Array,
+    py: Float32Array,
+    pe: Float32Array,
+    pa: Float32Array,
+    steps: number
+  ): Uint32Array {
     const resultIds: number[] = [];
     for (let i = 0; i <= steps; i++) {
-      let bestId = -1, minDiff = Infinity;
+      let bestId = -1,
+        minDiff = Infinity;
       for (let j = 0; j < this.system.length; j++) {
-        const dx = this.system.posX[j] - px[i], dy = this.system.posY[j] - py[i], dz = this.system.posZ[j] - pe[i], dw = this.system.posW[j] - pa[i];
-        const distSq = dx*dx + dy*dy + dz*dz + dw*dw;
-        const totalDiff = distSq + dw*dw*1000000.0; // Massive context snapping penalty
+        const dx = this.system.posX[j] - px[i],
+          dy = this.system.posY[j] - py[i],
+          dz = this.system.posZ[j] - pe[i],
+          dw = this.system.posW[j] - pa[i];
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        const totalDiff = distSq + dw * dw * 1000000.0; // Massive context snapping penalty
         if (totalDiff < minDiff) {
-          if (!(this.system.density[j] > DOPAT_CONFIG.PHYSICS.TRAP_MASS_THRESHOLD && this.system.entropyRate[j] < DOPAT_CONFIG.PHYSICS.TRAP_ENTROPY_THRESHOLD)) {
-            minDiff = totalDiff; bestId = j;
+          if (
+            !(
+              this.system.density[j] >
+                DOPAT_CONFIG.PHYSICS.TRAP_MASS_THRESHOLD &&
+              this.system.entropyRate[j] <
+                DOPAT_CONFIG.PHYSICS.TRAP_ENTROPY_THRESHOLD
+            )
+          ) {
+            minDiff = totalDiff;
+            bestId = j;
           }
         }
       }
-      if (bestId !== -1 && (resultIds.length === 0 || resultIds[resultIds.length - 1] !== bestId)) resultIds.push(bestId);
+      if (
+        bestId !== -1 &&
+        (resultIds.length === 0 || resultIds[resultIds.length - 1] !== bestId)
+      )
+        resultIds.push(bestId);
     }
     return new Uint32Array(resultIds);
   }

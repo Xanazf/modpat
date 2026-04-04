@@ -380,7 +380,8 @@ export default class Resolver implements Resolution.Engine {
     // If no stable conclusion resonated, handle Code Trigger or return "unknown".
     if (maxNetEnergy <= 0) {
       const lastIdInSequence = sequenceIds[N - 1];
-      const isSink = this.system.operatorClass[lastIdInSequence] === OperatorClass.Sink;
+      const isSink =
+        this.system.operatorClass[lastIdInSequence] === OperatorClass.Sink;
       if (isSink) {
         return this.resolveCodeSynthesis(sequenceIds);
       }
@@ -448,7 +449,10 @@ export default class Resolver implements Resolution.Engine {
     if (sourceNodeIdx !== -1) {
       const originalOp = this.findDominantOperator(sequenceIds, sourceNodeIdx);
       pushWithModifiers(sourceNodeIdx);
-      if (originalOp !== -1 && this.system.operatorClass[originalOp] !== OperatorClass.Sink) {
+      if (
+        originalOp !== -1 &&
+        this.system.operatorClass[originalOp] !== OperatorClass.Sink
+      ) {
         resultIds[resultCount++] = originalOp;
       }
       pushWithModifiers(targetNodeIdx);
@@ -497,7 +501,7 @@ export default class Resolver implements Resolution.Engine {
       const opClass = this.system.operatorClass[i];
       const isHighMass = this.system.mass[i] >= 500.0;
       const isInInquiry = Array.from(sequenceIds).includes(i);
-      
+
       if (opClass === OperatorClass.SyntaxAnchor || isHighMass || isInInquiry) {
         candidates.push(i);
         if (this.system.scope[i] === targetScope) hasCodeGoal = true;
@@ -513,7 +517,8 @@ export default class Resolver implements Resolution.Engine {
     candidates.sort((a, b) => {
       const wa = this.system.posW[a];
       const wb = this.system.posW[b];
-      if (Math.abs(wa - wb) < 0.0001) return this.system.posY[a] - this.system.posY[b];
+      if (Math.abs(wa - wb) < 0.0001)
+        return this.system.posY[a] - this.system.posY[b];
       return wa - wb;
     });
 
@@ -526,30 +531,41 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    console.log(`[DEBUG RESOLVER] Strict Waypoints: ${waypoints.map(id => this.atomizer.decodeSequence(new Uint32Array([id]), this.system)).join(" -> ")}`);
+    console.log(
+      `[DEBUG RESOLVER] Strict Waypoints: ${waypoints.map(id => this.atomizer.decodeSequence(new Uint32Array([id]), this.system)).join(" -> ")}`
+    );
 
     const fullPathIds: number[] = [];
     if (waypoints.length > 0) fullPathIds.push(waypoints[0]);
 
     for (let i = 0; i < waypoints.length - 1; i++) {
       // Routing segment: use minimal steps to enforce straight-line functional order
-      const segment = await this.mapper.route(waypoints[i], waypoints[i+1], { 
-        steps: 1, 
-        topic: "Mathematics"
+      const segment = await this.mapper.route(waypoints[i], waypoints[i + 1], {
+        steps: 1,
+        topic: "Mathematics",
       });
-      
+
       // Skip the first node of the segment if we already have it from the previous segment
       const startIndex = i === 0 ? 0 : 1;
       for (let j = startIndex; j < segment.length; j++) {
         const id = segment[j];
-        if (fullPathIds.length === 0 || fullPathIds[fullPathIds.length - 1] !== id) {
+        if (
+          fullPathIds.length === 0 ||
+          fullPathIds[fullPathIds.length - 1] !== id
+        ) {
           fullPathIds.push(id);
         }
       }
     }
     const geodesicPath = new Uint32Array(fullPathIds);
-    console.log(`[DEBUG RESOLVER] Final Concatenated Path: ${Array.from(geodesicPath).map(id => this.atomizer.decodeSequence(new Uint32Array([id]), this.system)).join(", ")}`);
-    
+    console.log(
+      `[DEBUG RESOLVER] Final Concatenated Path: ${Array.from(geodesicPath)
+        .map(id =>
+          this.atomizer.decodeSequence(new Uint32Array([id]), this.system)
+        )
+        .join(", ")}`
+    );
+
     if (geodesicPath.length > 0) {
       const synthesizedCode = this.synthesizer.collapse(
         geodesicPath,
@@ -882,7 +898,10 @@ export default class Resolver implements Resolution.Engine {
 
       // Check for structural rules related to creation/existence.
       // Note: "studied" is included here to support the destructive interference test logic.
-      if (this.memoryContains(verbScope, impliesScope, creationScope) || verb.toLowerCase() === "studied") {
+      if (
+        this.memoryContains(verbScope, impliesScope, creationScope) ||
+        verb.toLowerCase() === "studied"
+      ) {
         const objectTokens = doc.match(`${verb} [*]`).out("array");
         if (objectTokens.length > 0) {
           const objectStr = objectTokens[0]
@@ -891,9 +910,10 @@ export default class Resolver implements Resolution.Engine {
             .trim();
           if (objectStr) {
             // Determine if we should negate based on existing manifold knowledge
-            const targetStr = verb.toLowerCase() === "studied" 
-              ? `then nikola tesla did not study electricity` 
-              : `then ${objectStr} did not exist before ${date}`;
+            const targetStr =
+              verb.toLowerCase() === "studied"
+                ? `then nikola tesla did not study electricity`
+                : `then ${objectStr} did not exist before ${date}`;
             return this.atomizer.ingestSequence(targetStr, this.system);
           }
         }
