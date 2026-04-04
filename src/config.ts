@@ -9,6 +9,17 @@ const DOPAT_CONFIG = {
   RING_BUFFER_SIZE: 1024,
   DECAY_RATE: 0.95,
   USE_GPU: true,
+  PHYSICS: {
+    INFLUENCE_RADIUS: 400.0,
+    INFLUENCE_FALLOFF: 40.0,
+    PENALTY_RADIUS: 100.0,
+    PENALTY_FALLOFF: 20.0,
+    GRADIENT_STEP: 0.01,
+    VOID_POTENTIAL_THRESHOLD: 0.8,
+    TRAP_MASS_THRESHOLD: 5000.0,
+    TRAP_ENTROPY_THRESHOLD: 0.1,
+    TRAP_DISTANCE_THRESHOLD: 25.0,
+  },
 };
 
 // TODO: debug bindings
@@ -89,6 +100,11 @@ const ATOMIC_PATTERNS = [
   // lower-case word
   /\b[a-z]\b/i,
 ];
+
+export const SYNTAX_ATTRACTORS = {
+  KEYWORDS: new Set(["function", "const", "let", "return", "if", "else", "import", "export", "class", "interface", "type", "await", "async"]),
+  STRUCTURES: new Set(["{", "}", "(", ")", "[", "]", "=>", ":", ";", ".", "+", "-", "*", "/", "=", ",", "<", ">"])
+};
 
 export {
   ATOMIC_PATTERNS,

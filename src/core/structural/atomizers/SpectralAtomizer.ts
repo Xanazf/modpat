@@ -9,7 +9,7 @@ import { BaseAtomizer } from "./BaseAtomizer";
  *
  * It treats electromagnetic and spatial data as logical precursors,
  * where spectral peaks materialize as massive bodies and phase alignments
- * define logical operators through interference patterns.
+ * define logical operators through interference patterns within the 4D dual-layer manifold.
  */
 export default class SpectralAtomizer
   extends BaseAtomizer
@@ -74,25 +74,35 @@ export default class SpectralAtomizer
         // Frequency (f) -> Scope: The structural reach is defined by the frequency.
         const scope = freq;
 
-        // Amplitude (A) -> Mass: Signal strength translates to logical importance (gravitational pull).
+        // Amplitude (A) -> Mass: Signal strength translates to logical importance.
         const mass = amplitude * system.c ** 2;
 
         // Phase -> Operator Class: Relative phase determines the type of logical interference.
         let opClass = OperatorClass.None;
         if (Math.abs(phase) < Math.PI / 4) {
-          // Constructive interference is modeled as a Conjunction (AND).
           opClass = OperatorClass.Conjunction;
         } else if (Math.abs(phase) > (3 * Math.PI) / 4) {
-          // Destructive interference is modeled as an Inversion (NOT).
           opClass = OperatorClass.Inversion;
         }
 
-        // Materialize the spectral peak in the manifold.
+        // Materialize the spectral peak in the Dual-Layer Manifold.
         const id = system.createLocation(mass, scope);
         system.operatorClass[id] = opClass;
 
-        // Initial entropy is low for clear, high-magnitude peaks.
-        system.entropy[id] = 0.1;
+        // Matter Layer Content:
+        // Spectral energy maps to logical potential (Depth).
+        system.depth[id] = amplitude;
+        // Age represents its relative position in the spectral sequence.
+        system.time[id] = i * 0.01;
+
+        // Coordinate Layer Positioning:
+        system.posX[id] = mass;
+        system.posY[id] = scope;
+        system.posZ[id] = system.depth[id];
+        system.posW[id] = system.time[id];
+
+        // Finalize derived properties (density, intensity, etc).
+        system.update(id);
 
         peakIds.push(id);
       }
@@ -102,7 +112,7 @@ export default class SpectralAtomizer
   }
 
   /**
-   * Maps GPS and IMU telemetry to the 2D projected manifold.
+   * Maps GPS and IMU telemetry to the 4D dual-layer manifold.
    * Translates absolute physical coordinates and motion into topological state.
    *
    * @param gps Latitude and Longitude coordinates.
@@ -120,23 +130,38 @@ export default class SpectralAtomizer
     const ids: number[] = [];
 
     // Create a base Telemetry Truth Atom: a massive body representing current physical presence.
-    const id = system.createLocation(system.c ** 2, 0);
+    // Matter Content:
+    const mass = system.c ** 2;
+    const scope = 1.0;
+    const id = system.createLocation(mass, scope);
+    
+    // Coordinate Layer Mapping:
     system.posX[id] = gps.lon;
     system.posY[id] = gps.lat;
+    
+    // Depth (Energy) represents the combined inertial magnitude.
+    system.depth[id] = Math.abs(imu.pitch) + Math.abs(imu.roll) + Math.abs(imu.yaw);
+    system.posZ[id] = system.depth[id];
+    
+    // Age (Time) represents current system simulation time.
+    system.time[id] = Date.now() * 0.001;
+    system.posW[id] = 0.0; // Instantaneous context
 
-    // Map IMU motion loosely to logical entropy to define spatial distortion/uncertainty.
-    system.entropy[id] =
-      Math.abs(imu.pitch) + Math.abs(imu.roll) + Math.abs(imu.yaw);
+    system.update(id);
     ids.push(id);
 
     if (isDrifting) {
       // Inject a Destructive Interference Precept (Void).
-      // A negative-mass entity that represents a "jammed" or invalid logical state.
-      const voidId = system.createLocation(-(system.c ** 2), 0);
+      const voidId = system.createLocation(-mass, scope);
       system.posX[voidId] = gps.lon;
       system.posY[voidId] = gps.lat;
-      system.entropy[voidId] = 100.0; // Extremely high entropy (uncertainty).
+      
+      // High entropy rate for spatial instability.
+      system.time[voidId] = 100.0; 
+      system.posW[voidId] = 0.0;
+      
       system.operatorClass[voidId] = OperatorClass.Inversion;
+      system.update(voidId);
       ids.push(voidId);
     }
 
