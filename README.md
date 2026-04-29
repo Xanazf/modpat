@@ -1,7 +1,7 @@
 # Modulated Praxis Attenuation Topology (ModPAT)
 
 > [!NOTE]
-> Can also be called Physically-Based Machine Thinking
+> Can also be called Physically-Based Machine Reasoning
 > but i wanted something with a lil more BOOM to it.
 
 ModPAT is an experimental reasoning engine designed to explore logic through the lens of physics and topology. Instead of treating logic as a sequence of discrete boolean steps, this system maps relationships onto a four-dimensional manifold where deduction is achieved through pathfinding and signal analysis.
