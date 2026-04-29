@@ -287,6 +287,20 @@ export default class Resolver implements Resolution.Engine {
         }
       }
     }
+
+    // Energy Conservation (Diffusion Matrix Normalization)
+    // Ensures truth energy does not magically multiply and explode the matrix.
+    for (let i = 0; i < N; i++) {
+      let rowSum = 0;
+      for (let j = 0; j < N; j++) {
+        rowSum += Math.abs(transferMatrix[i * N + j]);
+      }
+      if (rowSum > 0) {
+        for (let j = 0; j < N; j++) {
+          transferMatrix[i * N + j] /= rowSum;
+        }
+      }
+    }
     // console.log(`[DEBUG RESOLVER] Sink Node Index: ${sinkNodeIdx}`);
 
     // Phase 3: Compute Accumulated Resonance Matrix (Reachability).
@@ -295,6 +309,8 @@ export default class Resolver implements Resolution.Engine {
     const currentResonance = this.E_curr_buffer.subarray(0, N * N);
     accumulatedResonance.set(transferMatrix);
     currentResonance.set(transferMatrix);
+
+    const logicalConductivity = 0.85; // Physical dissipation factor (Alpha)
 
     if (this.gpu && N > 16) {
       // GPU Acceleration for matrix power series (high-performance propagation).
@@ -306,10 +322,10 @@ export default class Resolver implements Resolution.Engine {
           N,
           N
         );
-        // Dampen energy to simulate information entropy loss.
+        // Dampen energy using explicit physical dissipation model.
         const dampenedResonance = await this.gpu.mulScalarF64(
           nextResonanceRes,
-          0.9
+          logicalConductivity
         );
         const totalResonanceRes = await this.gpu.addF64(
           accumulatedResonance,
@@ -329,7 +345,7 @@ export default class Resolver implements Resolution.Engine {
             for (let k = 0; k < N; k++) {
               sum += currentResonance[i * N + k] * transferMatrix[k * N + j];
             }
-            const dampened = sum * 0.9; // Apply logical friction/entropy.
+            const dampened = sum * logicalConductivity; // Apply logical friction/entropy.
             nextResonance[i * N + j] = dampened;
             accumulatedResonance[i * N + j] += dampened;
           }
@@ -665,18 +681,35 @@ export default class Resolver implements Resolution.Engine {
     let subX = 0,
       subY = 0,
       subZ = 0,
-      subW = 0;
+      subW = 0,
+      subMass = 0;
     for (let i = 0; i < subjectIds.length; i++) {
       const id = subjectIds[i];
-      subX += this.system.posX[id];
-      subY += this.system.posY[id];
-      subZ += this.system.posZ[id];
-      subW += this.system.posW[id];
+      const m = this.system.mass[id] || 1.0;
+      subX += this.system.posX[id] * m;
+      subY += this.system.posY[id] * m;
+      subZ += this.system.posZ[id] * m;
+      subW += this.system.posW[id] * m;
+      subMass += m;
     }
-    subX /= subjectIds.length;
-    subY /= subjectIds.length;
-    subZ /= subjectIds.length;
-    subW /= subjectIds.length;
+    if (subMass > 0) {
+      subX /= subMass;
+      subY /= subMass;
+      subZ /= subMass;
+      subW /= subMass;
+    }
+
+    // Calculate spatial variance to establish a dynamic logical boundary threshold
+    let variance = 0;
+    for (let i = 0; i < subjectIds.length; i++) {
+      const id = subjectIds[i];
+      const dx = this.system.posX[id] - subX;
+      const dy = this.system.posY[id] - subY;
+      const dz = this.system.posZ[id] - subZ;
+      const dw = this.system.posW[id] - subW;
+      variance += dx * dx + dy * dy + dz * dz + dw * dw;
+    }
+    const dynamicThreshold = Math.max(50.0, variance * 2.0);
 
     const results: { ids: Uint32Array; score: number }[] = [];
     for (let i = 0; i < length; i++) {
@@ -692,7 +725,7 @@ export default class Resolver implements Resolution.Engine {
           const dw = memSub.w - subW;
           const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
-          if (distSq < 250.0) {
+          if (distSq < dynamicThreshold) {
             results.push({
               ids: this.collectSequence(i + 1, 1),
               score: distSq,
@@ -710,7 +743,7 @@ export default class Resolver implements Resolution.Engine {
             const dw = memObj.w - subW;
             const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
-            if (distSq < 250.0) {
+            if (distSq < dynamicThreshold) {
               results.push({
                 ids: this.collectSequence(i - 1, -1),
                 score: distSq * 0.1, // Identity objects get priority
@@ -736,11 +769,12 @@ export default class Resolver implements Resolution.Engine {
   private getClusterCentroid(
     startId: number,
     direction: 1 | -1
-  ): { x: number; y: number; z: number; w: number; count: number } {
+  ): { x: number; y: number; z: number; w: number; totalMass: number; count: number } {
     let x = 0,
       y = 0,
       z = 0,
       w = 0,
+      totalMass = 0,
       count = 0;
     const length = this.system.length;
     let k = startId;
@@ -756,29 +790,31 @@ export default class Resolver implements Resolution.Engine {
         if (direction === -1 && currY >= lastY) break;
       }
 
-      x += this.system.posX[k];
-      y += this.system.posY[k];
-      z += this.system.posZ[k];
-      w += this.system.posW[k];
+      const m = this.system.mass[k] || 1.0;
+      x += this.system.posX[k] * m;
+      y += this.system.posY[k] * m;
+      z += this.system.posZ[k] * m;
+      w += this.system.posW[k] * m;
+      totalMass += m;
       count++;
       lastY = currY;
       k += direction;
     }
 
-    if (count > 0) {
-      x /= count;
-      y /= count;
-      z /= count;
-      w /= count;
+    if (totalMass > 0) {
+      x /= totalMass;
+      y /= totalMass;
+      z /= totalMass;
+      w /= totalMass;
     }
-    return { x, y, z, w, count };
+    return { x, y, z, w, totalMass, count };
   }
 
   /**
    * Helper to collect a contiguous sequence of non-operator tokens.
    * Stops at operator boundaries or Kind coordinate (posY) discontinuities.
    */
-  private collectSequence(startId: number, direction: 1 | -1): Uint32Array {
+  public collectSequence(startId: number, direction: 1 | -1): Uint32Array {
     const ids: number[] = [];
     const length = this.system.length;
     let k = startId;
@@ -976,8 +1012,9 @@ export default class Resolver implements Resolution.Engine {
     startId: number,
     endId: number,
     steps: number = 32,
-    boostScopes?: Set<number>
+    boostScopes?: Set<number>,
+    topic?: string
   ): Promise<Uint32Array> {
-    return this.mapper.route(startId, endId, { steps, boostScopes });
+    return this.mapper.route(startId, endId, { steps, boostScopes, topic });
   }
 }

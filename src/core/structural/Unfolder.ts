@@ -86,7 +86,7 @@ export default class Unfolder {
    * @param voidPreceptId The ID of the node with low density.
    * @param topic The semantic topic to expand (e.g., "Security").
    */
-  public async expand(voidPreceptId: number, topic?: string): Promise<void> {
+  public async expand(voidPreceptId: number, topic?: string): Promise<boolean> {
     const activeTopic = topic || this.atomizer.decodeSequence(new Uint32Array([voidPreceptId]), this.system).trim();
     
     const isCodeRelated = /api|code|function|programming|library|framework|script|typescript|javascript|python|rust|c\+\+|java|ruby|go|php|swift|kotlin|scala|sql|html|css|react|vue|angular|node|express|django|flask|spring|rails|laravel|dotnet|kubernetes|docker|aws|gcp|azure|linux|macos|windows|android|ios/i.test(activeTopic);
@@ -107,7 +107,7 @@ export default class Unfolder {
       }
     }
 
-    if (!fullContent.trim()) return;
+    if (!fullContent.trim()) return false;
 
     // 3. Ingest this text into the manifold via SemanticAtomizer
     const newPreceptIds = this.atomizer.ingestSequence(
@@ -115,21 +115,30 @@ export default class Unfolder {
       this.system
     );
 
+    if (newPreceptIds.length === 0) return false;
+
     // 4. Assign physical parameters to create a "Sub-Gradient" that bridges the void
     const basePosX = this.system.posX[voidPreceptId];
     const basePosY = this.system.posY[voidPreceptId];
+
+    // Maintain grammatical coherence by applying a uniform displacement for the entire fact,
+    // rather than scrambling individual words with random noise.
+    const factDisplacementX = (Math.random() - 0.5) * 5.0;
+    const factDisplacementY = (Math.random() - 0.5) * 5.0;
 
     for (const id of Array.from(newPreceptIds)) {
       // Assign high mass to ensure these new precepts are authoritative
       this.system.mass[id] = this.system.c * 10;
 
-      // Position them spatially near the parent void, but with unique displacement
-      this.system.posX[id] = basePosX + (Math.random() - 0.5) * 5.0;
-      this.system.posY[id] = basePosY + (Math.random() - 0.5) * 5.0;
+      // Position them spatially near the parent void, preserving internal topology
+      this.system.posX[id] = this.system.posX[id] + basePosX + factDisplacementX;
+      this.system.posY[id] = this.system.posY[id] + basePosY + factDisplacementY;
 
       // Update the system state for each new precept
       this.system.update(id);
     }
+
+    return true;
   }
 
   /**

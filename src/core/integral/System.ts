@@ -191,8 +191,8 @@ const LogicOperations = {
     const baseMass = system.mass[source];
     // If the target is the source itself, return full mass.
     if (target === 0) return baseMass;
-    // Apply inverse square law with a scaling factor of sqrt(PI).
-    return baseMass * (Math.sqrt(Math.PI) / target ** 2);
+    // Apply physically rigorous isotropic point source flux constant (1 / 4πr²)
+    return baseMass / (4 * Math.PI * target * target);
   },
 
   /**
@@ -488,14 +488,17 @@ class System implements Root.System {
     const d = this.depth[id];
     const t = this.time[id];
 
+    // Normalizing scale to maintain finite bounds for derived units
+    const physicalScale = 1.0;
+
     // Matter Layer Intersection (posX:posY)
-    this.density[id] = Math.min(m / s, this.maxilon);
+    this.density[id] = Math.min((m / s) * physicalScale, this.maxilon);
     // Temporal Layer Intersection (posW:posY)
-    this.entropyRate[id] = Math.min(t / s, this.maxilon);
+    this.entropyRate[id] = Math.min((t / s) * physicalScale, this.maxilon);
     // Energy Layer Intersection (posZ:posX)
-    this.potency[id] = Math.min(d / Math.max(m, this.epsilon), this.maxilon);
+    this.potency[id] = Math.min((d / Math.max(m, this.epsilon)) * physicalScale, this.maxilon);
     // Intensity Layer Intersection (posZ:posY)
-    this.intensity[id] = Math.min(d / s, this.maxilon);
+    this.intensity[id] = Math.min((d / s) * physicalScale, this.maxilon);
 
     // Update integrity checksum.
     this.checksum[id] = this.calculateChecksum(id);
@@ -601,15 +604,17 @@ class System implements Root.System {
 
       // Age increases based on the decay constant.
       this.time[i] += rate * deltaTime;
-      // Matter decays over time.
+      // Matter decays exponentially over time.
       this.mass[i] *= Math.exp(-rate * deltaTime);
 
       // Natural Drift: dead or forgotten precepts drift towards the manifold origin.
+      // Applied using a continuous exponential decay model instead of an explicit Euler step.
       if (Math.abs(this.mass[i]) < 100.0) {
-        this.posX[i] *= 0.9;
-        this.posY[i] *= 0.9;
-        this.posZ[i] *= 0.9;
-        this.posW[i] *= 0.9;
+        const driftDamping = Math.exp(-0.1 * deltaTime);
+        this.posX[i] *= driftDamping;
+        this.posY[i] *= driftDamping;
+        this.posZ[i] *= driftDamping;
+        this.posW[i] *= driftDamping;
       }
 
       // Re-calculate derived properties after decay.

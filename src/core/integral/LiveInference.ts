@@ -234,7 +234,7 @@ export class LiveInference {
     this.respond(`[Unfolder] Expanding logical void for: ${attractionCenter}...`);
     
     // Create a Void Precept with negative mass to attract new knowledge
-    const voidScope = this.atomizer.getSymbolScope("void", false);
+    const voidScope = this.atomizer.getSymbolScope("void");
     const voidId = this.system.createLocation(-this.system.c, voidScope);
     
     // Position it at the center of the query's spatial signature
@@ -251,7 +251,18 @@ export class LiveInference {
 
     // Expand the void by fetching external data
     const preExpandLength = this.system.length;
-    await this.unfolder.expand(voidId, attractionCenter);
+    let expanded = await this.unfolder.expand(voidId, attractionCenter);
+    if (!expanded && attractionCenter) {
+      // Decompose query into cleaner keywords for factual expansion
+      const terms = nlp(attractionCenter).terms().out("array");
+      for (let term of terms) {
+        term = term.replace(/[^a-zA-Z0-9]/g, "");
+        if (term.length > 2) {
+          const tExpanded = await this.unfolder.expand(voidId, term);
+          if (tExpanded) expanded = true;
+        }
+      }
+    }
     const postExpandLength = this.system.length;
 
     // Phase 3: Recursive Re-Resolution
@@ -324,7 +335,8 @@ export class LiveInference {
           bestActionId,
           targetQuantum,
           128,
-          boostScopes
+          boostScopes,
+          attractionCenter
         );
 
         if (geodesicPath.length > 0) {
@@ -340,7 +352,7 @@ export class LiveInference {
               geodesicPath,
               this.atomizer
             );
-            this.respond(`[Geodesic]: ${answerString}`);
+            this.respond(`[Geodesic Generative]: ${answerString}`);
             return answerString;
           }
         }

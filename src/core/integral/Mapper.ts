@@ -1,3 +1,4 @@
+import nlp from "compromise";
 import logger from "@utils/SpectralLogger";
 import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
@@ -104,7 +105,7 @@ class Mapper implements Mapping.Engine {
     let finalIds: Uint32Array | null = null;
 
     // 2. Iterative Relaxation using Manifold Potential Field.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       if (this.gpu) {
         await this.relaxPathGPU(
           px,
@@ -145,9 +146,18 @@ class Mapper implements Mapping.Engine {
           );
           if (potential > DOPAT_CONFIG.PHYSICS.VOID_POTENTIAL_THRESHOLD) {
             if (nearestId !== -1) {
-              await this.unfolder.expand(nearestId, options.topic);
-              voidDetected = true;
-              break;
+              let expanded = await this.unfolder.expand(nearestId, options.topic);
+              if (!expanded && options.topic) {
+                const terms = nlp(options.topic).terms().out("array");
+                for (const term of terms) {
+                  const tExpanded = await this.unfolder.expand(nearestId, term);
+                  if (tExpanded) expanded = true;
+                }
+              }
+              if (expanded) {
+                voidDetected = true;
+                break;
+              }
             }
           }
         }
@@ -382,17 +392,18 @@ class Mapper implements Mapping.Engine {
                     let h = params.h;
                     let d0 = potentialAt(curr);
                     let grad = vec4<f32>(
-                        (potentialAt(vec4<f32>(curr.x+h, curr.y, curr.z, curr.w)) - d0)/h,
-                        (potentialAt(vec4<f32>(curr.x, curr.y+h, curr.z, curr.w)) - d0)/h,
-                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z+h, curr.w)) - d0)/h,
-                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w+h)) - d0)/h
+                        (potentialAt(vec4<f32>(curr.x+h, curr.y, curr.z, curr.w)) - potentialAt(vec4<f32>(curr.x-h, curr.y, curr.z, curr.w)))/(2.0*h),
+                        (potentialAt(vec4<f32>(curr.x, curr.y+h, curr.z, curr.w)) - potentialAt(vec4<f32>(curr.x, curr.y-h, curr.z, curr.w)))/(2.0*h),
+                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z+h, curr.w)) - potentialAt(vec4<f32>(curr.x, curr.y, curr.z-h, curr.w)))/(2.0*h),
+                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w+h)) - potentialAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w-h)))/(2.0*h)
                     );
                     let spring = (pathData[i-1u] + pathData[i+1u])/2.0 - curr;
                     let displacement = params.lr * (spring * 2.0 - grad);
                     
                     var next = curr + displacement;
-                    // Monotonic Age Constraint
-                    next.w = max(pathData[i-1u].w, min(curr.w, next.w));
+                    // Semi-implicit integration: apply soft constraints to maintain flow without hard clipping
+                    let ageDiff = next.w - pathData[i-1u].w;
+                    if (ageDiff < 0.0) { next.w = next.w - ageDiff * 0.9; } // Soft asymmetric rebound
                     pathData[i] = next;
                 }
                 storageBarrier();
@@ -424,30 +435,22 @@ class Mapper implements Mapping.Engine {
     for (let iter = 0; iter < maxIterations; iter++) {
       for (let i = 1; i < steps; i++) {
         const h = phys.GRADIENT_STEP;
-        const d0 = this.getPotential(
-          px[i],
-          py[i],
-          pe[i],
-          pa[i],
-          penalties,
-          boost
-        );
         const gx =
           (this.getPotential(px[i] + h, py[i], pe[i], pa[i], penalties, boost) -
-            d0) /
-          h;
+           this.getPotential(px[i] - h, py[i], pe[i], pa[i], penalties, boost)) /
+          (2.0 * h);
         const gy =
           (this.getPotential(px[i], py[i] + h, pe[i], pa[i], penalties, boost) -
-            d0) /
-          h;
+           this.getPotential(px[i], py[i] - h, pe[i], pa[i], penalties, boost)) /
+          (2.0 * h);
         const ge =
           (this.getPotential(px[i], py[i], pe[i] + h, pa[i], penalties, boost) -
-            d0) /
-          h;
+           this.getPotential(px[i], py[i], pe[i] - h, pa[i], penalties, boost)) /
+          (2.0 * h);
         const ga =
           (this.getPotential(px[i], py[i], pe[i], pa[i] + h, penalties, boost) -
-            d0) /
-          h;
+           this.getPotential(px[i], py[i], pe[i], pa[i] - h, penalties, boost)) /
+          (2.0 * h);
 
         const sx = (px[i - 1] + px[i + 1]) / 2 - px[i];
         const sy = (py[i - 1] + py[i + 1]) / 2 - py[i];
@@ -458,10 +461,16 @@ class Mapper implements Mapping.Engine {
         py[i] += lr * (sy * 2.0 - gy);
         pe[i] += lr * (se * 2.0 - ge);
 
-        // Monotonic Age Traversal
+        // Soft Asymmetric Monotonic Age Traversal (Semi-implicit constraint)
         const da_move = lr * (sa * 2.0 - ga);
-        pa[i] = Math.max(pa[i - 1], Math.min(pa[i], pa[i] + da_move));
-        if (i < steps) pa[i] = Math.min(pa[i], pa[i + 1]);
+        pa[i] += da_move;
+        
+        const ageDiff = pa[i] - pa[i - 1];
+        if (ageDiff < 0) pa[i] -= ageDiff * 0.9; // Soft rebound
+        if (i < steps) {
+            const nextAgeDiff = pa[i + 1] - pa[i];
+            if (nextAgeDiff < 0) pa[i] += nextAgeDiff * 0.9;
+        }
       }
     }
   }
