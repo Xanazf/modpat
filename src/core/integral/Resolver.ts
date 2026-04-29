@@ -348,7 +348,7 @@ export default class Resolver implements Resolution.Engine {
     // If no explicit Sink node (|-) was provided, return the original sequence.
     if (sinkNodeIdx === -1) return sequenceIds;
 
-    // Phase 4: Identify the Target Node (Sink point with highest net energy).
+    // Phase 5: Identify the Target Node (Sink point with highest net energy).
     let targetNodeIdx = -1;
     let maxNetEnergy = -Infinity;
 
@@ -385,6 +385,7 @@ export default class Resolver implements Resolution.Engine {
       if (isSink) {
         return this.resolveCodeSynthesis(sequenceIds);
       }
+
       return this.atomizer.ingestSequence("unknown", this.system);
     }
     // Phase 5: Transitive Filtering.
@@ -542,7 +543,6 @@ export default class Resolver implements Resolution.Engine {
       // Routing segment: use minimal steps to enforce straight-line functional order
       const segment = await this.mapper.route(waypoints[i], waypoints[i + 1], {
         steps: 1,
-        topic: "Mathematics",
       });
 
       // Skip the first node of the segment if we already have it from the previous segment

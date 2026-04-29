@@ -86,19 +86,25 @@ export default class Unfolder {
    * @param voidPreceptId The ID of the node with low density.
    * @param topic The semantic topic to expand (e.g., "Security").
    */
-  public async expand(voidPreceptId: number, topic: string): Promise<void> {
-    // 1. Fetch technical data via Context7
-    const technicalData = await this.queryContext7(topic);
-
-    // 2. Fetch encyclopedic data via Wikipedia
-    const wikiData = await this.queryWikipedia(topic);
+  public async expand(voidPreceptId: number, topic?: string): Promise<void> {
+    const activeTopic = topic || this.atomizer.decodeSequence(new Uint32Array([voidPreceptId]), this.system).trim();
+    
+    const isCodeRelated = /api|code|function|programming|library|framework|script|typescript|javascript|python|rust|c\+\+|java|ruby|go|php|swift|kotlin|scala|sql|html|css|react|vue|angular|node|express|django|flask|spring|rails|laravel|dotnet|kubernetes|docker|aws|gcp|azure|linux|macos|windows|android|ios/i.test(activeTopic);
 
     let fullContent = "";
-    if (technicalData) {
-      fullContent += `${technicalData.title}. ${technicalData.snippet}\n`;
-    }
-    if (wikiData) {
-      fullContent += `${wikiData}\n`;
+
+    if (isCodeRelated) {
+      // 1. Fetch technical data via Context7
+      const technicalData = await this.queryContext7(activeTopic);
+      if (technicalData) {
+        fullContent += `${technicalData.title}. ${technicalData.snippet}\n`;
+      }
+    } else {
+      // 2. Fetch encyclopedic data via Wikipedia
+      const wikiData = await this.queryWikipedia(activeTopic);
+      if (wikiData) {
+        fullContent += `${wikiData}\n`;
+      }
     }
 
     if (!fullContent.trim()) return;

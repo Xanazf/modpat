@@ -145,7 +145,7 @@ class Mapper implements Mapping.Engine {
           );
           if (potential > DOPAT_CONFIG.PHYSICS.VOID_POTENTIAL_THRESHOLD) {
             if (nearestId !== -1) {
-              await this.unfolder.expand(nearestId, options.topic ?? "Logic");
+              await this.unfolder.expand(nearestId, options.topic);
               voidDetected = true;
               break;
             }

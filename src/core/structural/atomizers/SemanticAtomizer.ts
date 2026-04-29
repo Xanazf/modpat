@@ -1,5 +1,5 @@
 import type System from "@core_i/System";
-import { classifyOperatorToken } from "@core_i/System";
+import { classifyOperatorToken, OperatorClass } from "@core_i/System";
 import nlp from "compromise";
 import { BaseAtomizer } from "./BaseAtomizer";
 import { SYNTAX_ATTRACTORS } from "@config";
@@ -74,7 +74,7 @@ export default class SemanticAtomizer
       .replace(/SINK_MARKER/g, "|-");
 
     const rawTokens = preparedText.split(/\s+/).filter(t => t.length > 0);
-    const tokens: { text: string; isOp: boolean; isPlural: boolean }[] = [];
+    const tokens: { text: string; isOp: boolean; isPlural: boolean; isVerb: boolean }[] = [];
 
     for (const token of rawTokens) {
       const normal = token.toLowerCase();
@@ -110,6 +110,7 @@ export default class SemanticAtomizer
           isKeyword ||
           this.logicalAdverbs.has(normal),
         isPlural,
+        isVerb,
       });
     }
 
@@ -118,7 +119,7 @@ export default class SemanticAtomizer
 
     // 2. Physical Materialization
     for (let i = 0; i < tokens.length; i++) {
-      const { text, isOp, isPlural } = tokens[i];
+      const { text, isOp, isPlural, isVerb } = tokens[i];
       const norm = text.toLowerCase().trim();
 
       // Update current loom state based on structural signifiers
@@ -139,7 +140,11 @@ export default class SemanticAtomizer
       // the unique physical identity of each token in the functional chain.
       const id = system.createLocation(mass, scope);
 
-      system.operatorClass[id] = classifyOperatorToken(text);
+      let opClass = classifyOperatorToken(text);
+      if (opClass === OperatorClass.None && isVerb) {
+        opClass = OperatorClass.Action;
+      }
+      system.operatorClass[id] = opClass;
       sequenceIds[i] = id;
 
       system.posY[id] = i * 0.1;
