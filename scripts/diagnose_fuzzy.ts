@@ -16,7 +16,7 @@ async function diagnose() {
     const id = atomizer.ingestSequence(t, system)[0];
     const x = system.posX[id];
     const y = system.posY[id];
-    const z = system.entropy[id];
+    const z = system.entropyRate[id];
     const w = system.time[id];
     logger.log(
       `${t.padEnd(10)}: X=${x.toFixed(4)}, Y=${y.toFixed(4)}, Z=${z.toFixed(4)}, W=${w.toFixed(4)}`
@@ -30,7 +30,7 @@ async function diagnose() {
   const dist = (id1: number, id2: number) => {
     const dx = system.posX[id1] - system.posX[id2];
     const dy = system.posY[id1] - system.posY[id2];
-    const dz = system.entropy[id1] - system.entropy[id2];
+    const dz = system.entropyRate[id1] - system.entropyRate[id2];
     const dw = system.time[id1] - system.time[id2];
     return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
   };
@@ -42,12 +42,13 @@ async function diagnose() {
   // Calculate centroid of "the red planet"
   const centerX = (system.posX[redId] + system.posX[planetId]) / 2;
   const centerY = (system.posY[redId] + system.posY[planetId]) / 2;
-  const centerZ = (system.entropy[redId] + system.entropy[planetId]) / 2;
+  const centerZ =
+    (system.entropyRate[redId] + system.entropyRate[planetId]) / 2;
   const centerW = (system.time[redId] + system.time[planetId]) / 2;
 
   const dx = system.posX[marsId] - centerX;
   const dy = system.posY[marsId] - centerY;
-  const dz = system.entropy[marsId] - centerZ;
+  const dz = system.entropyRate[marsId] - centerZ;
   const dw = system.time[marsId] - centerW;
   const distToCentroid = Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
 
@@ -90,7 +91,7 @@ async function diagnose() {
     system.posX[distractorId] = system.posX[alphaId] + 1.0;
     system.posY[distractorId] = system.posY[alphaId] + 1.0;
     system.mass[distractorId] = system.c ** 2 * 1000000.0;
-    system.entropy[distractorId] = 0.0;
+    system.entropyRate[distractorId] = 0.0;
 
     logger.log(
       `Alpha [${alphaId}]: X=${system.posX[alphaId].toFixed(2)}, Y=${system.posY[alphaId].toFixed(2)}`

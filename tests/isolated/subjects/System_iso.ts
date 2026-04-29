@@ -1,4 +1,4 @@
-import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
+import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "./iso_config";
 import { RingBuffer } from "ring-buffer-ts";
 
 /**
@@ -40,7 +40,7 @@ enum TargetBuffer {
  * Classification of logical operators as "massive bodies" that attract and define
  * the relationships between variables in the heat field.
  */
-export enum OperatorClass {
+enum OperatorClass {
   /** No operator assigned. */
   None = 0,
   /** Operators that shift the identity or state (e.g., "is", "becomes"). */
@@ -64,15 +64,15 @@ export enum OperatorClass {
 }
 
 /**
- * Classifies a raw string token into its corresponding OperatorClass.
+ * Classifies a raw string atom into its corresponding OperatorClass.
  *
- * @param token The string representation of the operator.
+ * @param atom The string representation of the operator.
  * @returns The classified OperatorClass.
  */
-function classifyOperatorToken(token: string): OperatorClass {
-  const norm = token.trim().toLowerCase();
+function classifyOperator(atom: string): OperatorClass {
+  const norm = atom.trim().toLowerCase();
 
-  // TypeScript Physicalized Code Synthesis: check syntax attractors first.
+  // check syntax attractors first.
   if (
     SYNTAX_ATTRACTORS.KEYWORDS.has(norm) ||
     SYNTAX_ATTRACTORS.STRUCTURES.has(norm)
@@ -235,6 +235,10 @@ class System implements Root.System {
   /** The contiguous block of memory (Logical Manifold) hosting all physical states. */
   public readonly buffer: ArrayBuffer;
 
+  /**
+   * Update Ring Buffer with 10 most recent update chains
+   * Format: `[from]:[to] | [result] | [affected]`
+   */
   public updateRing = new RingBuffer<string>(10);
 
   public get patbuf(): string[] {
@@ -382,11 +386,11 @@ class System implements Root.System {
   /**
    * Clears the manifold and resets all allocation pointers.
    */
-  public reset(): void {
+  public reset(from?: string): void {
     this.length = 0;
     this.freeList = [];
     this.pushRingUpdate(
-      "reset",
+      from || "reset",
       "length,freeList",
       `${this.length},${this.freeList.length}`,
       ["system"]
@@ -576,13 +580,20 @@ class System implements Root.System {
    *
    * @returns Array of IDs with corrupted or unstable physical states.
    */
-  public checkIntegrity(): number[] {
+  public checkIntegrity(from?: string): number[] {
     const corrupted: number[] = [];
     for (let i = 0; i < this.length; i++) {
       if (!this.validate(i)) {
         corrupted.push(i);
       }
     }
+    // Push Ring Buffer Update
+    this.pushRingUpdate(
+      from || "checkIntegrity",
+      `validate[...${this.length}]`,
+      `corrupted: ${corrupted.length}`,
+      ["system"]
+    );
     return corrupted;
   }
 
@@ -672,5 +683,5 @@ class System implements Root.System {
   }
 }
 
-export { LogicOperations, TargetBuffer, classifyOperatorToken };
+export { OperatorClass, LogicOperations, TargetBuffer, classifyOperator };
 export default System;

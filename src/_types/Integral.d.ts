@@ -22,7 +22,7 @@ declare namespace Root {
     imag: Float64Array;
   };
 
-  type TargetUnion = "mass" | "time" | "density";
+  type TargetUnion = "mass" | "time" | "density" | number;
   interface System {
     // Main System object
     // - modeled after Direct Memory Access Buffer

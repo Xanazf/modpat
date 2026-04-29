@@ -86,6 +86,28 @@ export const logger = {
     console.log(styled, ...args);
   },
 
+  section: (
+    heading: string,
+    separator: string,
+    msg: string,
+    ...args: unknown[]
+  ) => {
+    const styledSeparator = visualizer.render({ type: "void" }, separator);
+    const styledHeading = visualizer.render({ type: "formal" }, heading);
+    let styledAt = "";
+    let styledPos = "";
+    const pos = msg.match(/\d+/);
+    if (msg.includes("@")) {
+      styledAt = visualizer.render({ type: "conflict" }, "@");
+      if (pos) styledPos = visualizer.render({ type: "numeral" }, pos[0]);
+    }
+    const styled = msg.replace(
+      `${separator} ${heading}@${pos && pos[0]}`,
+      `${styledSeparator} ${styledHeading}${styledAt}${styledPos}`
+    );
+    console.log(styled, ...args);
+  },
+
   /**
    * Logs a logical sequence with its full physical representation from the System.
    * Supports an optional 'resultIds' to show transformation (e.g., "query : answer").
@@ -190,6 +212,32 @@ export const logger = {
       );
       console.log("    " + styledSequence + "\n");
     });
+  },
+
+  /**
+   * Renders the current state of the logical manifold's update ring buffer.
+   */
+  ring: (system: System) => {
+    const buffer = system.patbuf;
+    const styledHeader = visualizer.render(
+      { type: "formal" },
+      "[UPDATE RING BUFFER]"
+    );
+    console.log(`\n  ${styledHeader}`);
+
+    if (buffer.length === 0) {
+      console.log(`    ${visualizer.render({ type: "void" }, "(empty)")}\n`);
+      return;
+    }
+
+    buffer.forEach((entry, idx) => {
+      const styledEntry = visualizer.render({ type: "informal" }, entry);
+      const prefix = String(idx).padStart(2, "0");
+      console.log(
+        `    ${visualizer.render({ type: "numeral" }, prefix)} | ${styledEntry}`
+      );
+    });
+    console.log("");
   },
 
   /**

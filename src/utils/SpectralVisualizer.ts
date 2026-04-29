@@ -5,18 +5,19 @@ import type System from "@core_i/System";
  */
 
 export interface SpectralNode {
-  type: "formal" | "informal" | "conflict" | "void";
+  type: "formal" | "informal" | "conflict" | "void" | "numeral";
   mass?: number;
   entropy?: number;
   density?: number;
 }
 
 export class SpectralVisualizer {
-  // Mapping module domains to RGB bias
+  // Mapping module domains to RGB values
   private colors = {
     logic: [0, 255, 255], // Cyan
     semantic: [0, 255, 100], // Emerald
-    conflict: [255, 0, 255], // Magenta
+    conflict: [255, 0, 180], // Magenta
+    numeral: [180, 100, 255], // Purple
     void: [128, 128, 128], // Gray
     heat: [255, 100, 0], // Orange
   };
@@ -26,10 +27,11 @@ export class SpectralVisualizer {
     if (node.type === "formal") baseColor = this.colors.logic;
     if (node.type === "conflict") baseColor = this.colors.conflict;
     if (node.type === "void") baseColor = this.colors.void;
+    if (node.type === "numeral") baseColor = this.colors.numeral;
 
     let [r, g, b] = baseColor;
 
-    // Apply "Heat" Glow based on entropy (Surprisal)
+    // Apply heat based on entropy (Surprisal)
     // High entropy = more shift towards heat colors
     if (node.entropy !== undefined && node.entropy > 2) {
       const heatFactor = Math.min(1.0, (node.entropy - 2) / 8); // Normalized 2..10 bits

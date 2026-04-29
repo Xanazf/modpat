@@ -33,10 +33,9 @@ export async function executeUnfolderSuite() {
       // but we can check if any new precepts were created)
       let foundSpecific = false;
       for (let i = initialCount; i < finalCount; i++) {
-        const scope = env.system.scope[i];
-        // We don't have an easy way to get the string back without a reverse map in SemanticAtomizer
-        // but we can check if the system length increased as a baseline.
-        foundSpecific = true;
+        if (env.system.scope[i] !== undefined) {
+          foundSpecific = true;
+        }
       }
       assert.ok(foundSpecific, "Specific precepts should be materialized");
     });

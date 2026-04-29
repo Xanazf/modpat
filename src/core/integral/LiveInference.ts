@@ -1,6 +1,5 @@
 import axios from "axios";
 import nlp from "compromise";
-import wiki from "wikipedia";
 
 import type Resolver from "@core_i/Resolver";
 import type System from "@core_i/System";
@@ -9,15 +8,10 @@ import type Store from "@core_s/Memory";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import logger from "@utils/SpectralLogger";
 
-// Wikipedia API requires a valid User-Agent to avoid 403 Forbidden errors.
-// This identifies the engine as a research tool for topological logic.
-axios.defaults.headers.common["User-Agent"] =
-  "MpatLogicEngine/1.0 (https://github.com/dopecodez/Wikipedia/)";
-
 /**
  * The LiveInference toolkit facilitates real-time topological query resolution.
  * It bridges natural language input with the logical manifold by routing intents
- * through active memory, persistent DuckDB storage, and external knowledge sources like Wikipedia.
+ * through active memory, persistent DuckDB storage.
  */
 export class LiveInference {
   /** The core logical manifold where physical states are managed. */
@@ -207,13 +201,11 @@ export class LiveInference {
       }
     }
 
-    // Phase 3: External Knowledge Retrieval (Wikipedia).
-    return this.queryWikipedia(
-      attractionCenter,
-      query,
-      heatNodes,
-      topologicalQuery
-    );
+    // Phase 3: External Knowledge Retrieval via Unfolder (Triggered through Pathfinding).
+    // In this basic direct-resolution phase, we admit ignorance if memory fails.
+    const fallback = "unknown";
+    this.respond(fallback);
+    return fallback;
   }
 
   /**
@@ -356,125 +348,6 @@ export class LiveInference {
 
     this.respond(inferredMeaning);
     return inferredMeaning;
-  }
-
-  /**
-   * Performs an external knowledge search via Wikipedia.
-   * Ranks results based on their resonance with the query's heat nodes.
-   *
-   * @param attractionCenter The subject to search for.
-   * @param query The original query string.
-   * @param heatNodes Keywords for resonance matching.
-   * @param topologicalQuery The transformed query for manifold resolution.
-   * @returns The best matching information string.
-   */
-  private async queryWikipedia(
-    attractionCenter: string,
-    query: string,
-    heatNodes: string[],
-    topologicalQuery: string
-  ): Promise<string> {
-    if (!attractionCenter) {
-      const doc = nlp(query);
-      const nouns = doc.nouns().out("array");
-      if (nouns.length === 0) {
-        const fallback =
-          "I do not know the answer to that, and could not find a search term.";
-        this.respond(fallback);
-        return fallback;
-      }
-      attractionCenter = nouns[nouns.length - 1];
-    }
-
-    this.respond(`[Wikipedia] Searching for: ${attractionCenter}...`);
-    try {
-      const page = await wiki.page(attractionCenter);
-      const content = await page.content();
-
-      let bestSentence = "";
-      let maxResonance = 0;
-
-      const sentences = nlp(content).sentences().out("array");
-      const centerLower = attractionCenter.toLowerCase();
-      const centerParts = centerLower.split(/\s+/).filter(p => p.length > 2);
-
-      for (const sentence of sentences) {
-        const sLower = sentence.toLowerCase();
-
-        // 1. Attraction Center check: Does it mention the core topic?
-        let attractionScore = 0;
-        for (const part of centerParts) {
-          if (sLower.includes(part)) attractionScore += 1;
-        }
-        if (attractionScore === 0) continue;
-
-        // 2. Heat Node resonance: overlap with query keywords.
-        let nodeScore = 0;
-        for (const node of heatNodes) {
-          if (node && node.length > 2 && sLower.includes(node)) {
-            nodeScore += 1;
-          }
-        }
-
-        // 3. Proximity: are heat nodes physically near the attraction center in the text?
-        let proximityScore = 0;
-        if (nodeScore > 0) {
-          const firstCenterIdx = sLower.indexOf(centerParts[0]);
-          for (const node of heatNodes) {
-            const nodeIdx = sLower.indexOf(node);
-            if (nodeIdx !== -1) {
-              const dist = Math.abs(nodeIdx - firstCenterIdx);
-              if (dist < 50) proximityScore += 1;
-            }
-          }
-        }
-
-        // 4. Action Boost: prioritize sentences that match the requested action (e.g., "died").
-        let actionBoost = 0;
-        if (
-          heatNodes.includes("die") &&
-          (sLower.includes("died") || sLower.includes("death"))
-        ) {
-          actionBoost += 3;
-          // Penalize if the action refers to a relative or unrelated entity.
-          if (
-            sLower.includes("father") ||
-            sLower.includes("byron") ||
-            sLower.includes("husband")
-          ) {
-            actionBoost -= 2;
-          }
-        }
-
-        const totalScore =
-          attractionScore + nodeScore * 2 + proximityScore + actionBoost;
-
-        if (totalScore > maxResonance) {
-          maxResonance = totalScore;
-          bestSentence = sentence;
-        }
-      }
-
-      // If no sentence resonated strongly, fall back to the summary lead.
-      if (!bestSentence) {
-        const summary = await page.summary();
-        const extract = summary.extract;
-        bestSentence = nlp(extract).sentences().json()[0]?.text || extract;
-      }
-
-      bestSentence = bestSentence.replace(/\n/g, " ").trim();
-
-      // Crystallize the raw fact into the persistent vault for future resonance.
-      await this.processCommand(bestSentence);
-
-      // Resolve the final answer formally through the System topology.
-      const isExpl = Boolean(query.toLowerCase().match(/^(how|why|who|what)/));
-      return this.resolveThroughSystem(topologicalQuery, bestSentence, isExpl);
-    } catch (error) {
-      const fallback = `I tried to look up "${attractionCenter}" on Wikipedia, but couldn't find anything useful.`;
-      this.respond(fallback);
-      return fallback;
-    }
   }
 
   /**

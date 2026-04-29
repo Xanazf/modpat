@@ -134,15 +134,16 @@ export default class SpectralAtomizer
     const mass = system.c ** 2;
     const scope = 1.0;
     const id = system.createLocation(mass, scope);
-    
+
     // Coordinate Layer Mapping:
     system.posX[id] = gps.lon;
     system.posY[id] = gps.lat;
-    
+
     // Depth (Energy) represents the combined inertial magnitude.
-    system.depth[id] = Math.abs(imu.pitch) + Math.abs(imu.roll) + Math.abs(imu.yaw);
+    system.depth[id] =
+      Math.abs(imu.pitch) + Math.abs(imu.roll) + Math.abs(imu.yaw);
     system.posZ[id] = system.depth[id];
-    
+
     // Age (Time) represents current system simulation time.
     system.time[id] = Date.now() * 0.001;
     system.posW[id] = 0.0; // Instantaneous context
@@ -155,11 +156,11 @@ export default class SpectralAtomizer
       const voidId = system.createLocation(-mass, scope);
       system.posX[voidId] = gps.lon;
       system.posY[voidId] = gps.lat;
-      
+
       // High entropy rate for spatial instability.
-      system.time[voidId] = 100.0; 
+      system.time[voidId] = 100.0;
       system.posW[voidId] = 0.0;
-      
+
       system.operatorClass[voidId] = OperatorClass.Inversion;
       system.update(voidId);
       ids.push(voidId);

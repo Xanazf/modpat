@@ -1,6 +1,8 @@
 import type System from "@core_i/System";
-import { classifyOperatorToken } from "@core_i/System";
+import { classifyOperatorToken, OperatorClass } from "@core_i/System";
 import { BaseAtomizer } from "./BaseAtomizer";
+// TODO:
+// import { RIGHT_DIRECTIONAL_PATTERNS } from "@config";
 
 /**
  * The Atomizer is a low-level logical parser responsible for converting
@@ -10,9 +12,6 @@ import { BaseAtomizer } from "./BaseAtomizer";
  * operators act as gravitational attractors and variables act as particles.
  */
 export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
-  /** Regular expression to identify logical operators within a string. */
-  private logicRegex =
-    /\b(if|then|else|exists|implies|for\s+all|not|all|are|is)\b|=>|\|-|&&|\|\|/i;
   /** Identifies operators that signify a right-directional logical conclusion. */
   private rightDirectionalRegex = /\|-|\btherefore\b/i;
 
@@ -29,7 +28,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
    * @returns The calculated physical scope.
    */
   public getSymbolScope(symbol: string): number {
-    const isOperator = this.logicRegex.test(symbol);
+    const isOperator = classifyOperatorToken(symbol) != OperatorClass.None;
     return super.getSymbolScope(symbol, isOperator);
   }
 
@@ -52,7 +51,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
 
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
-      const isOperator = this.logicRegex.test(token);
+      const isOperator = classifyOperatorToken(token) != OperatorClass.None;
 
       // 1. Calculate Logical Mass (m = E/c^2).
       // Operators are massive attractors that define the "gravitational" field of the statement.
