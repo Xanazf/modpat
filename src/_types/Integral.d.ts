@@ -69,6 +69,8 @@ declare namespace Mapping {
     verbose?: boolean;
     /** The semantic topic to expand if a void is detected. */
     topic?: string;
+    /** The index before new knowledge was ingested, used to mask past memory queries. */
+    preExpandLength?: number;
   }
 
   /**

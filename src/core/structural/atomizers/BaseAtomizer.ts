@@ -83,4 +83,13 @@ export abstract class BaseAtomizer {
     const cleanIdx = Math.round(symbolIdx);
     return this.reverseMap.get(cleanIdx) || "<?>";
   }
+
+  /**
+   * Public accessor for resolving a scope integer back to a string symbol.
+   * Useful for external components that need to inspect the manifold.
+   */
+  public resolveScope(scope: number): string | undefined {
+    const s = this.resolveSymbolFromScope(scope);
+    return s === "<?>" ? undefined : s;
+  }
 }

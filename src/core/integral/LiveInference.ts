@@ -112,10 +112,13 @@ export class LiveInference {
         const primaryVerb = actionVerbs[0];
         const directObject = doc.match(`${primaryVerb} [*]`).out("text").trim();
         if (directObject) {
-          attractionCenter = directObject.replace(primaryVerb, "").replace(/\?$/, "").trim();
+          attractionCenter = directObject
+            .replace(primaryVerb, "")
+            .replace(/\?$/, "")
+            .trim();
         }
       }
-      
+
       // Fallback to noun phrase extraction if no clear action -> object mapping
       if (!attractionCenter) {
         const nounPhrases = doc.nouns().out("array");
@@ -126,12 +129,12 @@ export class LiveInference {
     }
 
     // Identify Heat Nodes (keywords) to find resonance in the topology.
-    // Verbs and nouns define the peaks of interest.
     const queryDoc = nlp(query);
     const verbs = queryDoc.verbs().toInfinitive().out("array");
     const nouns = queryDoc.nouns().out("array");
     const heatNodes = [...verbs, ...nouns]
-      .map(w => w.toLowerCase().replace(/[^a-z0-9]/g, ""))
+      .flatMap(w => w.toLowerCase().split(/[^a-z0-9]+/))
+      .map(w => w.trim())
       .filter(w => w.length > 2);
 
     // Phase 1: Try the logic matrix in active memory (Direct Inference).
@@ -148,16 +151,18 @@ export class LiveInference {
     console.log(`[DEBUG] query: ${query}, topQuery: ${topologicalQuery}`);
     console.log(`[DEBUG] inferredMeaning: ${inferredMeaning}`);
 
-    // EXCEPTION: Explanatory queries (who/what/how/why) should avoid simple direct identity matches
+    // WARN: Explanatory queries (who/what/how/why) should avoid simple direct identity matches
     // from the memory vault if they are too brief (single tokens), as they likely represent
     // collapsed wave-forms that lost their descriptive context.
     const isExplanatory = query.toLowerCase().match(/^(how|why|who|what)/);
     const isTooBrief = inferredMeaning.split(" ").length <= 1;
 
-    const normalizedTopQuery = topologicalQuery.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const normalizedTopQuery = topologicalQuery
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
     const normalizedInferred = inferredMeaning.replace(/[^a-z0-9]/g, "");
 
-    // If we found a direct resonance that isn't just the query itself.
+    // found a direct resonance that isn't just the query itself.
     if (
       inferredMeaning &&
       normalizedInferred !== normalizedTopQuery &&
@@ -231,21 +236,24 @@ export class LiveInference {
       return fallback;
     }
 
-    this.respond(`[Unfolder] Expanding logical void for: ${attractionCenter}...`);
-    
+    this.respond(
+      `[Unfolder] Expanding logical void for: ${attractionCenter}...`
+    );
+
     // Create a Void Precept with negative mass to attract new knowledge
     const voidScope = this.atomizer.getSymbolScope("void");
     const voidId = this.system.createLocation(-this.system.c, voidScope);
-    
+
     // Position it at the center of the query's spatial signature
-    let avgX = 0, avgY = 0;
+    let avgX = 0,
+      avgY = 0;
     for (let i = 0; i < queryQuanta.length; i++) {
-        avgX += this.system.posX[queryQuanta[i]];
-        avgY += this.system.posY[queryQuanta[i]];
+      avgX += this.system.posX[queryQuanta[i]];
+      avgY += this.system.posY[queryQuanta[i]];
     }
     if (queryQuanta.length > 0) {
-        this.system.posX[voidId] = avgX / queryQuanta.length;
-        this.system.posY[voidId] = avgY / queryQuanta.length;
+      this.system.posX[voidId] = avgX / queryQuanta.length;
+      this.system.posY[voidId] = avgY / queryQuanta.length;
     }
     this.system.update(voidId);
 
@@ -267,7 +275,7 @@ export class LiveInference {
 
     // Phase 3: Recursive Re-Resolution
     // The Unfolder has now populated the manifold with new encyclopedic knowledge.
-    // We re-trigger the resolver to collapse the wave-form onto the correct answer.
+    // Re-trigger the resolver to collapse the wave-form onto the correct answer.
     const reDerivationPath = await this.resolver.resolveSequence(queryQuanta);
     const reInferredMeaning = this.atomizer
       .decodeSequence(reDerivationPath, this.system)
@@ -295,63 +303,116 @@ export class LiveInference {
       return fallback;
     }
 
-    let targetIdx = queryQuanta.length - 1;
-    while (
-      targetIdx >= 0 &&
-      this.system.operatorClass[queryQuanta[targetIdx]] !== OperatorClass.None
-    ) {
-      targetIdx--;
-    }
-    const targetQuantum = queryQuanta[Math.max(0, targetIdx)];
-    
+    // Use the last node of the last Wikipedia article as the target.
+    // This maximises the posY sweep: the path travels from posY≈basePosY (start of
+    // article 1) all the way to posY≈basePosY+N*0.1 (end of article 3), picking up
+    // vocabulary from every layer. The boost on topic keywords ("titanium", "iridium",
+    // "alloy") will pull the path through the relevant content along the way.
+    // We fall back to the query-derived target only if no Wikipedia content was ingested.
+    const targetQuantum =
+      postExpandLength > preExpandLength
+        ? postExpandLength - 1
+        : queryQuanta[
+            Math.max(
+              0,
+              (() => {
+                let idx = queryQuanta.length - 1;
+                while (
+                  idx >= 0 &&
+                  this.system.operatorClass[queryQuanta[idx]] !==
+                    OperatorClass.None
+                )
+                  idx--;
+                return Math.max(0, idx);
+              })()
+            )
+          ];
+
     const isHowQuery = query.toLowerCase().includes("how");
     if (isHowQuery && queryQuanta.length > 0) {
-      let bestActionId = -1;
-      let maxMass = -Infinity;
-      
-      const queryScopes = new Set<number>();
-      for (let i = 0; i < queryQuanta.length; i++) {
-          queryScopes.add(this.system.scope[queryQuanta[i]]);
-      }
+      const bestActionId = preExpandLength;
 
-      for (let i = preExpandLength; i < postExpandLength; i++) {
-        if (this.system.operatorClass[i] === OperatorClass.Action && !queryScopes.has(this.system.scope[i])) {
-          if (this.system.mass[i] > maxMass) {
-            maxMass = this.system.mass[i];
-            bestActionId = i;
-          }
-        }
-      }
-      
       if (bestActionId !== -1) {
         const boostScopes = new Set<number>();
+        const keywordTokens = new Set<string>();
         for (const kw of heatNodes) {
-          const atomizedIds = this.atomizer.ingestSequence(kw, this.system);
-          if (atomizedIds.length > 0)
-            boostScopes.add(this.system.scope[atomizedIds[0]]);
+          for (const tok of kw.toLowerCase().split(/\s+/)) {
+            if (tok.length > 2) keywordTokens.add(tok);
+          }
+        }
+        for (let i = preExpandLength; i < postExpandLength; i++) {
+          const sym = this.atomizer.resolveScope(this.system.scope[i]);
+          if (sym && keywordTokens.has(sym))
+            boostScopes.add(this.system.scope[i]);
         }
 
-        const geodesicPath = await this.resolver.calculateGeodesic(
-          bestActionId,
-          targetQuantum,
-          128,
-          boostScopes,
-          attractionCenter
+        console.log(`[DEBUG Phase4] heatNodes: ${JSON.stringify(heatNodes)}`);
+        console.log(
+          `[DEBUG Phase4] keywordTokens: ${JSON.stringify([...keywordTokens])}`
+        );
+        console.log(`[DEBUG Phase4] boostScopes size: ${boostScopes.size}`);
+        console.log(
+          `[DEBUG Phase4] bestActionId: ${bestActionId} => "${this.atomizer.resolveScope(this.system.scope[bestActionId])}", posZ=${this.system.posZ[bestActionId].toFixed(2)}`
+        );
+        console.log(
+          `[DEBUG Phase4] targetQuantum: ${targetQuantum} => "${this.atomizer.resolveScope(this.system.scope[targetQuantum])}", posZ=${this.system.posZ[targetQuantum].toFixed(2)}`
+        );
+        console.log(
+          `[DEBUG Phase4] preExpandLength: ${preExpandLength}, postExpandLength: ${postExpandLength}`
         );
 
-        if (geodesicPath.length > 0) {
+        // Intra-Layer Routing:
+        // Find the first AND last node of each posZ layer, then route a geodesic
+        // entirely within each layer from its start to its end. This ensures each
+        // Wikipedia article is read in full from its opening sentence to its last
+        // word, rather than being cut short mid-article during a cross-layer jump.
+        const layerBounds = new Map<number, { first: number; last: number }>();
+        for (let i = preExpandLength; i < postExpandLength; i++) {
+          const lk = Math.floor(this.system.posZ[i] / 10.0);
+          const b = layerBounds.get(lk);
+          if (!b) layerBounds.set(lk, { first: i, last: i });
+          else b.last = i;
+        }
+        const sortedLayers = [...layerBounds.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([, bounds]) => bounds);
+        console.log(`[DEBUG Phase4] layers: ${JSON.stringify(sortedLayers)}`);
+
+        const combinedIds: number[] = [];
+        for (let seg = 0; seg < sortedLayers.length; seg++) {
+          const { first, last } = sortedLayers[seg];
+          const segPath = await this.resolver.calculateGeodesic(
+            first,
+            last,
+            128,
+            // No boostScopes within a layer: the path only needs to travel linearly
+            // from first to last within its own posZ layer. Passing boostScopes
+            // here causes the path to jump between every keyword occurrence inside
+            // the article, scrambling the grammar (e.g. 10x "iridium" attractors
+            // in the Iridium article). Boosts are only meaningful across layers.
+            undefined,
+            undefined,
+            preExpandLength
+          );
+          const skipFirst = seg > 0;
+          for (let k = skipFirst ? 1 : 0; k < segPath.length; k++) {
+            const id = segPath[k];
+            if (
+              combinedIds.length === 0 ||
+              combinedIds[combinedIds.length - 1] !== id
+            ) {
+              combinedIds.push(id);
+            }
+          }
+        }
+
+        if (combinedIds.length > 0) {
           const answerString = this.atomizer
-            .decodeSequence(geodesicPath, this.system)
+            .decodeSequence(new Uint32Array(combinedIds), this.system)
             .replace(/\s+/g, " ")
             .trim();
 
           if (answerString && answerString !== "unknown") {
-            logger.wave(
-              "Geodesic Resolve",
-              this.system,
-              geodesicPath,
-              this.atomizer
-            );
             this.respond(`[Geodesic Generative]: ${answerString}`);
             return answerString;
           }
@@ -414,13 +475,13 @@ export class LiveInference {
 
       // Phase 4 (Action-Oriented Geodesic Routing)
       let sourceQuantum = contextQuanta[0];
-      
+
       const doc = nlp(query);
       const isHowQuery = doc.has("how");
       if (isHowQuery) {
         let bestActionId = -1;
         let maxMass = -Infinity;
-        
+
         // Find high mass action in the *context*
         for (let i = 0; i < contextQuanta.length; i++) {
           const id = contextQuanta[i];
@@ -431,7 +492,7 @@ export class LiveInference {
             }
           }
         }
-        
+
         if (bestActionId !== -1) {
           sourceQuantum = bestActionId;
         }

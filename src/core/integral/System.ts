@@ -496,7 +496,10 @@ class System implements Root.System {
     // Temporal Layer Intersection (posW:posY)
     this.entropyRate[id] = Math.min((t / s) * physicalScale, this.maxilon);
     // Energy Layer Intersection (posZ:posX)
-    this.potency[id] = Math.min((d / Math.max(m, this.epsilon)) * physicalScale, this.maxilon);
+    this.potency[id] = Math.min(
+      (d / Math.max(m, this.epsilon)) * physicalScale,
+      this.maxilon
+    );
     // Intensity Layer Intersection (posZ:posY)
     this.intensity[id] = Math.min((d / s) * physicalScale, this.maxilon);
 

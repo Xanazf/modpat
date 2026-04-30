@@ -146,7 +146,10 @@ class Mapper implements Mapping.Engine {
           );
           if (potential > DOPAT_CONFIG.PHYSICS.VOID_POTENTIAL_THRESHOLD) {
             if (nearestId !== -1) {
-              let expanded = await this.unfolder.expand(nearestId, options.topic);
+              let expanded = await this.unfolder.expand(
+                nearestId,
+                options.topic
+              );
               if (!expanded && options.topic) {
                 const terms = nlp(options.topic).terms().out("array");
                 for (const term of terms) {
@@ -191,7 +194,15 @@ class Mapper implements Mapping.Engine {
 
       const report = this.review(px, py, pe, pa, steps);
       if (report.passed) {
-        finalIds = this.extractIds(px, py, pe, pa, steps);
+        finalIds = this.extractIds(
+          px,
+          py,
+          pe,
+          pa,
+          steps,
+          options.preExpandLength || 0,
+          targetId
+        );
         break;
       } else if (report.trapIndex !== undefined) {
         penalties.push({
@@ -204,7 +215,18 @@ class Mapper implements Mapping.Engine {
       }
     }
 
-    return finalIds || this.extractIds(px, py, pe, pa, steps);
+    return (
+      finalIds ||
+      this.extractIds(
+        px,
+        py,
+        pe,
+        pa,
+        steps,
+        options.preExpandLength || 0,
+        targetId
+      )
+    );
   }
 
   /**
@@ -229,9 +251,14 @@ class Mapper implements Mapping.Engine {
     const sysInfluence = new Float32Array(sysLength);
     for (let j = 0; j < sysLength; j++) {
       // Influence is derived from Matter Density and Energy Intensity
+      // Syntactic Markov Chain Baseline: +5.0 to ensure operands are visible
       let influence =
-        this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
-      if (boostScopes?.has(this.system.scope[j])) influence *= 100.0;
+        this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
+      if (boostScopes?.has(this.system.scope[j])) {
+        // Moderate additive boost: makes topic keywords ~10x the baseline (50/5),
+        // not ~556x (c^2*10/5). A massive boost collapses the path to a point attractor.
+        influence += 50.0;
+      }
       sysInfluence[j] = influence;
     }
 
@@ -437,19 +464,47 @@ class Mapper implements Mapping.Engine {
         const h = phys.GRADIENT_STEP;
         const gx =
           (this.getPotential(px[i] + h, py[i], pe[i], pa[i], penalties, boost) -
-           this.getPotential(px[i] - h, py[i], pe[i], pa[i], penalties, boost)) /
+            this.getPotential(
+              px[i] - h,
+              py[i],
+              pe[i],
+              pa[i],
+              penalties,
+              boost
+            )) /
           (2.0 * h);
         const gy =
           (this.getPotential(px[i], py[i] + h, pe[i], pa[i], penalties, boost) -
-           this.getPotential(px[i], py[i] - h, pe[i], pa[i], penalties, boost)) /
+            this.getPotential(
+              px[i],
+              py[i] - h,
+              pe[i],
+              pa[i],
+              penalties,
+              boost
+            )) /
           (2.0 * h);
         const ge =
           (this.getPotential(px[i], py[i], pe[i] + h, pa[i], penalties, boost) -
-           this.getPotential(px[i], py[i], pe[i] - h, pa[i], penalties, boost)) /
+            this.getPotential(
+              px[i],
+              py[i],
+              pe[i] - h,
+              pa[i],
+              penalties,
+              boost
+            )) /
           (2.0 * h);
         const ga =
           (this.getPotential(px[i], py[i], pe[i], pa[i] + h, penalties, boost) -
-           this.getPotential(px[i], py[i], pe[i], pa[i] - h, penalties, boost)) /
+            this.getPotential(
+              px[i],
+              py[i],
+              pe[i],
+              pa[i] - h,
+              penalties,
+              boost
+            )) /
           (2.0 * h);
 
         const sx = (px[i - 1] + px[i + 1]) / 2 - px[i];
@@ -464,12 +519,12 @@ class Mapper implements Mapping.Engine {
         // Soft Asymmetric Monotonic Age Traversal (Semi-implicit constraint)
         const da_move = lr * (sa * 2.0 - ga);
         pa[i] += da_move;
-        
+
         const ageDiff = pa[i] - pa[i - 1];
         if (ageDiff < 0) pa[i] -= ageDiff * 0.9; // Soft rebound
         if (i < steps) {
-            const nextAgeDiff = pa[i + 1] - pa[i];
-            if (nextAgeDiff < 0) pa[i] += nextAgeDiff * 0.9;
+          const nextAgeDiff = pa[i + 1] - pa[i];
+          if (nextAgeDiff < 0) pa[i] += nextAgeDiff * 0.9;
         }
       }
     }
@@ -493,9 +548,12 @@ class Mapper implements Mapping.Engine {
         dw = w - this.system.posW[j];
       const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
       if (distSq < phys.INFLUENCE_RADIUS) {
+        // Syntactic Markov Chain Baseline: Ensure all logical nodes (operands) have enough
+        // topological weight to form localized grammatical trenches, instead of being invisible.
         let infl =
-          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
-        if (boost?.has(this.system.scope[j])) infl *= 100.0;
+          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
+        // Moderate additive boost: 10x baseline, not 556x.
+        if (boost?.has(this.system.scope[j])) infl += 50.0;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2)); // Contextual Anisotropy
         if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Arrow of Logic
         pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
@@ -539,8 +597,9 @@ class Mapper implements Mapping.Engine {
         nearestId = j;
       }
       if (distSq < phys.INFLUENCE_RADIUS) {
+        // Syntactic Markov Chain Baseline
         let infl =
-          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
+          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
         if (boost?.has(this.system.scope[j])) infl *= 100.0;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2));
         if (this.system.posW[j] < w - 0.01) infl *= 0.01;
@@ -600,19 +659,37 @@ class Mapper implements Mapping.Engine {
     py: Float32Array,
     pe: Float32Array,
     pa: Float32Array,
-    steps: number
+    steps: number,
+    preExpandLength: number = 0,
+    targetId: number = -1
   ): Uint32Array {
     const resultIds: number[] = [];
+    const maxPosYByLayer = new Map<number, number>();
+
     for (let i = 0; i <= steps; i++) {
       let bestId = -1,
         minDiff = Infinity;
       for (let j = 0; j < this.system.length; j++) {
+        // Prevent path from snapping to past memory queries globally (excluding exact target)
+        if (j < preExpandLength && j !== targetId) continue;
+
         const dx = this.system.posX[j] - px[i],
           dy = this.system.posY[j] - py[i],
           dz = this.system.posZ[j] - pe[i],
           dw = this.system.posW[j] - pa[i];
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-        const totalDiff = distSq + dw * dw * 1000000.0; // Massive context snapping penalty
+        let totalDiff = distSq + dw * dw * 1000000.0; // Massive context snapping penalty
+
+        const layerJ = Math.floor(this.system.posZ[j] / 10.0);
+
+        // Monotonic Grammatical Filter:
+        // Ensure grammatical continuity per fact layer. We track the furthest we've read
+        // in each fact (posZ layer) and heavily penalize reading backward.
+        const maxPosY = maxPosYByLayer.get(layerJ) ?? -Infinity;
+        if (this.system.posY[j] < maxPosY) {
+          totalDiff += 1000000.0; // Extreme penalty for backwards syntax
+        }
+
         if (totalDiff < minDiff) {
           if (
             !(
@@ -630,8 +707,37 @@ class Mapper implements Mapping.Engine {
       if (
         bestId !== -1 &&
         (resultIds.length === 0 || resultIds[resultIds.length - 1] !== bestId)
-      )
+      ) {
+        /** Continuous Path Reconstruction:
+         *  If the sampled points jump across multiple words within the SAME grammatical trench (posZ layer),
+         *  it means the continuous physical path rolled over the intermediate words. We must fill them in
+         *  to fully reconstruct the bridging syntax.
+         */
+        const layerBest = Math.floor(this.system.posZ[bestId] / 10.0);
+
+        if (resultIds.length > 0) {
+          const lastId = resultIds[resultIds.length - 1];
+          const layerLast = Math.floor(this.system.posZ[lastId] / 10.0);
+
+          if (layerLast === layerBest && bestId > lastId) {
+            // only fill in the gap if it's reasonably small (e.g. < 5 tokens).
+            // ff it's a huge jump, it means the path left the trench and returned later.
+            if (bestId - lastId < 5) {
+              for (let fillId = lastId + 1; fillId < bestId; fillId++) {
+                resultIds.push(fillId);
+              }
+            }
+          }
+        }
+
         resultIds.push(bestId);
+
+        // Update the max grammatical position read for this fact layer
+        const currentMax = maxPosYByLayer.get(layerBest) ?? -Infinity;
+        if (this.system.posY[bestId] > currentMax) {
+          maxPosYByLayer.set(layerBest, this.system.posY[bestId]);
+        }
+      }
     }
     return new Uint32Array(resultIds);
   }

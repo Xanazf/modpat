@@ -74,7 +74,12 @@ export default class SemanticAtomizer
       .replace(/SINK_MARKER/g, "|-");
 
     const rawTokens = preparedText.split(/\s+/).filter(t => t.length > 0);
-    const tokens: { text: string; isOp: boolean; isPlural: boolean; isVerb: boolean }[] = [];
+    const tokens: {
+      text: string;
+      isOp: boolean;
+      isPlural: boolean;
+      isVerb: boolean;
+    }[] = [];
 
     for (const token of rawTokens) {
       const normal = token.toLowerCase();

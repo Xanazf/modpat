@@ -15,6 +15,7 @@ declare namespace Atomic {
     ingestSequence(text: string, system: System): Uint32Array;
     decodeSequence(sequenceIds: Uint32Array, system: System): string;
     getSymbolScope(symbol: string, isOperator: boolean): number;
+    resolveScope(scope: number): string | undefined;
     init(): Promise<void>;
   }
 }

@@ -769,7 +769,14 @@ export default class Resolver implements Resolution.Engine {
   private getClusterCentroid(
     startId: number,
     direction: 1 | -1
-  ): { x: number; y: number; z: number; w: number; totalMass: number; count: number } {
+  ): {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    totalMass: number;
+    count: number;
+  } {
     let x = 0,
       y = 0,
       z = 0,
@@ -1013,8 +1020,14 @@ export default class Resolver implements Resolution.Engine {
     endId: number,
     steps: number = 32,
     boostScopes?: Set<number>,
-    topic?: string
+    topic?: string,
+    preExpandLength: number = 0
   ): Promise<Uint32Array> {
-    return this.mapper.route(startId, endId, { steps, boostScopes, topic });
+    return this.mapper.route(startId, endId, {
+      steps,
+      boostScopes,
+      topic,
+      preExpandLength,
+    });
   }
 }
