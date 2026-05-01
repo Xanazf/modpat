@@ -38,9 +38,9 @@ const getLogicMetric = (potential: ScalarField): getMetric_T => {
 };
 
 /**
- * TEMPORAL ANISOTROPY (The W-Dimension / Arrow of Logic)
+ * TEMPORAL ANISOTROPY (The W-Dimension / Temporal Anisotropy)
  * System.ts uses posW (Age) to represent temporal context.
- * Mapper.ts implements an "Arrow of Logic" (influence decays if moving "backward" in time).
+ * Mapper.ts implements Temporal Anisotropy (influence decays if moving "backward" in time).
  *
  * This creates a geometry where the metric depends on the direction of travel (velocity v).
  */
@@ -55,7 +55,7 @@ const getAnisotropicMetric = (p: Vector, v: Vector): number[][] => {
   // If velocity in W is negative (v[3] < 0), we increase the "cost" of space.
   const ageVelocity = v[3];
   if (ageVelocity < 0) {
-    // Moving against the Arrow of Logic is physically "harder"
+    // Moving against the Temporal Anisotropy is physically "harder"
     g[3][3] = 1000.0;
   }
 
@@ -230,7 +230,7 @@ const exampleLogicPotential = (p: Vector) => {
 
     if (distSq < 2.0) {
       let influence = a.mass * 1.5;
-      if (a.pos[3] < p[3] - 0.01) influence *= 0.01; // Arrow of Logic
+      if (a.pos[3] < p[3] - 0.01) influence *= 0.01; // Temporal Anisotropy
       influence *= Math.exp(-Math.pow(dw * 10.0, 2));
       potential -= influence * Math.exp(-distSq / 0.5);
     }
@@ -264,7 +264,7 @@ const pTrap: Vector = [1.0, 1.0, 1.0, 1.0];
  * Modulated Temporal Attenuation
  * Shows how moving "Backward" in time (decreasing W) encounters massive resistance.
  */
-console.log("\n--- TEMPORAL ANISOTROPY (Arrow of Logic) ---");
+console.log("\n--- TEMPORAL ANISOTROPY ---");
 const pos: Vector = [0, 0, 0, 1.0];
 const vForward: Vector = [0, 0, 0, 0.1]; // Moving into the future
 const vBackward: Vector = [0, 0, 0, -0.1]; // Moving into the past

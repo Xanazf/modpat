@@ -110,7 +110,7 @@ The engine models logical operations as energy vibrations propagating through a 
 Deduction is performed by finding the "geodesic" (the shortest logical path) through the 4D manifold potential field.
 
 * **Iterative Relaxation:** The system uses gradient descent to move path nodes toward high-density logic attractors while maintaining path smoothness through simulated spring forces.
-* **Monotonic Age Traversal:** Paths are constrained by the "Arrow of Logic," ensuring temporal consistency in derivations.
+* **Monotonic Age Traversal:** Paths are constrained by the Temporal Anisotropy, ensuring temporal consistency in derivations.
 * **Trap Detection:** A self-review mechanism identifies "Logic Traps"—zones of high mass but low entropy that indicate circular reasoning or semantic dead-ends.
 
 ## Implementation Details

@@ -12,8 +12,8 @@ import System, { OperatorClass } from "./System";
 
 /**
  * The Resolver is the primary logical engine, modeled as a physical simulation
- * of truth propagation. It treats sequences of logical quanta as a closed
- * dynamical system where energy (truth) vibrates through a manifold.
+ * of resonance propagation. It treats sequences of logical quanta as a closed
+ * dynamical system where energy (resonance) vibrates through a manifold.
  */
 export default class Resolver implements Resolution.Engine {
   /** The logical manifold hosting the physical state. */
@@ -31,7 +31,7 @@ export default class Resolver implements Resolution.Engine {
 
   /** Maximum capacity for the pre-allocated resolution buffers. */
   private static MAX_SEQUENCE_LENGTH = 1024;
-  /** T_buffer: Stores the current energy vibration (Truth) of each node. */
+  /** T_buffer: Stores the current energy vibration (resonance) of each node. */
   private T_buffer: Float64Array;
   /** W_buffer: The Transfer Matrix defining resonance between nodes. */
   private W_buffer: Float64Array;
@@ -243,7 +243,7 @@ export default class Resolver implements Resolution.Engine {
     // Initialize the energy vibration vector.
     const energyVibration = this.T_buffer.subarray(0, N);
     energyVibration.fill(0);
-    if (N > 0) energyVibration[0] = 1.0; // Seed the system with initial truth energy.
+    if (N > 0) energyVibration[0] = 1.0; // Seed the system with initial resonance energy.
 
     // Initialize the Transfer Matrix (W) defining the conductivity of logic.
     const transferMatrix = this.W_buffer.subarray(0, N * N);

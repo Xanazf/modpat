@@ -6,7 +6,7 @@ import baseComplexArray from "./ComplexArray";
  * logic signals rather than simple boolean values.
  *
  * In this paradigm:
- * - Logical truths are represented as signal amplification (interference).
+ * - Logical resonances are represented as signal amplification (interference).
  * - Uncertainty or "OR" operations are represented as signal dampening or mixing.
  * - Negation is represented as a phase shift (polarity inversion).
  */

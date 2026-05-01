@@ -74,7 +74,7 @@ export async function executeSignalManagerSuite() {
       assert.strictEqual(
         normalIds.length,
         1,
-        "Should create exactly one truth precept for stable GPS"
+        "Should create exactly one resonance precept for stable GPS"
       );
       assert.strictEqual(env.system.posX[normalIds[0]], gps.lon);
       assert.strictEqual(env.system.posY[normalIds[0]], gps.lat);
@@ -154,7 +154,7 @@ export async function executeSignalManagerSuite() {
       await manager.waitForStability();
     });
 
-    await it("Test 5: Temporal Truth Decay (Matter Half-Life)", async () => {
+    await it("Test 5: Temporal Resonance Decay (Matter Half-Life)", async () => {
       const startMass = env.system.c ** 2;
       const startAge = 5.0;
       const startX = 80.0;
@@ -191,7 +191,7 @@ export async function executeSignalManagerSuite() {
       );
       assert.ok(
         env.system.posX[decayingId] < startX,
-        "Decayed truths must drift toward manifold origin"
+        "Decayed resonance must drift toward manifold origin"
       );
     });
 

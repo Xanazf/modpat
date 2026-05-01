@@ -362,7 +362,7 @@ class Mapper implements Mapping.Engine {
                     var influence = sysInfluence[j];
                     let dw = diff.w; // Age Context
                     influence = influence * exp(-(dw * 50.0) * (dw * 50.0)); // Context Anisotropy
-                    if (sysPos[j].w < p.w - 0.01) { influence = influence * 0.01; } // Arrow of Logic
+                    if (sysPos[j].w < p.w - 0.01) { influence = influence * 0.01; } // Temporal Anisotropy
                     d = d - influence * exp(-distSq / params.iF);
                 }
             }
@@ -489,7 +489,7 @@ class Mapper implements Mapping.Engine {
           this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
         if (boost?.has(this.system.scope[j])) infl *= 100.0;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2)); // Contextual Anisotropy
-        if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Arrow of Logic
+        if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Temporal Anisotropy
         pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
       }
     }
