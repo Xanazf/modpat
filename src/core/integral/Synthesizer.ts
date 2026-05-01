@@ -1,5 +1,4 @@
 import System, { OperatorClass } from "./System";
-import { SYNTAX_ATTRACTORS } from "@config";
 
 /**
  * The Synthesizer is responsible for collapsing a logical Geodesic path

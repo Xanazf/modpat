@@ -247,7 +247,6 @@ class Mapper implements Mapping.Engine {
     const device = await TensorMath_GPU.getDevice();
     const sysLength = this.system.length;
 
-    const c2 = this.system.c * this.system.c;
     const sysInfluence = new Float32Array(sysLength);
     for (let j = 0; j < sysLength; j++) {
       // Influence is derived from Matter Density and Energy Intensity
@@ -539,7 +538,6 @@ class Mapper implements Mapping.Engine {
     boost: Set<number> | undefined
   ): number {
     const phys = DOPAT_CONFIG.PHYSICS;
-    const c2 = this.system.c * this.system.c;
     let pot = 1.0;
     for (let j = 0; j < this.system.length; j++) {
       const dx = x - this.system.posX[j],
@@ -582,7 +580,6 @@ class Mapper implements Mapping.Engine {
     boost: Set<number> | undefined
   ): { potential: number; nearestId: number } {
     const phys = DOPAT_CONFIG.PHYSICS;
-    const c2 = this.system.c * this.system.c;
     let pot = 1.0,
       minDistSq = Infinity,
       nearestId = -1;
@@ -600,7 +597,7 @@ class Mapper implements Mapping.Engine {
         // Syntactic Markov Chain Baseline
         let infl =
           this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
-        if (boost?.has(this.system.scope[j])) infl *= 100.0;
+        if (boost?.has(this.system.scope[j])) infl += 50.0;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2));
         if (this.system.posW[j] < w - 0.01) infl *= 0.01;
         pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);

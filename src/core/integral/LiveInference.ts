@@ -1,4 +1,4 @@
-import axios from "axios";
+
 import nlp from "compromise";
 
 import type Resolver from "@core_i/Resolver";
@@ -148,8 +148,8 @@ export class LiveInference {
       .replace(/\s+/g, " ")
       .trim();
 
-    console.log(`[DEBUG] query: ${query}, topQuery: ${topologicalQuery}`);
-    console.log(`[DEBUG] inferredMeaning: ${inferredMeaning}`);
+    logger.log(`[DEBUG] query: ${query}, topQuery: ${topologicalQuery}`);
+    logger.log(`[DEBUG] inferredMeaning: ${inferredMeaning}`);
 
     // WARN: Explanatory queries (who/what/how/why) should avoid simple direct identity matches
     // from the memory vault if they are too brief (single tokens), as they likely represent
@@ -229,7 +229,7 @@ export class LiveInference {
       }
     }
 
-    // Phase 2: Intentional Unfolder Triggering
+    // Phase 3: Intentional Unfolder Triggering
     if (!attractionCenter) {
       const fallback = "unknown";
       this.respond(fallback);
@@ -273,7 +273,7 @@ export class LiveInference {
     }
     const postExpandLength = this.system.length;
 
-    // Phase 3: Recursive Re-Resolution
+    // Phase 4: Recursive Re-Resolution
     // The Unfolder has now populated the manifold with new encyclopedic knowledge.
     // Re-trigger the resolver to collapse the wave-form onto the correct answer.
     const reDerivationPath = await this.resolver.resolveSequence(queryQuanta);
@@ -293,7 +293,7 @@ export class LiveInference {
       return reInferredMeaning;
     }
 
-    // Phase 4: Action-Oriented Geodesic Routing
+    // Phase 5: Action-Oriented Geodesic Routing
     // If re-resolution fails, find the highest mass Action token and map a geodesic to the target.
     // We strictly limit the search to newly ingested knowledge (i >= preExpandLength)
     // to avoid hallucinating connections from unrelated previous tasks in shared memory.
@@ -346,19 +346,19 @@ export class LiveInference {
             boostScopes.add(this.system.scope[i]);
         }
 
-        console.log(`[DEBUG Phase4] heatNodes: ${JSON.stringify(heatNodes)}`);
-        console.log(
-          `[DEBUG Phase4] keywordTokens: ${JSON.stringify([...keywordTokens])}`
+        logger.log(`[DEBUG Phase5] heatNodes: ${JSON.stringify(heatNodes)}`);
+        logger.log(
+          `[DEBUG Phase5] keywordTokens: ${JSON.stringify([...keywordTokens])}`
         );
-        console.log(`[DEBUG Phase4] boostScopes size: ${boostScopes.size}`);
-        console.log(
-          `[DEBUG Phase4] bestActionId: ${bestActionId} => "${this.atomizer.resolveScope(this.system.scope[bestActionId])}", posZ=${this.system.posZ[bestActionId].toFixed(2)}`
+        logger.log(`[DEBUG Phase5] boostScopes size: ${boostScopes.size}`);
+        logger.log(
+          `[DEBUG Phase5] bestActionId: ${bestActionId} => "${this.atomizer.resolveScope(this.system.scope[bestActionId])}", posZ=${this.system.posZ[bestActionId].toFixed(2)}`
         );
-        console.log(
-          `[DEBUG Phase4] targetQuantum: ${targetQuantum} => "${this.atomizer.resolveScope(this.system.scope[targetQuantum])}", posZ=${this.system.posZ[targetQuantum].toFixed(2)}`
+        logger.log(
+          `[DEBUG Phase5] targetQuantum: ${targetQuantum} => "${this.atomizer.resolveScope(this.system.scope[targetQuantum])}", posZ=${this.system.posZ[targetQuantum].toFixed(2)}`
         );
-        console.log(
-          `[DEBUG Phase4] preExpandLength: ${preExpandLength}, postExpandLength: ${postExpandLength}`
+        logger.log(
+          `[DEBUG Phase5] preExpandLength: ${preExpandLength}, postExpandLength: ${postExpandLength}`
         );
 
         // Intra-Layer Routing:
@@ -376,7 +376,7 @@ export class LiveInference {
         const sortedLayers = [...layerBounds.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([, bounds]) => bounds);
-        console.log(`[DEBUG Phase4] layers: ${JSON.stringify(sortedLayers)}`);
+        logger.log(`[DEBUG Phase5] layers: ${JSON.stringify(sortedLayers)}`);
 
         const combinedIds: number[] = [];
         for (let seg = 0; seg < sortedLayers.length; seg++) {

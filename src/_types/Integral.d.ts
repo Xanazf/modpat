@@ -45,10 +45,13 @@ declare namespace Root {
     readonly c: number;
 
     // Register a Part/Complex and get its Proxy
-    createLocation(localMass: number, localScope: number): number;
+    createLocation(localMass: number, localScope: number, from?: string): number;
+
+    // Check if a location is currently allocated
+    isAllocated(id: number): boolean;
 
     // Subscribe a proxy at index "i" to a proxy at index `j`
-    createSignal(buffer: TargetUnion, j: number, v?: number): Signal;
+    createSignal(buffer: number, j: number): Signal;
   }
 }
 
@@ -91,7 +94,7 @@ declare namespace Mapping {
     route(
       sourceId: number,
       targetId: number,
-      options: Mapping.RouteOptions = {}
+      options?: Mapping.RouteOptions
     ): Promise<Uint32Array>;
   }
 }
@@ -103,7 +106,9 @@ declare namespace Resolution {
       startId: number,
       endId: number,
       steps?: number,
-      boostScopes?: Set<number>
+      boostScopes?: Set<number>,
+      topic?: string,
+      preExpandLength?: number
     ): Promise<Uint32Array>;
   }
 }

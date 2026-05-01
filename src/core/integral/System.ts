@@ -298,6 +298,9 @@ class System implements Root.System {
   /** Buffer view for 'checksum': physical hash of the precept's state for integrity. (F64) */
   public readonly checksum: Float64Array;
 
+  /** Buffer view for 'allocated': tracks if a location is currently active. (U8) */
+  public readonly allocated: Uint8Array;
+
   /** View for the Part Layer: stores pointers to atomic logical components (words). (U32) */
   public readonly PartLayer: Uint32Array;
 
@@ -332,7 +335,7 @@ class System implements Root.System {
     const totalBytes =
       blockF64 * 14 + // mass, scope, depth, time, posX, posY, posZ, posW, density, entropyRate, potency, intensity, decayRate, checksum
       blockU32 * 2 + // PartLayer, ComplexLayer
-      blockU8;
+      blockU8 * 2; // operatorClass, allocated
 
     this.buffer = new ArrayBuffer(totalBytes);
 
@@ -377,6 +380,9 @@ class System implements Root.System {
     // Map 8-bit logical classifications into the buffer.
     this.operatorClass = new Uint8Array(this.buffer, offset, maxP);
     offset += blockU8;
+
+    this.allocated = new Uint8Array(this.buffer, offset, maxP);
+    offset += blockU8;
   }
 
   /**
@@ -385,10 +391,15 @@ class System implements Root.System {
   public reset(): void {
     this.length = 0;
     this.freeList = [];
+    // Clear entire buffer to zero.
+    new Uint8Array(this.buffer).fill(0);
+    // Clear view cache.
+    this.viewCache.fill(undefined);
+
     this.pushRingUpdate(
       "reset",
-      "length,freeList",
-      `${this.length},${this.freeList.length}`,
+      "length,freeList,buffer",
+      `${this.length},${this.freeList.length},cleared`,
       ["system"]
     );
   }
@@ -433,6 +444,7 @@ class System implements Root.System {
     }
 
     // Set initial physical state.
+    this.allocated[id] = 1;
     this.mass[id] = initialMass;
     this.scope[id] = initialScope;
     this.decayRate[id] = 0.01; // Default decay rate.
@@ -443,12 +455,25 @@ class System implements Root.System {
   }
 
   /**
+   * Checks if a location is currently allocated.
+   *
+   * @param id The index of the precept.
+   * @returns True if allocated.
+   */
+  public isAllocated(id: number): boolean {
+    if (id < 0 || id >= this.length) return false;
+    return this.allocated[id] === 1;
+  }
+
+  /**
    * Returns a location to the free list and clears its physical state.
    *
    * @param id The index of the precept to free.
    */
   public freeLocation(id: number, from?: string): void {
     if (id < 0 || id >= this.length) return;
+
+    this.allocated[id] = 0;
 
     // Zero out all physical properties to prevent stale data.
     this.mass[id] = 0;
@@ -466,6 +491,12 @@ class System implements Root.System {
     this.decayRate[id] = 0;
     this.checksum[id] = 0;
     this.operatorClass[id] = OperatorClass.None;
+
+    // Invalidate view cache for this ID.
+    const maxP = DOPAT_CONFIG.MAX_PRECEPTS;
+    for (let bufferEnum = 0; bufferEnum < 14; bufferEnum++) {
+      this.viewCache[bufferEnum * maxP + id] = undefined;
+    }
 
     this.freeList.push(id);
     this.pushRingUpdate(
@@ -529,25 +560,28 @@ class System implements Root.System {
    * @returns The calculated checksum.
    */
   private calculateChecksum(id: number): number {
-    const m = this.mass[id] || 0;
-    const s = this.scope[id] || 0;
-    const d = this.depth[id] || 0;
-    const t = this.time[id] || 0;
-    const x = this.posX[id] || 0;
-    const y = this.posY[id] || 0;
-    const z = this.posZ[id] || 0;
-    const w = this.posW[id] || 0;
-
-    return (
-      m * 0.1 +
-      s * 0.2 +
-      d * 0.3 +
-      t * 0.4 +
-      x * 0.5 +
-      y * 0.6 +
-      z * 0.7 +
-      w * 0.8
-    );
+    const data = new Float64Array([
+      this.mass[id] || 0,
+      this.scope[id] || 0,
+      this.depth[id] || 0,
+      this.time[id] || 0,
+      this.posX[id] || 0,
+      this.posY[id] || 0,
+      this.posZ[id] || 0,
+      this.posW[id] || 0,
+    ]);
+    const bytes = new Uint8Array(data.buffer);
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) {
+      let byte = bytes[i];
+      for (let j = 0; j < 8; j++) {
+        const bit = (crc ^ byte) & 1;
+        crc >>>= 1;
+        if (bit) crc ^= 0xedb88320;
+        byte >>>= 1;
+      }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
   }
 
   /**
@@ -601,7 +635,7 @@ class System implements Root.System {
   public decay(deltaTime: number): void {
     for (let i = 0; i < this.length; i++) {
       // Skip deallocated locations.
-      if (this.mass[i] === 0 && this.scope[i] === 0) continue;
+      if (!this.isAllocated(i)) continue;
 
       const rate = this.decayRate[i] || 0.01;
 
@@ -612,7 +646,7 @@ class System implements Root.System {
 
       // Natural Drift: dead or forgotten precepts drift towards the manifold origin.
       // Applied using a continuous exponential decay model instead of an explicit Euler step.
-      if (Math.abs(this.mass[i]) < 100.0) {
+      if (Math.abs(this.mass[i]) < DOPAT_CONFIG.DRIFT_THRESHOLD) {
         const driftDamping = Math.exp(-0.1 * deltaTime);
         this.posX[i] *= driftDamping;
         this.posY[i] *= driftDamping;

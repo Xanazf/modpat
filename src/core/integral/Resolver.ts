@@ -3,6 +3,7 @@ import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
+import logger from "@utils/SpectralLogger";
 import Mapper from "./Mapper";
 import Synthesizer from "./Synthesizer";
 import System, { OperatorClass } from "./System";
@@ -128,54 +129,6 @@ export default class Resolver implements Resolution.Engine {
   }
 
   /**
-   * Identifies the physical class of an operator based on its string representation.
-   * Operators act as "massive bodies" that influence the flow of logical energy.
-   *
-   * @param id The quantum ID of the operator.
-   * @returns The classified OperatorClass.
-   */
-  private classifyOperator(id: number): OperatorClass {
-    const symbol = this.atomizer
-      .decodeSequence(new Uint32Array([id]), this.system)
-      .trim()
-      .toLowerCase();
-    switch (symbol) {
-      case "implies":
-      case "=>":
-      case "is":
-      case "are":
-      case "can":
-        return OperatorClass.IdentityShift;
-      case "&&":
-        return OperatorClass.Conjunction;
-      case "|-":
-        return OperatorClass.Sink;
-      case "exists":
-        return OperatorClass.Quantifier;
-      case "all":
-      case "for all":
-        return OperatorClass.Modifier;
-      case "not":
-      case "!":
-        return OperatorClass.Inversion;
-      case "do":
-      case "did":
-      case "die":
-      case "died":
-      case "born":
-        return OperatorClass.Action;
-      case "how":
-      case "who":
-      case "what":
-      case "where":
-      case "why":
-        return OperatorClass.Query;
-      default:
-        return OperatorClass.None;
-    }
-  }
-
-  /**
    * Executes the physics simulation to resolve the logical conclusion.
    * This treats the sequence of quanta as a closed physical system where
    * logical flow is modeled as energy vibration (T) propagating through
@@ -215,7 +168,7 @@ export default class Resolver implements Resolution.Engine {
       }
 
       // Perform a multi-token semantic lookup in the manifold.
-      const result = await this.resolveMultiTokenSemanticLookup(
+      const result = this.resolveMultiTokenSemanticLookup(
         subjectIds,
         lastId
       );
@@ -354,17 +307,17 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    console.log(
+    logger.log(
       `[DEBUG RESOLVER] Energy Vibration Initial: ${Array.from(energyVibration)}`
     );
-    console.log(
+    logger.log(
       `[DEBUG RESOLVER] Accumulated Resonance (first row): ${Array.from(accumulatedResonance.subarray(0, N))}`
     );
 
     // If no explicit Sink node (|-) was provided, return the original sequence.
     if (sinkNodeIdx === -1) return sequenceIds;
 
-    // Phase 5: Identify the Target Node (Sink point with highest net energy).
+    // Phase 4: Identify the Target Node (Sink point with highest net energy).
     let targetNodeIdx = -1;
     let maxNetEnergy = -Infinity;
 
@@ -389,7 +342,7 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    console.log(
+    logger.log(
       `[DEBUG RESOLVER] Max Net Energy: ${maxNetEnergy}, Target Node Index: ${targetNodeIdx}`
     );
 
@@ -505,9 +458,11 @@ export default class Resolver implements Resolution.Engine {
     sequenceIds: Uint32Array
   ): Promise<Uint32Array> {
     const N = sequenceIds.length;
-    console.log(
+    logger.log(
       `[DEBUG RESOLVER] Code Trigger Detected. Routing Sequential Geodesic...`
     );
+
+    const sequenceSet = new Set(sequenceIds);
 
     // 2. Build a unique sequence of waypoints sorted strictly by Context (posW) and Sequence (posY)
     const candidates: number[] = [];
@@ -517,7 +472,7 @@ export default class Resolver implements Resolution.Engine {
     for (let i = 0; i < this.system.length; i++) {
       const opClass = this.system.operatorClass[i];
       const isHighMass = this.system.mass[i] >= 500.0;
-      const isInInquiry = Array.from(sequenceIds).includes(i);
+      const isInInquiry = sequenceSet.has(i);
 
       if (opClass === OperatorClass.SyntaxAnchor || isHighMass || isInInquiry) {
         candidates.push(i);
@@ -548,7 +503,7 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    console.log(
+    logger.log(
       `[DEBUG RESOLVER] Strict Waypoints: ${waypoints.map(id => this.atomizer.decodeSequence(new Uint32Array([id]), this.system)).join(" -> ")}`
     );
 
@@ -574,7 +529,7 @@ export default class Resolver implements Resolution.Engine {
       }
     }
     const geodesicPath = new Uint32Array(fullPathIds);
-    console.log(
+    logger.log(
       `[DEBUG RESOLVER] Final Concatenated Path: ${Array.from(geodesicPath)
         .map(id =>
           this.atomizer.decodeSequence(new Uint32Array([id]), this.system)
@@ -587,7 +542,7 @@ export default class Resolver implements Resolution.Engine {
         geodesicPath,
         this.system
       );
-      console.log(`[DEBUG RESOLVER] Synthesized Code: ${synthesizedCode}`);
+      logger.log(`[DEBUG RESOLVER] Synthesized Code: ${synthesizedCode}`);
       if (synthesizedCode) {
         return this.atomizer.ingestSequence(synthesizedCode, this.system);
       }
@@ -868,10 +823,7 @@ export default class Resolver implements Resolution.Engine {
    * Helper to retrieve the structural scope of a text symbol.
    */
   private getSymbolScope(symbol: string): number {
-    const localSystem = new System();
-    const ids = this.atomizer.ingestSequence(symbol, localSystem);
-    if (ids.length > 0) return localSystem.scope[ids[0]];
-    return -1;
+    return this.atomizer.getSymbolScope(symbol, false);
   }
 
   /**
@@ -940,11 +892,7 @@ export default class Resolver implements Resolution.Engine {
       const creationScope = this.getSymbolScope("creation");
 
       // Check for structural rules related to creation/existence.
-      // Note: "studied" is included here to support the destructive interference test logic.
-      if (
-        this.memoryContains(verbScope, impliesScope, creationScope) ||
-        verb.toLowerCase() === "studied"
-      ) {
+      if (this.memoryContains(verbScope, impliesScope, creationScope)) {
         const objectTokens = doc.match(`${verb} [*]`).out("array");
         if (objectTokens.length > 0) {
           const objectStr = objectTokens[0]
@@ -953,10 +901,7 @@ export default class Resolver implements Resolution.Engine {
             .trim();
           if (objectStr) {
             // Determine if we should negate based on existing manifold knowledge
-            const targetStr =
-              verb.toLowerCase() === "studied"
-                ? `then nikola tesla did not study electricity`
-                : `then ${objectStr} did not exist before ${date}`;
+            const targetStr = `then ${objectStr} did not exist before ${date}`;
             return this.atomizer.ingestSequence(targetStr, this.system);
           }
         }
