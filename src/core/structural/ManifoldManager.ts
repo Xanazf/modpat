@@ -1,3 +1,4 @@
+import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import type { SystemPersistence } from "./Persistence";
@@ -18,7 +19,7 @@ export class ManifoldManager {
   public emergencySystem: System;
   /** Persistence layer for snapshotting and hydrating the manifold. */
   private persistence: SystemPersistence;
-  /** The spectral atomizer for quantum processing. */
+  /** The atomizer for ingestion processing. */
   private atomizer: SpectralAtomizer;
   /** The currently active logical universe. */
   private activeSystem: System;
@@ -208,6 +209,70 @@ export class ManifoldManager {
   }
 
   /**
+   * Phase 2: Gravitational Consolidation
+   * Runs in the background to merge exact matches and pull similar concepts into orbits.
+   */
+  private consolidationRoutine(dt: number): void {
+    const sys = this.activeSystem;
+    const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
+
+    // Throttle: don't run every tick unless pressure is extremely high
+    // (Simulated by running a partial sweep each tick instead of full O(N^2))
+    const sweeps = pressure > 0.8 ? 50 : 10;
+
+    for (let k = 0; k < sweeps; k++) {
+      if (sys.length < 2) break;
+      const i = Math.floor(Math.random() * sys.length);
+      if (!sys.isAllocated(i)) continue;
+      if (sys.operatorClass[i] !== 0) continue; // Only consolidate semantic atoms (OperatorClass.None = 0)
+
+      for (let j = 0; j < sys.length; j++) {
+        if (i === j || !sys.isAllocated(j)) continue;
+        if (sys.operatorClass[j] !== 0) continue;
+
+        // 4D Distance
+        const dx = sys.posX[i] - sys.posX[j];
+        const dy = sys.posY[i] - sys.posY[j];
+        const dz = sys.posZ[i] - sys.posZ[j];
+        const dw = sys.posW[i] - sys.posW[j];
+
+        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+
+        // EXACT MATCH FUSION
+        if (sys.scope[i] === sys.scope[j] && distSq < 0.0001) {
+          // i absorbs j
+          sys.mass[i] += sys.mass[j];
+          sys.depth[i] += sys.depth[j];
+          sys.freeLocation(j, "exact_match_fusion");
+          sys.update(i, "fusion");
+          continue;
+        }
+
+        // ORBITAL CLUSTERING (Semantic Proximity)
+        const ORBIT_RADIUS_SQ = 0.5; // Threshold for similar meaning
+        if (distSq < ORBIT_RADIUS_SQ) {
+          // Determine Root (heaviest mass)
+          const root = sys.mass[i] > sys.mass[j] ? i : j;
+          const satellite = root === i ? j : i;
+
+          // Gently shift satellite towards root (Gravity)
+          const pull = 0.1 * dt; // Attenuation factor
+          sys.posX[satellite] += (sys.posX[root] - sys.posX[satellite]) * pull;
+          sys.posY[satellite] += (sys.posY[root] - sys.posY[satellite]) * pull;
+          sys.posZ[satellite] += (sys.posZ[root] - sys.posZ[satellite]) * pull;
+
+          // Blend Scope (Harmonic Resonance)
+          // Gradually align the frequency band of the satellite to the root
+          sys.scope[satellite] +=
+            (sys.scope[root] - sys.scope[satellite]) * pull * 0.5;
+
+          sys.update(satellite, "orbital_clustering");
+        }
+      }
+    }
+  }
+
+  /**
    * advances the temporal state of the manifold.
    *
    * Applies temporal decay to all logic atoms and triggers regulatory
@@ -221,6 +286,9 @@ export class ManifoldManager {
 
     // Apply temporal decay across the manifold
     this.activeSystem.decay(dt);
+
+    // Consolidate similar patterns
+    this.consolidationRoutine(dt);
 
     // Scan for destabilizing anomalies
     this.monitorThreats().catch(err => {

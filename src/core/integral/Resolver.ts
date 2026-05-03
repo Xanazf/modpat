@@ -159,10 +159,10 @@ export default class Resolver implements Resolution.Engine {
       // Check if this logical interference pattern has already been crystallized.
       if (this.store) {
         const cached = await this.store.checkInterferencePattern(sequenceIds);
-        if (cached) {
-          // console.log(
-          //   `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.join(",")}, words: ${this.atomizer.decodeSequence(cached, this.system)}`
-          // );
+        if (cached && cached.length > 0) {
+          logger.debug(
+            `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.join(",")}, words: ${this.atomizer.decodeSequence(cached, this.system)}`
+          );
           return cached;
         }
       }
@@ -170,9 +170,9 @@ export default class Resolver implements Resolution.Engine {
       // Perform a multi-token semantic lookup in the manifold.
       const result = this.resolveMultiTokenSemanticLookup(subjectIds, lastId);
 
-      // console.log(
-      //   `[DEBUG RESOLVER] Phase 0 matched IDs: ${result.join(",")}, words: ${this.atomizer.decodeSequence(result, this.system)}`
-      // );
+      logger.debug(
+        `[DEBUG RESOLVER] Phase 0 matched IDs: ${result.join(",")}, words: ${this.atomizer.decodeSequence(result, this.system)}`
+      );
 
       // Crystallize the new proof into memory if a valid result was found.
       if (this.store && result.length > 0) {
@@ -203,9 +203,9 @@ export default class Resolver implements Resolution.Engine {
       const id = sequenceIds[i];
       const scope = this.system.scope[id];
       const opClass = this.system.operatorClass[id];
-      // console.log(
-      //   `[DEBUG RESOLVER] Token ${i}: ${this.atomizer.decodeSequence(new Uint32Array([id]), this.system)}, opClass: ${opClass}, scope: ${scope}`
-      // );
+      logger.debug(
+        `[DEBUG RESOLVER] Token ${i}: ${this.atomizer.decodeSequence(new Uint32Array([id]), this.system)}, opClass: ${opClass}, scope: ${scope}`
+      );
 
       // Identify the Sink Node: the logical conclusion point.
       if (opClass === OperatorClass.Sink) sinkNodeIdx = i;
@@ -214,9 +214,9 @@ export default class Resolver implements Resolution.Engine {
       for (let j = 0; j < N; j++) {
         if (i !== j && this.system.scope[sequenceIds[j]] === scope) {
           transferMatrix[i * N + j] = Math.max(transferMatrix[i * N + j], 0.8);
-          // console.log(
-          //   `[DEBUG RESOLVER] Constructive Interference between ${i} and ${j}`
-          // );
+          logger.debug(
+            `[DEBUG RESOLVER] Constructive Interference between ${i} and ${j}`
+          );
         }
       }
 
@@ -228,9 +228,9 @@ export default class Resolver implements Resolution.Engine {
         ) {
           // Allow energy to bypass the operator and flow directly between adjacent concepts.
           transferMatrix[(i - 1) * N + (i + 1)] = 1.0;
-          // console.log(
-          //   `[DEBUG RESOLVER] Gravitational Lens at ${i} bypassing to ${i + 1}`
-          // );
+          logger.debug(
+            `[DEBUG RESOLVER] Gravitational Lens at ${i} bypassing to ${i + 1}`
+          );
         } else if (opClass === OperatorClass.Inversion) {
           // Phase Inversion: Negation causes destructive interference (-1.0).
           transferMatrix[i * N + (i + 1)] = -1.0;
@@ -251,7 +251,7 @@ export default class Resolver implements Resolution.Engine {
         }
       }
     }
-    // console.log(`[DEBUG RESOLVER] Sink Node Index: ${sinkNodeIdx}`);
+    logger.debug(`[DEBUG RESOLVER] Sink Node Index: ${sinkNodeIdx}`);
 
     // Phase 3: Compute Accumulated Resonance Matrix (Reachability).
     // Iteratively propagate energy through the matrix to find long-range resonances.
@@ -304,10 +304,10 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    logger.log(
+    logger.debug(
       `[DEBUG RESOLVER] Energy Vibration Initial: ${Array.from(energyVibration)}`
     );
-    logger.log(
+    logger.debug(
       `[DEBUG RESOLVER] Accumulated Resonance (first row): ${Array.from(accumulatedResonance.subarray(0, N))}`
     );
 
@@ -339,7 +339,7 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    logger.log(
+    logger.debug(
       `[DEBUG RESOLVER] Max Net Energy: ${maxNetEnergy}, Target Node Index: ${targetNodeIdx}`
     );
 
@@ -455,7 +455,7 @@ export default class Resolver implements Resolution.Engine {
     sequenceIds: Uint32Array
   ): Promise<Uint32Array> {
     const N = sequenceIds.length;
-    logger.log(
+    logger.debug(
       `[DEBUG RESOLVER] Code Trigger Detected. Routing Sequential Geodesic...`
     );
 
@@ -500,7 +500,7 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    logger.log(
+    logger.debug(
       `[DEBUG RESOLVER] Strict Waypoints: ${waypoints.map(id => this.atomizer.decodeSequence(new Uint32Array([id]), this.system)).join(" -> ")}`
     );
 
@@ -526,7 +526,7 @@ export default class Resolver implements Resolution.Engine {
       }
     }
     const geodesicPath = new Uint32Array(fullPathIds);
-    logger.log(
+    logger.debug(
       `[DEBUG RESOLVER] Final Concatenated Path: ${Array.from(geodesicPath)
         .map(id =>
           this.atomizer.decodeSequence(new Uint32Array([id]), this.system)
@@ -539,7 +539,7 @@ export default class Resolver implements Resolution.Engine {
         geodesicPath,
         this.system
       );
-      logger.log(`[DEBUG RESOLVER] Synthesized Code: ${synthesizedCode}`);
+      logger.debug(`[DEBUG RESOLVER] Synthesized Code: ${synthesizedCode}`);
       if (synthesizedCode) {
         return this.atomizer.ingestSequence(synthesizedCode, this.system);
       }

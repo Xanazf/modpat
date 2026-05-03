@@ -15,6 +15,15 @@ import {
 interface WaveForm {
   /** The universal topological signature of the input interference pattern. */
   signature: string;
+  /** The target to match the interference pattern against. */
+  target_pattern: string;
+  /** The stored net energy of the pattern. */
+  net_energy: number;
+  /** The coordinates of the pattern in the manifold. */
+  anchor_x: number;
+  anchor_y: number;
+  anchor_z: number;
+  anchor_w: number;
   /** Indices mapping the generic variable placeholders to the physical output. */
   source_indices: Uint32Array;
 }
@@ -68,10 +77,15 @@ export default class Store implements Memory.Vault {
     this._connection = await this.instance.connect();
     await this._connection.run(`
       CREATE TABLE IF NOT EXISTS wave_forms (
-        signature VARCHAR PRIMARY KEY,
+        signature VARCHAR,
         target_pattern VARCHAR,
-        net_energy DOUBLE
+        net_energy DOUBLE,
+        anchor_x DOUBLE,
+        anchor_y DOUBLE,
+        anchor_z DOUBLE,
+        anchor_w DOUBLE
       );
+      CREATE INDEX IF NOT EXISTS idx_wave_sig ON wave_forms (signature);
     `);
   }
 
@@ -87,6 +101,27 @@ export default class Store implements Memory.Vault {
    */
   public async waitForInit(): Promise<void> {
     return this.initPromise;
+  }
+
+  /**
+   * Calculates the centroid of a sequence of quanta in 4D space.
+   */
+  private calculateCentroid(ids: Uint32Array): number[] {
+    let x = 0,
+      y = 0,
+      z = 0,
+      w = 0;
+    const count = ids.length;
+    if (count === 0) return [0, 0, 0, 0];
+
+    for (let i = 0; i < count; i++) {
+      const id = ids[i];
+      x += this.system.posX[id];
+      y += this.system.posY[id];
+      z += this.system.posZ[id];
+      w += this.system.posW[id];
+    }
+    return [x / count, y / count, z / count, w / count];
   }
 
   /**
@@ -114,7 +149,7 @@ export default class Store implements Memory.Vault {
         .decodeSequence(new Uint32Array([id]), this.system)
         .trim();
 
-      // Robust Identification: If it has OperatorClass.None, it is a variable/atom.
+      // If it has OperatorClass.None, it is a variable/atom.
       // Otherwise, it is an operator with fixed logical mass.
       if (this.system.operatorClass[id] === OperatorClass.None) {
         if (!varMap.has(scope)) {
@@ -154,11 +189,14 @@ export default class Store implements Memory.Vault {
         .decodeSequence(new Uint32Array([id]), this.system)
         .trim();
 
-      // If it's a variable (low mass), use its mapped VAR_X placeholder
-      if (this.system.mass[id] <= this.system.epsilon * 10) {
+      // Use VAR placeholder only if it was part of the original input manifold
+      if (
+        this.system.mass[id] <= this.system.epsilon * 10 &&
+        varMap.has(scope)
+      ) {
         targetTokens.push(`VAR_${varMap.get(scope)}`);
       } else {
-        // Operators retain their symbol
+        // Operators or new variables not in the input retain their literal identity
         targetTokens.push(symbol);
       }
     }
@@ -183,17 +221,21 @@ export default class Store implements Memory.Vault {
   ) {
     const { signature, varMap } = this.abstractSequence(inputSequence);
     const targetPattern = this.abstractTarget(outputSequence, varMap);
+    const [ax, ay, az, aw] = this.calculateCentroid(inputSequence);
 
     const stmt = await this._connection.prepare(`
-      INSERT INTO wave_forms (signature, target_pattern, net_energy) 
-      VALUES (?, ?, ?) 
-      ON CONFLICT (signature) DO UPDATE SET net_energy = EXCLUDED.net_energy;
+      INSERT INTO wave_forms (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
       stmt.bindVarchar(1, signature);
       stmt.bindVarchar(2, targetPattern);
       stmt.bindDouble(3, energy);
+      stmt.bindDouble(4, ax);
+      stmt.bindDouble(5, ay);
+      stmt.bindDouble(6, az);
+      stmt.bindDouble(7, aw);
       await stmt.run();
     } finally {
       stmt.destroySync();
@@ -214,6 +256,7 @@ export default class Store implements Memory.Vault {
     inputSequence: Uint32Array
   ): Promise<Uint32Array | null> {
     const { signature, varMap } = this.abstractSequence(inputSequence);
+    const [qx, qy, qz, qw] = this.calculateCentroid(inputSequence);
 
     const reverseVarMap = new Map<number, number>();
     for (const [scope, varId] of varMap.entries()) {
@@ -222,16 +265,32 @@ export default class Store implements Memory.Vault {
 
     let targetPattern: string | null = null;
 
-    const stmt = await this._connection.prepare(
-      `SELECT target_pattern FROM wave_forms WHERE signature = ?`
-    );
+    // Spatial Resonance Query: Find the structurally identical signature that is physically closest to our query
+    const stmt = await this._connection.prepare(`
+      SELECT target_pattern,
+             (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2) + pow(anchor_w - ?, 2)) as resonance
+      FROM wave_forms
+      WHERE signature = ?
+      ORDER BY resonance ASC
+      LIMIT 1
+    `);
     try {
-      stmt.bindVarchar(1, signature);
+      stmt.bindDouble(1, qx);
+      stmt.bindDouble(2, qy);
+      stmt.bindDouble(3, qz);
+      stmt.bindDouble(4, qw);
+      stmt.bindVarchar(5, signature);
+
       const res = await stmt.runAndReadAll();
       const rows = res.getRows();
       if (rows && rows.length > 0) {
-        // Correctly access the target_pattern from the second column (index 1)
-        targetPattern = rows[0][1]?.toString() || null;
+        const resonance = Number(rows[0][1]);
+        // Tight Resonance Threshold:
+        // A distance < 0.1 indicates the query is physically targeting the same logical entity.
+        // A larger distance suggests a structural coincidence but a different topological identity.
+        if (resonance < 0.1) {
+          targetPattern = rows[0][0]?.toString() || null;
+        }
       }
     } catch (err) {
       console.error("Vault Interference Query Error:", err);
@@ -260,7 +319,20 @@ export default class Store implements Memory.Vault {
           }
         }
       } else {
-        const opId = this.findOperatorIdBySymbol(inputSequence, token);
+        let opId = this.findOperatorIdBySymbol(inputSequence, token);
+        if (opId === -1) {
+          // Fallback: Find it globally if not in input
+          const targetScope = (this.atomizer as any).getSymbolScope(token);
+          for (let i = 0; i < this.system.length; i++) {
+            if (
+              this.system.scope[i] === targetScope &&
+              this.system.isAllocated(i)
+            ) {
+              opId = i;
+              break;
+            }
+          }
+        }
         if (opId !== -1) resultIds.push(opId);
       }
     }
@@ -287,6 +359,36 @@ export default class Store implements Memory.Vault {
       if (decoded === symbol) return sequenceIds[i];
     }
     return -1;
+  }
+
+  /**
+   * Adjusts the confidence level (net energy) of a crystallized wave form.
+   * This implements Hebbian reinforcement based on feedback or consistency checks.
+   *
+   * @param signature - The signature of the wave form to adjust.
+   * @param delta - The energy delta to apply.
+   */
+  public async adjustEnergy(signature: string, delta: number): Promise<void> {
+    const stmt = await this._connection.prepare(`
+      UPDATE wave_forms
+      SET net_energy = net_energy + ?
+      WHERE signature = ?
+    `);
+    try {
+      stmt.bindDouble(1, delta);
+      stmt.bindVarchar(2, signature);
+      await stmt.run();
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /**
+   * Periodically clears out cached patterns that have accumulated zero or negative energy.
+   * This permanently removes "hallucinated" or incorrect logical paths.
+   */
+  public async cullWeakWaveForms(): Promise<void> {
+    await this._connection.run("DELETE FROM wave_forms WHERE net_energy <= 0");
   }
 
   /**

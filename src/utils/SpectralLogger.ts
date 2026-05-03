@@ -1,4 +1,5 @@
 import type System from "@core_i/System";
+import { SYSTEM_CONFIG } from "@config";
 import { SpectralVisualizer } from "./SpectralVisualizer";
 
 const visualizer = new SpectralVisualizer();
@@ -48,6 +49,47 @@ export const logger = {
    * Standard log with pattern-based spectral styling.
    */
   log: (msg: string, ...args: unknown[]) => {
+    if (typeof msg !== "string") {
+      console.log(msg, ...args);
+      return;
+    }
+
+    // Pattern recognition for common system tags and markers
+    const styled = msg
+      .replace(
+        /\[Wikipedia\]/g,
+        visualizer.render({ type: "informal" }, "[Wikipedia]")
+      )
+      .replace(
+        /\[Geodesic\]/g,
+        visualizer.render({ type: "formal" }, "[Geodesic]")
+      )
+      .replace(
+        /\[LiveInference\]:/g,
+        visualizer.render({ type: "formal" }, "[LiveInference]:")
+      )
+      .replace(
+        /\[TestInference\]:/g,
+        visualizer.render({ type: "formal" }, "[TestInference]:")
+      )
+      .replace(/\[Inference Surprisal: (.*?) bits\]/g, (_, bits) => {
+        const entropy = parseFloat(bits);
+        // Map entropy to "heat" glow
+        return visualizer.render(
+          { type: "informal", entropy },
+          `[Inference Surprisal: ${bits} bits]`
+        );
+      })
+      .replace(/Acknowledged: "(.*?)"/g, (_, text) => {
+        return `Acknowledged: "${visualizer.render({ type: "informal" }, text)}"`;
+      });
+
+    console.log(styled, ...args);
+  },
+  debug: (msg: string, ...args: unknown[]) => {
+    if (!SYSTEM_CONFIG.DEBUG) {
+      return;
+    }
     if (typeof msg !== "string") {
       console.log(msg, ...args);
       return;

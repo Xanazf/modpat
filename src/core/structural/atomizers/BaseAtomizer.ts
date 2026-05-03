@@ -1,4 +1,4 @@
-import { BRAIN_CONFIG } from "@src/config";
+import { SYSTEM_CONFIG } from "@src/config";
 import { UMAPLoader } from "@core_s/UMAPLoader";
 
 /**
@@ -21,8 +21,8 @@ export abstract class BaseAtomizer {
    */
   constructor() {
     this.loader = new UMAPLoader(
-      BRAIN_CONFIG.DOD_EMBEDDING.UMAP_BINARY_PATH,
-      BRAIN_CONFIG.DOD_EMBEDDING.UMAP_DICT_PATH
+      SYSTEM_CONFIG.DOD_EMBEDDING.UMAP_BINARY_PATH,
+      SYSTEM_CONFIG.DOD_EMBEDDING.UMAP_DICT_PATH
     );
   }
 
@@ -56,9 +56,9 @@ export abstract class BaseAtomizer {
     const idx = this.getSymbolIdx(symbol);
     // Apply an offset to separate logical and semantic frequency bands.
     const offset = isOperator
-      ? BRAIN_CONFIG.DOD_EMBEDDING.LOGIC_OFFSET
-      : BRAIN_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET;
-    return (idx + offset) * BRAIN_CONFIG.DOD_EMBEDDING.BASE_FREQUENCY;
+      ? SYSTEM_CONFIG.DOD_EMBEDDING.LOGIC_OFFSET
+      : SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET;
+    return (idx + offset) * SYSTEM_CONFIG.DOD_EMBEDDING.BASE_FREQUENCY;
   }
 
   /**
@@ -69,14 +69,14 @@ export abstract class BaseAtomizer {
    * @returns The original string symbol, or "<?>" if unknown.
    */
   protected resolveSymbolFromScope(scope: number): string {
-    const normalizedScope = scope / BRAIN_CONFIG.DOD_EMBEDDING.BASE_FREQUENCY;
+    const normalizedScope = scope / SYSTEM_CONFIG.DOD_EMBEDDING.BASE_FREQUENCY;
 
     // Determine which field (Logic or Semantic) the scope belongs to.
     let symbolIdx: number;
-    if (normalizedScope >= BRAIN_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET) {
-      symbolIdx = normalizedScope - BRAIN_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET;
+    if (normalizedScope >= SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET) {
+      symbolIdx = normalizedScope - SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET;
     } else {
-      symbolIdx = normalizedScope - BRAIN_CONFIG.DOD_EMBEDDING.LOGIC_OFFSET;
+      symbolIdx = normalizedScope - SYSTEM_CONFIG.DOD_EMBEDDING.LOGIC_OFFSET;
     }
 
     // Round to account for floating-point drift in the manifold.

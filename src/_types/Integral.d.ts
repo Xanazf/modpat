@@ -45,7 +45,11 @@ declare namespace Root {
     readonly c: number;
 
     // Register a Part/Complex and get its Proxy
-    createLocation(localMass: number, localScope: number, from?: string): number;
+    createLocation(
+      localMass: number,
+      localScope: number,
+      from?: string
+    ): number;
 
     // Check if a location is currently allocated
     isAllocated(id: number): boolean;

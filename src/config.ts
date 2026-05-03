@@ -24,8 +24,8 @@ const DOPAT_CONFIG = {
 };
 
 // TODO: debug bindings
-const BRAIN_CONFIG = {
-  DEBUG: true,
+const SYSTEM_CONFIG = {
+  DEBUG: false,
   DEDUCE: {
     START_ANCHOR: 4.0,
     END_ANCHOR: 0.5,
@@ -142,7 +142,7 @@ export const SYNTAX_ATTRACTORS = {
 
 export {
   ATOMIC_PATTERNS,
-  BRAIN_CONFIG,
+  SYSTEM_CONFIG,
   DOPAT_CONFIG,
   FULL_DIRECTIONAL_PATTERNS,
   LOGIC_PATTERNS,

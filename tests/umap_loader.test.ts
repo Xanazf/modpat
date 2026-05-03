@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { BRAIN_CONFIG } from "@config";
+import { SYSTEM_CONFIG } from "@config";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
@@ -9,7 +9,7 @@ export async function executeUMAPSuite() {
     const env = await TestHarness.getEnvironment("base");
 
     await it("Testing UMAPLoader Word Mapping", async () => {
-      if (!fs.existsSync(BRAIN_CONFIG.DOD_EMBEDDING.UMAP_BINARY_PATH)) {
+      if (!fs.existsSync(SYSTEM_CONFIG.DOD_EMBEDDING.UMAP_BINARY_PATH)) {
         logger.warn("UMAP binary not found, skipping UMAPLoader tests");
         return;
       }

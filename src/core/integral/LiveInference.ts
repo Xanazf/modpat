@@ -1,4 +1,3 @@
-
 import nlp from "compromise";
 
 import type Resolver from "@core_i/Resolver";
@@ -25,6 +24,8 @@ export class LiveInference {
   private store: Store;
   /** The unfolder for expanding logical voids. */
   private unfolder: Unfolder;
+  /** Tracks the signature of the last processed intent for feedback reinforcement. */
+  private last_signature: string | null = null;
 
   /**
    * Initializes the inference engine with its required structural dependencies.
@@ -61,7 +62,28 @@ export class LiveInference {
     // Identify questions by grammar or punctuation.
     const isQuestion = doc.questions().length > 0 || query.trim().endsWith("?");
 
-    // Route based on the "heat" of the inquiry tokens.
+    // Reinforcement against user feedback
+    // TODO: distrust user feedback and check with Unfolder
+    // stop checking after user gives X ingested corrections
+    if (/^(no|incorrect|wrong|that'?s wrong|false)\b/i.test(query)) {
+      if (this.last_signature) {
+        await this.store.adjustEnergy(this.last_signature, -0.5);
+        const response =
+          "Feedback acknowledged. Structural confidence reduced.";
+        this.respond(response);
+        return response;
+      }
+    }
+    if (/^(yes|correct|right|true)\b/i.test(query)) {
+      if (this.last_signature) {
+        await this.store.adjustEnergy(this.last_signature, 0.1);
+        const response =
+          "Feedback acknowledged. Structural confidence increased.";
+        this.respond(response);
+        return response;
+      }
+    }
+
     if (
       isQuestion ||
       query.match(/^(what|who|where|how|why|is|are|can|do|does)\b/i)
@@ -148,8 +170,8 @@ export class LiveInference {
       .replace(/\s+/g, " ")
       .trim();
 
-    logger.log(`[DEBUG] query: ${query}, topQuery: ${topologicalQuery}`);
-    logger.log(`[DEBUG] inferredMeaning: ${inferredMeaning}`);
+    logger.debug(`[DEBUG] query: ${query}, topQuery: ${topologicalQuery}`);
+    logger.debug(`[DEBUG] inferredMeaning: ${inferredMeaning}`);
 
     // WARN: Explanatory queries (who/what/how/why) should avoid simple direct identity matches
     // from the memory vault if they are too brief (single tokens), as they likely represent
@@ -346,18 +368,18 @@ export class LiveInference {
             boostScopes.add(this.system.scope[i]);
         }
 
-        logger.log(`[DEBUG Phase5] heatNodes: ${JSON.stringify(heatNodes)}`);
-        logger.log(
+        logger.debug(`[DEBUG Phase5] heatNodes: ${JSON.stringify(heatNodes)}`);
+        logger.debug(
           `[DEBUG Phase5] keywordTokens: ${JSON.stringify([...keywordTokens])}`
         );
-        logger.log(`[DEBUG Phase5] boostScopes size: ${boostScopes.size}`);
-        logger.log(
+        logger.debug(`[DEBUG Phase5] boostScopes size: ${boostScopes.size}`);
+        logger.debug(
           `[DEBUG Phase5] bestActionId: ${bestActionId} => "${this.atomizer.resolveScope(this.system.scope[bestActionId])}", posZ=${this.system.posZ[bestActionId].toFixed(2)}`
         );
-        logger.log(
+        logger.debug(
           `[DEBUG Phase5] targetQuantum: ${targetQuantum} => "${this.atomizer.resolveScope(this.system.scope[targetQuantum])}", posZ=${this.system.posZ[targetQuantum].toFixed(2)}`
         );
-        logger.log(
+        logger.debug(
           `[DEBUG Phase5] preExpandLength: ${preExpandLength}, postExpandLength: ${postExpandLength}`
         );
 
@@ -376,7 +398,7 @@ export class LiveInference {
         const sortedLayers = [...layerBounds.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([, bounds]) => bounds);
-        logger.log(`[DEBUG Phase5] layers: ${JSON.stringify(sortedLayers)}`);
+        logger.debug(`[DEBUG Phase5] layers: ${JSON.stringify(sortedLayers)}`);
 
         const combinedIds: number[] = [];
         for (let seg = 0; seg < sortedLayers.length; seg++) {
@@ -596,9 +618,54 @@ export class LiveInference {
    * @returns The decoded meaning as understood by the system.
    */
   public async processCommand(statement: string): Promise<string> {
+    const doc = nlp(statement);
+
+    // Phase 3: Pre-Ingestion Resonance Check (Contradiction Detection)
+    let invertedStatement = "";
+    if (doc.has("#Negative")) {
+      invertedStatement = doc.sentences().toPositive().text();
+    } else {
+      invertedStatement = doc.sentences().toNegative().text();
+    }
+
+    if (invertedStatement && invertedStatement !== statement) {
+      const invertedQuanta = this.atomizer.ingestSequence(
+        invertedStatement,
+        this.system
+      );
+      const collisionPath =
+        await this.store.checkInterferencePattern(invertedQuanta);
+
+      if (collisionPath && collisionPath.length > 0) {
+        const { signature } = this.store.abstractSequence(invertedQuanta);
+        // Penalize the cached fact (it's potentially false if new data says otherwise)
+        await this.store.adjustEnergy(signature, -0.5);
+
+        // Free the invertedQuanta in reverse order so the freeList pops them sequentially
+        for (let i = invertedQuanta.length - 1; i >= 0; i--) {
+          this.system.freeLocation(invertedQuanta[i], "contradiction_check");
+        }
+
+        const response = `[Logic Trap Detected]: Input contradicts known topological signature. Cached confidence penalized.`;
+        this.respond(response);
+        return response;
+      }
+
+      // Cleanup the check quanta if no collision, in reverse order
+      for (let i = invertedQuanta.length - 1; i >= 0; i--) {
+        this.system.freeLocation(
+          invertedQuanta[i],
+          "contradiction_check_clean"
+        );
+      }
+    }
+
     const quanta = this.atomizer.ingestSequence(statement, this.system);
 
     if (quanta.length > 0) {
+      const { signature } = this.store.abstractSequence(quanta);
+      this.last_signature = signature;
+
       // 1. Cache the interference pattern in active memory.
       await this.store.crystallizeProof(quanta, quanta, 1.0);
 

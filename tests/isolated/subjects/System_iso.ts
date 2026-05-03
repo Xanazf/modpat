@@ -417,6 +417,11 @@ class System implements Root.System {
    * @param initialScope The starting structural kind.
    * @returns The internal ID (index) of the new location.
    */
+  public isAllocated(id: number): boolean {
+    if (id < 0 || id >= this.length) return false;
+    return !(this.mass[id] === 0 && this.scope[id] === 0);
+  }
+
   public createLocation(
     initialMass: number,
     initialScope: number,
@@ -583,6 +588,7 @@ class System implements Root.System {
   public checkIntegrity(from?: string): number[] {
     const corrupted: number[] = [];
     for (let i = 0; i < this.length; i++) {
+      if (!this.isAllocated(i)) continue;
       if (!this.validate(i)) {
         corrupted.push(i);
       }

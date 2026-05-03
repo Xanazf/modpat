@@ -619,6 +619,7 @@ class System implements Root.System {
   public checkIntegrity(): number[] {
     const corrupted: number[] = [];
     for (let i = 0; i < this.length; i++) {
+      if (!this.isAllocated(i)) continue;
       if (!this.validate(i)) {
         corrupted.push(i);
       }
@@ -633,6 +634,9 @@ class System implements Root.System {
    * @param deltaTime Elapsed simulation time.
    */
   public decay(deltaTime: number): void {
+    const VACUUM_THRESHOLD = DOPAT_CONFIG.DRIFT_THRESHOLD * 0.001; // Critical threshold before deletion
+    const CRITICAL_ENTROPY = 100.0; // Point at which logic becomes purely chaotic noise
+
     for (let i = 0; i < this.length; i++) {
       // Skip deallocated locations.
       if (!this.isAllocated(i)) continue;
@@ -643,6 +647,17 @@ class System implements Root.System {
       this.time[i] += rate * deltaTime;
       // Matter decays exponentially over time.
       this.mass[i] *= Math.exp(-rate * deltaTime);
+
+      // Thermodynamic Forgetting (Topological Pruning)
+      // If a precept's mass drops below the vacuum threshold and its entropy is critically high,
+      // it signifies "heat death" for this node. We garbage-collect it to prevent topological noise.
+      if (
+        Math.abs(this.mass[i]) < VACUUM_THRESHOLD &&
+        this.entropyRate[i] > CRITICAL_ENTROPY
+      ) {
+        this.freeLocation(i, "thermodynamic_pruning");
+        continue;
+      }
 
       // Natural Drift: dead or forgotten precepts drift towards the manifold origin.
       // Applied using a continuous exponential decay model instead of an explicit Euler step.
