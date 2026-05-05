@@ -212,7 +212,10 @@ export default class Resolver implements Resolution.Engine {
 
       // Constructive Interference: Tokens sharing the same scope (meaning) attract energy.
       for (let j = 0; j < N; j++) {
-        if (i !== j && this.system.scope[sequenceIds[j]] === scope) {
+        if (
+          i !== j &&
+          Math.abs(this.system.scope[sequenceIds[j]] - scope) < 1e-6
+        ) {
           transferMatrix[i * N + j] = Math.max(transferMatrix[i * N + j], 0.8);
           logger.debug(
             `[DEBUG RESOLVER] Constructive Interference between ${i} and ${j}`
@@ -594,7 +597,50 @@ export default class Resolver implements Resolution.Engine {
     const operatorIdClass = this.system.operatorClass[operatorId];
     const length = this.system.length;
 
-    // 1. Structural Scope Sequence Match (Highest Precision).
+    // 1. Ring fast-path: O(SEQUENCE_INDEX_SIZE) scan over recently ingested sequences.
+    //    Iterates newest-first so recency bias aligns with thermodynamic forgetting —
+    //    the most recently ingested (hottest) facts are checked first.
+    //    Falls through to the full scan for facts older than the ring window.
+    //
+    //    IMPORTANT: registerSequenceStart is called for every ingestSequence, including
+    //    query sequences. Without the queryIdSet guard the fast-path would self-match
+    //    the query's own ring entry and return collectSequence(past-end) → "".
+    const queryIdSet = new Set<number>(subjectIds);
+    queryIdSet.add(operatorId);
+    const ringEntries = this.system.sequenceRing.toArray();
+    for (let r = ringEntries.length - 1; r >= 0; r--) {
+      const { scope0, startId } = ringEntries[r];
+      if (queryIdSet.has(startId)) continue; // never match the current query's own entry
+      if (Math.abs(scope0 - this.system.scope[subjectIds[0]]) >= 1e-6) continue;
+      if (!this.system.isAllocated(startId)) continue;
+
+      // Verify every token in the subject sequence at consecutive memory positions
+      let match = true;
+      for (let j = 0; j < subjectIds.length; j++) {
+        const cId = startId + j;
+        if (
+          cId >= length ||
+          !this.system.isAllocated(cId) ||
+          Math.abs(this.system.scope[cId] - this.system.scope[subjectIds[j]]) >=
+            1e-6
+        ) {
+          match = false;
+          break;
+        }
+      }
+      if (!match) continue;
+
+      // Check that the operator immediately follows the subject
+      const opId = startId + subjectIds.length;
+      if (
+        opId < length &&
+        Math.abs(this.system.scope[opId] - operatorScope) < 1e-6
+      ) {
+        return this.collectSequence(opId + 1, 1);
+      }
+    }
+
+    // 2. Full manifold scan: O(N × M) fallback for sequences older than the ring.
     // Forward Match: Inquiry Subject matches Memory Subject
     for (let i = 0; i < length - subjectIds.length - 1; i++) {
       let match = true;

@@ -7,6 +7,8 @@ const DOPAT_CONFIG = {
   MAXILON: Number.MAX_SAFE_INTEGER * 10e-3,
   BLACKBODY_LIMIT: 1e10,
   RING_BUFFER_SIZE: 1024,
+  /** Capacity of the scope-sequence index ring used for O(ring) forward-match lookups. */
+  SEQUENCE_INDEX_SIZE: 4096,
   DECAY_RATE: 0.95,
   USE_GPU: true,
   DRIFT_THRESHOLD: 100.0,

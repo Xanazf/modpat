@@ -86,7 +86,32 @@ export default class Store implements Memory.Vault {
         anchor_w DOUBLE
       );
       CREATE INDEX IF NOT EXISTS idx_wave_sig ON wave_forms (signature);
+
+      CREATE TABLE IF NOT EXISTS raw_facts (
+        fact VARCHAR NOT NULL,
+        source VARCHAR DEFAULT 'user',
+        confidence DOUBLE DEFAULT 1.0,
+        ingested_at BIGINT,
+        signature VARCHAR
+      );
+      CREATE INDEX IF NOT EXISTS idx_raw_facts_sig ON raw_facts (signature);
     `);
+
+    // Migrate existing raw_facts tables that may lack the newer columns
+    for (const col of [
+      "source VARCHAR DEFAULT 'user'",
+      "confidence DOUBLE DEFAULT 1.0",
+      "ingested_at BIGINT",
+      "signature VARCHAR",
+    ]) {
+      try {
+        await this._connection.run(
+          `ALTER TABLE raw_facts ADD COLUMN IF NOT EXISTS ${col}`
+        );
+      } catch {
+        // Column already exists in this DuckDB build — safe to ignore
+      }
+    }
   }
 
   /**
@@ -223,8 +248,53 @@ export default class Store implements Memory.Vault {
     const targetPattern = this.abstractTarget(outputSequence, varMap);
     const [ax, ay, az, aw] = this.calculateCentroid(inputSequence);
 
+    // Deduplicate: if this exact abstract signature already exists at a spatially
+    // close anchor (within 0.5 units), update its energy rather than inserting a
+    // duplicate row. This prevents unbounded table growth from repeated ingestion
+    // of the same fact while preserving spatial diversity for distinct contexts.
+    const checkStmt = await this._connection.prepare(`
+      SELECT net_energy FROM wave_forms
+      WHERE signature = ?
+        AND ABS(anchor_x - ?) < 0.5
+        AND ABS(anchor_y - ?) < 0.5
+      LIMIT 1
+    `);
+    let existingEnergy: number | null = null;
+    try {
+      checkStmt.bindVarchar(1, signature);
+      checkStmt.bindDouble(2, ax);
+      checkStmt.bindDouble(3, ay);
+      const res = await checkStmt.runAndReadAll();
+      const rows = res.getRows();
+      if (rows && rows.length > 0) existingEnergy = Number(rows[0][0]);
+    } finally {
+      checkStmt.destroySync();
+    }
+
+    if (existingEnergy !== null) {
+      // Only write back if the new proof carries higher confidence
+      if (energy > existingEnergy) {
+        const upd = await this._connection.prepare(`
+          UPDATE wave_forms SET net_energy = ?
+          WHERE signature = ?
+            AND ABS(anchor_x - ?) < 0.5
+            AND ABS(anchor_y - ?) < 0.5
+        `);
+        try {
+          upd.bindDouble(1, energy);
+          upd.bindVarchar(2, signature);
+          upd.bindDouble(3, ax);
+          upd.bindDouble(4, ay);
+          await upd.run();
+        } finally {
+          upd.destroySync();
+        }
+      }
+      return;
+    }
+
     const stmt = await this._connection.prepare(`
-      INSERT INTO wave_forms (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w) 
+      INSERT INTO wave_forms (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 

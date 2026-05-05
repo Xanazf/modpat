@@ -216,6 +216,14 @@ export default class SemanticAtomizer
       system.update(id);
     }
 
+    // Register the start of this sequence so Resolver can use the ring fast-path
+    if (sequenceIds.length > 0) {
+      system.registerSequenceStart(
+        system.scope[sequenceIds[0]],
+        sequenceIds[0]
+      );
+    }
+
     return sequenceIds;
   }
 

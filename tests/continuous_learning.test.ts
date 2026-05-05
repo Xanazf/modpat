@@ -71,9 +71,12 @@ export async function executeContinuousLearningSuite() {
       sys.operatorClass[id1] = 0;
       sys.operatorClass[id2] = 0;
       for (const id of [id1, id2]) {
-        sys.posX[id] = 10.0; sys.posY[id] = 10.0;
-        sys.posZ[id] = 10.0; sys.posW[id] = 10.0;
-        sys.depth[id] = 1.0; sys.update(id);
+        sys.posX[id] = 10.0;
+        sys.posY[id] = 10.0;
+        sys.posZ[id] = 10.0;
+        sys.posW[id] = 10.0;
+        sys.depth[id] = 1.0;
+        sys.update(id);
       }
       sys.depth[id2] = 2.0;
       sys.update(id2);
@@ -87,8 +90,14 @@ export async function executeContinuousLearningSuite() {
 
       assert.ok(merged, "Identical-scope co-located nodes should fuse");
       const survivorId = sys.isAllocated(id1) ? id1 : id2;
-      assert.ok(sys.mass[survivorId] > 10.0, "Survivor should hold accumulated mass");
-      assert.ok(sys.depth[survivorId] > 2.0, "Survivor should hold accumulated depth");
+      assert.ok(
+        sys.mass[survivorId] > 10.0,
+        "Survivor should hold accumulated mass"
+      );
+      assert.ok(
+        sys.depth[survivorId] > 2.0,
+        "Survivor should hold accumulated depth"
+      );
     });
 
     await it("Phase 2: Orbital clustering blends scope and corrects posW (Age axis)", async () => {
@@ -99,15 +108,21 @@ export async function executeContinuousLearningSuite() {
       sys.operatorClass[rootId] = 0;
       sys.operatorClass[satId] = 0;
       // Place within ORBIT_RADIUS_SQ = 0.5 but outside exact-match radius (distSq > 0.0001)
-      sys.posX[rootId] = 0; sys.posY[rootId] = 0; sys.posZ[rootId] = 0; sys.posW[rootId] = 0;
-      sys.posX[satId]  = 0.1; sys.posY[satId]  = 0.1; sys.posZ[satId]  = 0.1; sys.posW[satId]  = 0.1;
+      sys.posX[rootId] = 0;
+      sys.posY[rootId] = 0;
+      sys.posZ[rootId] = 0;
+      sys.posW[rootId] = 0;
+      sys.posX[satId] = 0.1;
+      sys.posY[satId] = 0.1;
+      sys.posZ[satId] = 0.1;
+      sys.posW[satId] = 0.1;
       sys.update(rootId);
       sys.update(satId);
 
       const initScopeSat = sys.scope[satId];
-      const initPosWSat  = sys.posW[satId];
-      const rootScope    = sys.scope[rootId];
-      const rootPosW     = sys.posW[rootId];
+      const initPosWSat = sys.posW[satId];
+      const rootScope = sys.scope[rootId];
+      const rootPosW = sys.posW[rootId];
 
       let scopeBlended = false;
       let posWCorrected = false;
@@ -115,14 +130,28 @@ export async function executeContinuousLearningSuite() {
       for (let i = 0; i < 1000; i++) {
         manager.tick(0.1);
         if (!sys.isAllocated(satId)) break;
-        if (Math.abs(sys.scope[satId] - rootScope) < Math.abs(initScopeSat - rootScope)) scopeBlended = true;
-        if (Math.abs(sys.posW[satId] - rootPosW) < Math.abs(initPosWSat - rootPosW)) posWCorrected = true;
+        if (
+          Math.abs(sys.scope[satId] - rootScope) <
+          Math.abs(initScopeSat - rootScope)
+        )
+          scopeBlended = true;
+        if (
+          Math.abs(sys.posW[satId] - rootPosW) <
+          Math.abs(initPosWSat - rootPosW)
+        )
+          posWCorrected = true;
         if (scopeBlended && posWCorrected) break;
       }
       await manager.waitForStability();
 
-      assert.ok(scopeBlended, "Satellite scope should converge toward root (harmonic resonance)");
-      assert.ok(posWCorrected, "Satellite posW (Age axis) should converge toward root — fixed missing 4th dimension");
+      assert.ok(
+        scopeBlended,
+        "Satellite scope should converge toward root (harmonic resonance)"
+      );
+      assert.ok(
+        posWCorrected,
+        "Satellite posW (Age axis) should converge toward root — fixed missing 4th dimension"
+      );
       assert.ok(
         sys.isAllocated(rootId) && sys.isAllocated(satId),
         "Both nodes should still exist (different scopes prevent full fusion)"
@@ -136,10 +165,17 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Pre-ingestion resonance check detects logical contradiction", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = new LiveInference(primary, atomizer, resolver, localStore);
+      const localInference = new LiveInference(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       await localInference.processIntent("gravity is strong");
-      const response = await localInference.processIntent("gravity is not strong");
+      const response = await localInference.processIntent(
+        "gravity is not strong"
+      );
 
       assert.ok(
         response.includes("Logic Trap Detected"),
@@ -151,7 +187,12 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Negative feedback reduces crystallized wave form energy", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = new LiveInference(primary, atomizer, resolver, localStore);
+      const localInference = new LiveInference(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       // Crystallize one wave form with energy 1.0
       await localInference.processCommand("nitrogen is a gas");
@@ -162,9 +203,13 @@ export async function executeContinuousLearningSuite() {
       const beforeRes = await beforeStmt.runAndReadAll();
       beforeStmt.destroySync();
       const initialEnergy = Number(beforeRes.getRows()[0]?.[0] ?? 1.0);
-      assert.ok(initialEnergy > 0, "Wave form should be crystallized with positive energy");
+      assert.ok(
+        initialEnergy > 0,
+        "Wave form should be crystallized with positive energy"
+      );
 
-      const feedbackResponse = await localInference.processIntent("no that is wrong");
+      const feedbackResponse =
+        await localInference.processIntent("no that is wrong");
       assert.ok(
         feedbackResponse.includes("confidence reduced"),
         "Negative feedback should be acknowledged"
@@ -187,7 +232,12 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Positive feedback increases crystallized wave form energy", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = new LiveInference(primary, atomizer, resolver, localStore);
+      const localInference = new LiveInference(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       await localInference.processCommand("the sun is a star");
 
@@ -198,7 +248,8 @@ export async function executeContinuousLearningSuite() {
       beforeStmt.destroySync();
       const initialEnergy = Number(beforeRes.getRows()[0]?.[0] ?? 1.0);
 
-      const feedbackResponse = await localInference.processIntent("yes correct");
+      const feedbackResponse =
+        await localInference.processIntent("yes correct");
       assert.ok(
         feedbackResponse.includes("confidence increased"),
         "Positive feedback should be acknowledged"
@@ -221,7 +272,12 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Repeated negative feedback drives energy to zero; cullWeakWaveForms removes it", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = new LiveInference(primary, atomizer, resolver, localStore);
+      const localInference = new LiveInference(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       // 3× "no" drives energy: 1.0 → 0.5 → 0.0 → -0.5
       await localInference.processCommand("the moon is made of cheese");
@@ -235,7 +291,10 @@ export async function executeContinuousLearningSuite() {
       const weakRes = await weakStmt.runAndReadAll();
       weakStmt.destroySync();
       const weakBefore = Number(weakRes.getRows()[0]?.[0] ?? 0);
-      assert.ok(weakBefore > 0, "Should have at least one weak (≤ 0 energy) wave form before cull");
+      assert.ok(
+        weakBefore > 0,
+        "Should have at least one weak (≤ 0 energy) wave form before cull"
+      );
 
       await localStore.cullWeakWaveForms();
 
@@ -256,14 +315,20 @@ export async function executeContinuousLearningSuite() {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
       // Fresh inference — last_signature starts null
-      const localInference = new LiveInference(primary, atomizer, resolver, localStore);
+      const localInference = new LiveInference(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       // With last_signature = null, "no" would fall through to processCommand instead of
       // entering the feedback branch. After the fix, processQuestion sets last_signature,
       // so the very next "no" is correctly recognised as reinforcement feedback.
       await localInference.processQuestion("what is iron");
 
-      const feedbackResponse = await localInference.processIntent("no that is wrong");
+      const feedbackResponse =
+        await localInference.processIntent("no that is wrong");
       assert.ok(
         feedbackResponse.includes("confidence reduced"),
         "Negative feedback after a question should be recognised (last_signature set by processQuestion)"
@@ -289,7 +354,10 @@ export async function executeContinuousLearningSuite() {
       const unfolder = new Unfolder(primary, atomizer);
       const ids = unfolder.ingestContent("silicon is a semiconductor", primary);
 
-      assert.ok(ids.length > 0, "ingestContent should allocate at least one precept");
+      assert.ok(
+        ids.length > 0,
+        "ingestContent should allocate at least one precept"
+      );
       for (let k = 0; k < ids.length; k++) {
         assert.ok(
           primary.isAllocated(ids[k]),

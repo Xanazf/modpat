@@ -73,10 +73,10 @@ class Mapper implements Mapping.Engine {
     const verbose = options.verbose ?? false;
 
     // 1. Initialize 4D Path State (Matter, Kind, Energy, Age).
-    const px = new Float32Array(steps + 1); // posX
-    const py = new Float32Array(steps + 1); // posY
-    const pe = new Float32Array(steps + 1); // posZ (Energy)
-    const pa = new Float32Array(steps + 1); // posW (Age)
+    const px = new Float64Array(steps + 1); // posX
+    const py = new Float64Array(steps + 1); // posY
+    const pe = new Float64Array(steps + 1); // posZ (Energy)
+    const pa = new Float64Array(steps + 1); // posW (Age)
 
     // Linear interpolation for initial guess across the dual-layer coordinates.
     for (let i = 0; i <= steps; i++) {
@@ -233,10 +233,10 @@ class Mapper implements Mapping.Engine {
    * Performs gradient descent on the logic density field using GPU acceleration.
    */
   private async relaxPathGPU(
-    px: Float32Array,
-    py: Float32Array,
-    pe: Float32Array,
-    pa: Float32Array,
+    px: Float64Array,
+    py: Float64Array,
+    pe: Float64Array,
+    pa: Float64Array,
     steps: number,
     maxIterations: number,
     learningRate: number,
@@ -447,10 +447,10 @@ class Mapper implements Mapping.Engine {
    * Performs gradient descent on the logic density field.
    */
   private relaxPath(
-    px: Float32Array,
-    py: Float32Array,
-    pe: Float32Array,
-    pa: Float32Array,
+    px: Float64Array,
+    py: Float64Array,
+    pe: Float64Array,
+    pa: Float64Array,
     steps: number,
     maxIterations: number,
     lr: number,
@@ -618,10 +618,10 @@ class Mapper implements Mapping.Engine {
   }
 
   private review(
-    px: Float32Array,
-    py: Float32Array,
-    pe: Float32Array,
-    pa: Float32Array,
+    px: Float64Array,
+    py: Float64Array,
+    pe: Float64Array,
+    pa: Float64Array,
     steps: number
   ): Mapping.ReviewReport {
     const phys = DOPAT_CONFIG.PHYSICS;
@@ -652,10 +652,10 @@ class Mapper implements Mapping.Engine {
   }
 
   private extractIds(
-    px: Float32Array,
-    py: Float32Array,
-    pe: Float32Array,
-    pa: Float32Array,
+    px: Float64Array,
+    py: Float64Array,
+    pe: Float64Array,
+    pa: Float64Array,
     steps: number,
     preExpandLength: number = 0,
     targetId: number = -1

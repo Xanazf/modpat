@@ -205,15 +205,12 @@ export class LiveInference {
     }
 
     // Phase 2: If active memory fails, try the persistent DuckDB vault.
+    // (raw_facts table is created and migrated in Store.init)
     if (attractionCenter) {
       try {
-        await this.store.connection.run(
-          `CREATE TABLE IF NOT EXISTS raw_facts (fact VARCHAR);`
-        );
-
-        // Search for facts containing the Attraction Center.
+        // Search for facts containing the Attraction Center, ranked by confidence.
         const stmt = await this.store.connection.prepare(
-          `SELECT fact FROM raw_facts WHERE fact LIKE ?`
+          `SELECT fact FROM raw_facts WHERE fact LIKE ? ORDER BY confidence DESC LIMIT 100`
         );
         stmt.bindVarchar(1, `%${attractionCenter}%`);
         const res = await stmt.runAndReadAll();
@@ -679,14 +676,14 @@ export class LiveInference {
       await this.store.crystallizeProof(quanta, quanta, 1.0);
 
       // 2. Store the raw fact in the persistent vault (DuckDB).
+      // Table is created and migrated in Store.init — no DDL needed here.
       try {
-        await this.store.connection.run(
-          `CREATE TABLE IF NOT EXISTS raw_facts (fact VARCHAR);`
-        );
         const stmt = await this.store.connection.prepare(
-          `INSERT INTO raw_facts (fact) VALUES (?)`
+          `INSERT INTO raw_facts (fact, source, confidence, ingested_at, signature) VALUES (?, 'user', 1.0, ?, ?)`
         );
         stmt.bindVarchar(1, statement);
+        stmt.bindBigInt(2, BigInt(Date.now()));
+        stmt.bindVarchar(3, signature);
         await stmt.run();
         stmt.destroySync();
       } catch (e) {

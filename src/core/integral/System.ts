@@ -237,6 +237,16 @@ class System implements Root.System {
 
   public updateRing = new RingBuffer<string>(10);
 
+  /**
+   * Scope-sequence index: stores (scope of first token, starting ID) for each
+   * ingested sequence so the Resolver can do an O(SEQUENCE_INDEX_SIZE) ring scan
+   * instead of an O(N × M) full manifold scan for the common forward-match case.
+   * Newest entries overwrite oldest — mirrors thermodynamic forgetting semantics.
+   */
+  public sequenceRing = new RingBuffer<{ scope0: number; startId: number }>(
+    DOPAT_CONFIG.SEQUENCE_INDEX_SIZE
+  );
+
   public get patbuf(): string[] {
     return this.updateRing.toArray();
   }
@@ -396,12 +406,29 @@ class System implements Root.System {
     // Clear view cache.
     this.viewCache.fill(undefined);
 
+    // Reset sequence index — hydrated nodes are re-registered when next ingested
+    this.sequenceRing = new RingBuffer<{ scope0: number; startId: number }>(
+      DOPAT_CONFIG.SEQUENCE_INDEX_SIZE
+    );
+
     this.pushRingUpdate(
       "reset",
       "length,freeList,buffer",
       `${this.length},${this.freeList.length},cleared`,
       ["system"]
     );
+  }
+
+  /**
+   * Records the start of an ingested sequence in the scope-sequence index.
+   * Called by atomizers after every complete ingestSequence so the Resolver's
+   * ring fast-path can locate the sequence without a full manifold scan.
+   *
+   * @param scope0 - Scope of the first token in the sequence.
+   * @param startId - System ID allocated for the first token.
+   */
+  public registerSequenceStart(scope0: number, startId: number): void {
+    this.sequenceRing.add({ scope0, startId });
   }
 
   /**
