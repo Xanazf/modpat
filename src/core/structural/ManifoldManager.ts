@@ -6,6 +6,62 @@ import type { SystemPersistence } from "./Persistence";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import type Unfolder from "@core_s/Unfolder";
 
+function arraysEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * Triple Modular Redundancy free-list allocator.
+ * Satisfies Root.FreeList and is injected into System via setAllocator(),
+ * so System's own allocation paths are TMR-protected.
+ */
+class TMRFreeList implements Root.FreeList {
+  private bufA: number[] = [];
+  private bufB: number[] = [];
+  private bufC: number[] = [];
+
+  push(id: number): void {
+    this.bufA.push(id);
+    this.bufB.push(id);
+    this.bufC.push(id);
+  }
+
+  pop(): number | undefined {
+    const voted = this.vote();
+    if (voted === null || voted.length === 0) return undefined;
+    const id = voted[voted.length - 1];
+    const next = voted.slice(0, -1);
+    this.bufA = [...next];
+    this.bufB = [...next];
+    this.bufC = [...next];
+    return id;
+  }
+
+  get length(): number {
+    return this.vote()?.length ?? 0;
+  }
+
+  /** Returns the consensus list, or null on total disagreement. */
+  getVoted(): number[] | null {
+    const v = this.vote();
+    return v !== null ? [...v] : null;
+  }
+
+  /** Injects a rogue value into bufA only, for corruption-simulation tests. */
+  injectCorruptionToBufferA(value: number): void {
+    this.bufA.push(value);
+  }
+
+  private vote(): number[] | null {
+    if (arraysEqual(this.bufA, this.bufB)) return this.bufA;
+    if (arraysEqual(this.bufB, this.bufC)) return this.bufB;
+    if (arraysEqual(this.bufA, this.bufC)) return this.bufA;
+    return null;
+  }
+}
+
 /**
  * The ManifoldManager acts as the guardian and regulator of the logical manifolds.
  *
@@ -19,7 +75,7 @@ export class ManifoldManager {
   public primarySystem: System;
   /** A parallel backup universe, used when the primary system encounters a critical anomaly. */
   public emergencySystem: System;
-  /** Shared mutable reference cell — components hold this and always see the active system. */
+  /** Shared mutable reference cell, components hold this and always see the active system. */
   private systemRef: SystemRef;
   /** Persistence layer for snapshotting and hydrating the manifold. */
   private persistence: SystemPersistence;
@@ -28,10 +84,11 @@ export class ManifoldManager {
   /** The currently active logical universe. */
   private activeSystem: System;
 
-  /** Triple Modular Redundancy (TMR) buffers for critical logical pointers. */
-  private tmrFreeListA: number[] = [];
-  private tmrFreeListB: number[] = [];
-  private tmrFreeListC: number[] = [];
+  /** TMR allocators, one per system, injected via System.setAllocator(). */
+  readonly primaryAllocator = new TMRFreeList();
+  private readonly emergencyAllocator = new TMRFreeList();
+  /** Tracks which allocator matches the currently active system. */
+  private activeAllocator: TMRFreeList;
 
   /** Flag to prevent race conditions during asynchronous self-healing hydration. */
   private isHydrating: boolean = false;
@@ -63,6 +120,11 @@ export class ManifoldManager {
     this.activeSystem = primary;
     this.systemRef = new SystemRef(primary);
     this.atomizer = new SpectralAtomizer();
+    this.activeAllocator = this.primaryAllocator;
+
+    // Wire TMR allocators into each system's allocation path.
+    primary.setAllocator(this.primaryAllocator);
+    emergency.setAllocator(this.emergencyAllocator);
   }
 
   /**
@@ -81,63 +143,31 @@ export class ManifoldManager {
   }
 
   /**
-   * Deep equality check for TMR buffers.
-   */
-  private arraysEqual(a: number[], b: number[]): boolean {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) return false;
-    }
-    return true;
-  }
-
-  /**
-   * Triple Modular Redundancy (TMR) Voter for the FreeList.
-   *
-   * Ensures the integrity of critical memory pointers by comparing three
-   * independent buffers. Identifies consensus through majority vote.
-   *
-   * @returns A safe clone of the most reliable version of the FreeList.
+   * Returns a safe clone of the voted free-list from the active system's TMR allocator.
+   * Triggers an emergency interrupt on total disagreement.
    */
   public getVotedFreeList(): number[] {
-    const ab = this.arraysEqual(this.tmrFreeListA, this.tmrFreeListB);
-    const bc = this.arraysEqual(this.tmrFreeListB, this.tmrFreeListC);
-    const ac = this.arraysEqual(this.tmrFreeListA, this.tmrFreeListC);
-
-    if (ab) return [...this.tmrFreeListA];
-    if (bc) return [...this.tmrFreeListB];
-    if (ac) return [...this.tmrFreeListA];
-
-    // Total disagreement: trigger interrupt and return empty list to prevent corruption
-    this.triggerInterrupt("TMR Failure: Complete loss of FreeList consensus");
-    return [];
+    const voted = this.activeAllocator.getVoted();
+    if (voted === null) {
+      this.triggerInterrupt("TMR Failure: Complete loss of FreeList consensus");
+      return [];
+    }
+    return voted;
   }
 
   /**
-   * Adds a logic atom ID to the redundant FreeList buffers.
-   * @param id - The ID of the decommissioned logic atom.
+   * Pushes an ID to the active system's TMR allocator (all three buffers).
    */
   public pushToFreeList(id: number): void {
-    this.tmrFreeListA.push(id);
-    this.tmrFreeListB.push(id);
-    this.tmrFreeListC.push(id);
+    this.activeAllocator.push(id);
   }
 
   /**
-   * Reclaims a logic atom ID from the voted FreeList and synchronizes all buffers.
-   * @returns A reclaimed ID, or undefined if the FreeList is empty.
+   * Pops an ID from the active system's TMR allocator using majority vote.
+   * @returns A reclaimed ID, or undefined if the list is empty.
    */
   public popFromFreeList(): number | undefined {
-    const list = this.getVotedFreeList();
-    if (list.length === 0) return undefined;
-    const id = list.pop();
-
-    // Sync all redundant lists to the new stable state
-    this.tmrFreeListA = [...list];
-    this.tmrFreeListB = [...list];
-    this.tmrFreeListC = [...list];
-
-    return id;
+    return this.activeAllocator.pop();
   }
 
   /**
@@ -182,6 +212,7 @@ export class ManifoldManager {
       `[ManifoldManager] CRITICAL INTERRUPT: ${reason}. Switching to Emergency Manifold!`
     );
     this.activeSystem = this.emergencySystem;
+    this.activeAllocator = this.emergencyAllocator;
     // Atomically redirect all SystemRef holders to the emergency system.
     this.systemRef.swap(this.emergencySystem);
 
@@ -332,7 +363,7 @@ export class ManifoldManager {
 
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
-        // EXACT MATCH FUSION — epsilon comparison guards against float drift
+        // EXACT MATCH FUSION, epsilon comparison guards against float drift
         if (Math.abs(sys.scope[i] - sys.scope[j]) < 1e-9 && distSq < 0.0001) {
           // i absorbs j
           sys.mass[i] += sys.mass[j];
@@ -356,11 +387,14 @@ export class ManifoldManager {
           sys.posZ[satellite] += (sys.posZ[root] - sys.posZ[satellite]) * pull;
           sys.posW[satellite] += (sys.posW[root] - sys.posW[satellite]) * pull;
 
-          // Blend Scope (Harmonic Resonance)
-          // Gradually align the frequency band of the satellite to the root
-          sys.scope[satellite] +=
+          // Blend Scope via updateScope to keep the scope index consistent.
+          // updateScope only calls update() when scope actually changes; the
+          // explicit update() below ensures the checksum reflects pos* changes
+          // even when the scope value is unchanged (floating-point equality).
+          const blendedScope =
+            sys.scope[satellite] +
             (sys.scope[root] - sys.scope[satellite]) * pull * 0.5;
-
+          sys.updateScope(satellite, blendedScope);
           sys.update(satellite, "orbital_clustering");
         }
       }

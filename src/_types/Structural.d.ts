@@ -13,6 +13,11 @@ declare namespace Atomic {
 
   interface Engine {
     ingestSequence(text: string, system: System): Uint32Array;
+    ingestPattern(
+      template: string,
+      slotTypes: Map<number, number>,
+      system: System
+    ): Uint32Array;
     decodeSequence(sequenceIds: Uint32Array, system: System): string;
     getSymbolScope(symbol: string, isOperator: boolean): number;
     resolveScope(scope: number): string | undefined;
@@ -58,11 +63,15 @@ declare namespace Memory {
     crystallizeProof(
       inputSequence: Uint32Array,
       outputSequence: Uint32Array,
-      energy: number
+      energy: number,
+      slotFlags?: bigint
     ): Promise<void>;
     checkInterferencePattern(
       inputSequence: Uint32Array
-    ): Promise<Uint32Array | null>;
+    ): Promise<{ ids: Uint32Array; slotFlags: bigint } | null>;
+
+    signatureForText(text: string): string;
+    rawFactExists(fact: string): Promise<boolean>;
 
     flush(): Promise<void>;
     close?(): Promise<void>;

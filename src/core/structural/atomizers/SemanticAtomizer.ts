@@ -1,5 +1,5 @@
 import type System from "@core_i/System";
-import { classifyOperatorToken, OperatorClass } from "@core_i/System";
+import { SlotType, classifyOperatorToken, OperatorClass } from "@core_i/System";
 import nlp from "compromise";
 import { BaseAtomizer } from "./BaseAtomizer";
 import { SYNTAX_ATTRACTORS } from "@config";
@@ -239,6 +239,86 @@ export default class SemanticAtomizer
     if (tags.includes("Place")) return "Place";
     if (tags.includes("Organization")) return "Organization";
     return "Noun";
+  }
+
+  /**
+   * Ingests an abstract code pattern template into the manifold and sets slotType
+   * on each VAR_N precept so the Mapper can perceive slot roles during path relaxation.
+   *
+   * posZ is assigned by slot depth:
+   *   Body      → 0.9  (open continuation, deepest, pulls sub-patterns in)
+   *   Condition → 0.7  (boolean guard, near-deep)
+   *   Parameter → 0.5  (argument list, mid)
+   *   TypeHint  → 0.3  (annotation, shallow)
+   *   Leaf      → 0.1  (terminal identifier, shallowest)
+   *
+   * @param template  - Abstract pattern string, e.g. "function VAR_0(VAR_1) { VAR_BODY }"
+   * @param slotTypes - Map from VAR index to SlotType bitmask.
+   * @param system    - The live manifold.
+   */
+  public ingestPattern(
+    template: string,
+    slotTypes: Map<number, SlotType>,
+    system: System
+  ): Uint32Array {
+    // Tokenize using the same preparation step as ingestSequence.
+    const preparedText = template
+      .replace(/\|-/g, " SINK_MARKER ")
+      .replace(/([(){}\[\]:;.,+\-*/=<>])/g, " $1 ")
+      .replace(/SINK_MARKER/g, "|-");
+
+    const rawTokens = preparedText.split(/\s+/).filter(t => t.length > 0);
+    const sequenceIds = new Uint32Array(rawTokens.length);
+
+    for (let i = 0; i < rawTokens.length; i++) {
+      const token = rawTokens[i];
+      const norm = token.trim().toLowerCase();
+
+      // Detect VAR_N tokens.
+      const varMatch = norm.match(/^var_(\d+)$/);
+      if (varMatch) {
+        const varId = parseInt(varMatch[1], 10);
+        const st = slotTypes.get(varId) ?? SlotType.Leaf;
+
+        const scope = this.getSymbolScope(norm);
+        const id = system.createLocation(system.epsilon, scope);
+        system.operatorClass[id] = OperatorClass.None;
+        system.slotType[id] = st;
+
+        // Assign posZ by slot depth so the Mapper's potential field can differentiate.
+        const depth =
+          st & SlotType.Body
+            ? 0.9
+            : st & SlotType.Condition
+              ? 0.7
+              : st & SlotType.Parameter
+                ? 0.5
+                : st & SlotType.TypeHint
+                  ? 0.3
+                  : 0.1; // Leaf
+
+        system.posZ[id] = depth;
+        system.posY[id] = i * 0.1;
+        system.posW[id] = 0.0;
+        system.depth[id] = depth;
+        system.update(id);
+        sequenceIds[i] = id;
+        continue;
+      }
+
+      // All other tokens, delegates to standard ingestSequence logic for one token.
+      const singleTokenIds = this.ingestSequence(token, system);
+      sequenceIds[i] = singleTokenIds[0];
+    }
+
+    if (sequenceIds.length > 0) {
+      system.registerSequenceStart(
+        system.scope[sequenceIds[0]],
+        sequenceIds[0]
+      );
+    }
+
+    return sequenceIds;
   }
 
   /**

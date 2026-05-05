@@ -1,5 +1,5 @@
 import type System from "@core_i/System";
-import { OperatorClass } from "@core_i/System";
+import { SlotType, OperatorClass } from "@core_i/System";
 import { ComplexArray } from "@core_s/FFT";
 import { BaseAtomizer } from "./BaseAtomizer";
 
@@ -29,6 +29,17 @@ export default class SpectralAtomizer
   public ingestSequence(text: string, system: System): Uint32Array {
     throw new Error(
       "SpectralAtomizer requires raw signal or telemetry ingestion."
+    );
+  }
+
+  /** Pattern ingestion not applicable to spectral domain, throws to surface misuse. */
+  public ingestPattern(
+    _template: string,
+    _slotTypes: Map<number, SlotType>,
+    _system: System
+  ): Uint32Array {
+    throw new Error(
+      "SpectralAtomizer does not support code pattern ingestion."
     );
   }
 

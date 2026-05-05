@@ -1,12 +1,198 @@
 import nlp from "compromise";
+import { parse, walk, replace, generate } from "abstract-syntax-tree";
 
 import type Resolver from "@core_i/Resolver";
 import type System from "@core_i/System";
-import { OperatorClass, SystemRef } from "@core_i/System";
+import { OperatorClass, SlotType, SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import logger from "@utils/SpectralLogger";
 import Unfolder from "@core_s/Unfolder";
+
+/** Maps JS/TS binary operator symbols to semantic intent words. */
+const OPERATOR_INTENT: Record<string, string> = {
+  "+": "addition",
+  "-": "subtraction",
+  "*": "multiplication",
+  "/": "division",
+  "%": "modulo",
+  "**": "power",
+  "===": "equality",
+  "!==": "inequality",
+  "==": "equality",
+  "!=": "inequality",
+  ">": "greater than",
+  "<": "less than",
+  ">=": "greater or equal",
+  "<=": "less or equal",
+  "&&": "logical and",
+  "||": "logical or",
+  "??": "nullish coalescing",
+};
+
+/** Derives a human-readable intent phrase from an ESTree node. */
+function deriveIntent(node: any): string {
+  switch (node.type) {
+    case "FunctionDeclaration":
+    case "FunctionExpression": {
+      const name = node.id?.name ?? "anonymous";
+      const friendlyName = nlp(name.replace(/([A-Z])/g, " $1").trim())
+        .normalize()
+        .out("text");
+      const ops: string[] = [];
+      walk(node, (n: any) => {
+        if (n.type === "BinaryExpression" && OPERATOR_INTENT[n.operator]) {
+          ops.push(OPERATOR_INTENT[n.operator]);
+        }
+      });
+      const opPhrase = [...new Set(ops)].join(" ");
+      return `${opPhrase ? opPhrase + " " : ""}function ${friendlyName}`.trim();
+    }
+    case "ArrowFunctionExpression": {
+      const ops: string[] = [];
+      walk(node, (n: any) => {
+        if (n.type === "BinaryExpression" && OPERATOR_INTENT[n.operator]) {
+          ops.push(OPERATOR_INTENT[n.operator]);
+        }
+      });
+      return (
+        `${[...new Set(ops)].join(" ")} arrow function`.trim() ||
+        "arrow function"
+      );
+    }
+    case "BinaryExpression":
+      return OPERATOR_INTENT[node.operator] ?? `binary ${node.operator}`;
+    case "IfStatement":
+      return "conditional branch";
+    case "ReturnStatement":
+      return "return value";
+    case "VariableDeclaration":
+      return `${node.kind} assignment`;
+    case "CallExpression": {
+      const callee = node.callee?.name ?? node.callee?.property?.name ?? "call";
+      return `call ${nlp(callee.replace(/([A-Z])/g, " $1").trim())
+        .normalize()
+        .out("text")}`.trim();
+    }
+    default:
+      return node.type
+        .toLowerCase()
+        .replace(/([A-Z])/g, " $1")
+        .trim();
+  }
+}
+
+/**
+ * Extracts an abstract pattern from an ESTree node.
+ *
+ * Strategy:
+ *  1. Generate the original code for the node using the AST library.
+ *  2. Assign SlotTypes from known structural positions (function name, params, etc.).
+ *  3. Walk remaining Identifiers and register them as Leaf.
+ *  4. Replace all identifier names in the generated string with VAR_N tokens.
+ *
+ * Returns null if the node yields no meaningful pattern.
+ */
+function extractPatternFromNode(node: any): {
+  pattern: string;
+  slotTypes: Map<number, SlotType>;
+  varNames: string[];
+} | null {
+  const nameToVar = new Map<string, number>();
+  const slotTypes = new Map<number, SlotType>();
+  const varNames: string[] = [];
+  let nextVar = 0;
+
+  function register(name: string, st: SlotType): void {
+    if (!name || typeof name !== "string") return;
+    if (!nameToVar.has(name)) {
+      nameToVar.set(name, nextVar);
+      slotTypes.set(nextVar, st);
+      varNames.push(name);
+      nextVar++;
+    }
+  }
+
+  // 1. Assign slot types from known structural positions.
+  if (
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression"
+  ) {
+    if (node.id?.name) register(node.id.name, SlotType.Leaf);
+    for (const p of node.params ?? [])
+      if (p.name) register(p.name, SlotType.Parameter);
+  } else if (node.type === "ArrowFunctionExpression") {
+    for (const p of node.params ?? [])
+      if (p.name) register(p.name, SlotType.Parameter);
+  } else if (node.type === "VariableDeclaration") {
+    for (const d of node.declarations ?? [])
+      if (d.id?.name) register(d.id.name, SlotType.Leaf);
+  } else if (node.type === "IfStatement") {
+    // Walk the test expression's identifiers as Condition slots.
+    if (node.test) {
+      walk(
+        {
+          type: "Program",
+          body: [{ type: "ExpressionStatement", expression: node.test }],
+          sourceType: "module",
+        },
+        (n: any) => {
+          if (n.type === "Identifier") register(n.name, SlotType.Condition);
+        }
+      );
+    }
+  }
+
+  // 2. Walk remaining identifiers, any name not yet registered becomes Leaf.
+  walk(
+    {
+      type: "Program",
+      body: [
+        node.type.includes("Expression") || node.type === "ReturnStatement"
+          ? { type: "ExpressionStatement", expression: node }
+          : node,
+      ],
+      sourceType: "module",
+    },
+    (n: any) => {
+      if (n.type === "Identifier" && !nameToVar.has(n.name))
+        register(n.name, SlotType.Leaf);
+    }
+  );
+
+  if (nameToVar.size === 0) return null;
+
+  // 3. Generate original code from the node.
+  const wrapper = {
+    type: "Program",
+    body: [
+      node.type.includes("Expression") || node.type === "ReturnStatement"
+        ? { type: "ExpressionStatement", expression: node }
+        : node,
+    ],
+    sourceType: "module",
+  };
+
+  let pattern: string;
+  try {
+    pattern = generate(wrapper).trim().replace(/;\s*$/, "").trim();
+  } catch {
+    return null;
+  }
+
+  // 4. Replace identifier names with VAR_N in the generated string.
+  // Sort by name length descending to prevent partial substitutions (e.g. "ab" before "a").
+  const sorted = [...nameToVar.entries()].sort(
+    (a, b) => b[0].length - a[0].length
+  );
+  for (const [name, varId] of sorted) {
+    const safe = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    pattern = pattern.replace(new RegExp(`\\b${safe}\\b`, "g"), `VAR_${varId}`);
+  }
+
+  if (!pattern) return null;
+  return { pattern, slotTypes, varNames };
+}
 
 /**
  * The LiveInference toolkit facilitates real-time topological query resolution.
@@ -14,7 +200,7 @@ import Unfolder from "@core_s/Unfolder";
  * through active memory, persistent DuckDB storage.
  */
 export class LiveInference {
-  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
   private get system(): System {
     return this.systemRef.current;
@@ -173,7 +359,7 @@ export class LiveInference {
       topologicalQuery,
       this.system
     );
-    // Track for feedback reinforcement — lets the user correct a bad question answer
+    // Track for feedback reinforcement, lets the user correct a bad question answer
     const { signature: questionSignature } =
       this.store.abstractSequence(queryQuanta);
     this.last_signature = questionSignature;
@@ -639,34 +825,16 @@ export class LiveInference {
     }
 
     if (invertedStatement && invertedStatement !== statement) {
-      const invertedQuanta = this.atomizer.ingestSequence(
-        invertedStatement,
-        this.system
-      );
-      const collisionPath =
-        await this.store.checkInterferencePattern(invertedQuanta);
-
-      if (collisionPath && collisionPath.length > 0) {
-        const { signature } = this.store.abstractSequence(invertedQuanta);
-        // Penalize the cached fact (it's potentially false if new data says otherwise)
-        await this.store.adjustEnergy(signature, -0.5);
-
-        // Free the invertedQuanta in reverse order so the freeList pops them sequentially
-        for (let i = invertedQuanta.length - 1; i >= 0; i--) {
-          this.system.freeLocation(invertedQuanta[i], "contradiction_check");
-        }
-
+      // Check the vault WITHOUT ingesting into the manifold so the inverted
+      // statement never appears as live precepts during the async query window.
+      const contradicts = await this.store.rawFactExists(invertedStatement);
+      if (contradicts) {
+        // Penalize the stored pattern without needing live IDs.
+        const invertedSig = this.store.signatureForText(invertedStatement);
+        await this.store.adjustEnergy(invertedSig, -0.5);
         const response = `[Logic Trap Detected]: Input contradicts known topological signature. Cached confidence penalized.`;
         this.respond(response);
         return response;
-      }
-
-      // Cleanup the check quanta if no collision, in reverse order
-      for (let i = invertedQuanta.length - 1; i >= 0; i--) {
-        this.system.freeLocation(
-          invertedQuanta[i],
-          "contradiction_check_clean"
-        );
       }
     }
 
@@ -680,7 +848,7 @@ export class LiveInference {
       await this.store.crystallizeProof(quanta, quanta, 1.0);
 
       // 2. Store the raw fact in the persistent vault (DuckDB).
-      // Table is created and migrated in Store.init — no DDL needed here.
+      // Table is created and migrated in Store.init, no DDL needed here.
       try {
         const stmt = await this.store.connection.prepare(
           `INSERT INTO raw_facts (fact, source, confidence, ingested_at, signature) VALUES (?, 'user', 1.0, ?, ?)`
@@ -707,6 +875,93 @@ export class LiveInference {
       this.respond(response);
       return response;
     }
+  }
+
+  /**
+   * Ingests source code and crystallizes abstract code patterns into the Memory vault.
+   *
+   * For each meaningful AST node (function, arrow, binary expression, if, return,
+   * variable declaration, call), it:
+   *   1. Derives a semantic intent phrase from the node's structure and name.
+   *   2. Extracts an abstract VAR_N pattern via AST replacement + code generation.
+   *   3. Assigns SlotType bitmasks to each VAR based on its structural role.
+   *   4. Ingests the intent into the manifold and the pattern as a code-pattern precept sequence.
+   *   5. Crystallizes (intent → pattern) in the wave_forms vault with slot_flags.
+   *
+   * @param source TypeScript/JavaScript source code to learn from.
+   * @returns Summary string describing how many patterns were ingested.
+   */
+  public async processCode(source: string): Promise<string> {
+    await this.store.waitForInit();
+
+    let ast: any;
+    try {
+      // Use script mode (not module) so code snippets without import/export are valid.
+      ast = parse(source, { module: false });
+    } catch (e: any) {
+      return `[processCode] Parse error: ${e.message}`;
+    }
+
+    const VISITED_TYPES = new Set([
+      "FunctionDeclaration",
+      "FunctionExpression",
+      "ArrowFunctionExpression",
+      "BinaryExpression",
+      "IfStatement",
+      "ReturnStatement",
+      "VariableDeclaration",
+      "CallExpression",
+    ]);
+
+    // walk() is synchronous, collect patterns first, then crystallize asynchronously.
+    const collected: {
+      intentPhrase: string;
+      extracted: NonNullable<ReturnType<typeof extractPatternFromNode>>;
+    }[] = [];
+    const seen = new Set<string>();
+
+    walk(ast, (node: any) => {
+      if (!VISITED_TYPES.has(node.type)) return;
+      const extracted = extractPatternFromNode(node);
+      if (!extracted) return;
+      const intentPhrase = deriveIntent(node);
+      const dedupeKey = `${intentPhrase}::${extracted.pattern}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      collected.push({ intentPhrase, extracted });
+    });
+
+    let count = 0;
+    for (const { intentPhrase, extracted } of collected) {
+      try {
+        const intentQuanta = this.atomizer.ingestSequence(
+          intentPhrase,
+          this.system
+        );
+        const patternQuanta = this.atomizer.ingestPattern(
+          extracted.pattern,
+          extracted.slotTypes,
+          this.system
+        );
+        const slotFlags = this.store.packSlotFlags(extracted.slotTypes);
+        await this.store.crystallizeProof(
+          intentQuanta,
+          patternQuanta,
+          1.0,
+          slotFlags
+        );
+        count++;
+        logger.debug(
+          `[processCode] +pattern: "${intentPhrase}" → "${extracted.pattern}"`
+        );
+      } catch (e: any) {
+        logger.error("[processCode] Failed to crystallize pattern:", e.message);
+      }
+    }
+
+    const summary = `Ingested ${count} code patterns.`;
+    this.respond(summary);
+    return summary;
   }
 
   /**

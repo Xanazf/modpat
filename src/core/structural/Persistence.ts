@@ -55,7 +55,7 @@ export class SystemPersistence {
       const appender = await this.connection.createAppender("precepts");
 
       for (let i = 0; i < system.length; i++) {
-        // Skip freed slots — no need to persist unallocated positions
+        // Skip freed slots, no need to persist unallocated positions
         if (!system.isAllocated(i)) continue;
 
         appender.appendUInteger(i); // id

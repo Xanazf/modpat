@@ -140,7 +140,7 @@ export default class Unfolder {
 
   /**
    * Fetches raw text content for a topic from Wikipedia or Context7.
-   * Does NOT ingest into the manifold — safe to call from background tasks.
+   * Does NOT ingest into the manifold, safe to call from background tasks.
    *
    * @param topic The subject to fetch content for.
    * @returns The fetched text, or an empty string if unavailable.

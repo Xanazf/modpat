@@ -22,6 +22,10 @@ const DOPAT_CONFIG = {
     TRAP_MASS_THRESHOLD: 5000.0,
     TRAP_ENTROPY_THRESHOLD: 0.1,
     TRAP_DISTANCE_THRESHOLD: 25.0,
+    /** Additive influence boost for Body-slot precepts during path relaxation. */
+    BODY_SLOT_ATTRACTION: 80.0,
+    /** Additive influence boost for Condition-slot precepts during path relaxation. */
+    COND_SLOT_ATTRACTION: 60.0,
   },
 };
 

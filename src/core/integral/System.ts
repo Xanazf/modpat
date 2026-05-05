@@ -37,6 +37,20 @@ enum TargetBuffer {
 }
 
 /**
+ * Bitmask enum for VAR slot roles within a code pattern.
+ * Stored in system.slotType[] so the Mapper can perceive and attract toward
+ * continuation points during geodesic path relaxation.
+ */
+export enum SlotType {
+  None = 0,
+  Leaf = 1 << 0, // concrete identifier or literal
+  Body = 1 << 1, // sub-pattern continuation
+  Condition = 1 << 2, // boolean expression
+  Parameter = 1 << 3, // argument / parameter list
+  TypeHint = 1 << 4, // type annotation
+}
+
+/**
  * Classification of logical operators as "massive bodies" that attract and define
  * the relationships between variables in the heat field.
  */
@@ -223,6 +237,9 @@ const LogicOperations = {
   },
 };
 
+/** Shared empty set returned by getIdsByScope() on a miss, avoids per-call allocation. */
+const _EMPTY_SET: ReadonlySet<number> = Object.freeze(new Set<number>());
+
 /**
  * The System represents the core logical manifold: a contiguous block of memory
  * where logical "precepts" (prepositions, the "x" in "if x, then y")
@@ -241,7 +258,7 @@ class System implements Root.System {
    * Scope-sequence index: stores (scope of first token, starting ID) for each
    * ingested sequence so the Resolver can do an O(SEQUENCE_INDEX_SIZE) ring scan
    * instead of an O(N × M) full manifold scan for the common forward-match case.
-   * Newest entries overwrite oldest — mirrors thermodynamic forgetting semantics.
+   * Newest entries overwrite oldest, mirrors thermodynamic forgetting semantics.
    */
   public sequenceRing = new RingBuffer<{ scope0: number; startId: number }>(
     DOPAT_CONFIG.SEQUENCE_INDEX_SIZE
@@ -320,8 +337,14 @@ class System implements Root.System {
   /** View for logical classifications: identifies the OperatorClass of a precept. (U8) */
   public readonly operatorClass: Uint8Array;
 
-  /** List of available indices in the manifold for reuse after deallocation. */
-  private freeList: number[] = [];
+  /** Slot-type flags for code-pattern VAR precepts, read by the Mapper's potential field. (U8) */
+  public readonly slotType: Uint8Array;
+
+  /** Free-list allocator, defaults to a plain array, swappable to a TMRFreeList via setAllocator(). */
+  private freeList: Root.FreeList = [];
+
+  /** Scope → set of currently allocated IDs: enables O(1) lookup by scope value. */
+  private readonly scopeIndex = new Map<number, Set<number>>();
 
   /**
    * Initializes the logical manifold and allocates the underlying ArrayBuffer.
@@ -345,7 +368,7 @@ class System implements Root.System {
     const totalBytes =
       blockF64 * 14 + // mass, scope, depth, time, posX, posY, posZ, posW, density, entropyRate, potency, intensity, decayRate, checksum
       blockU32 * 2 + // PartLayer, ComplexLayer
-      blockU8 * 2; // operatorClass, allocated
+      blockU8 * 3; // operatorClass, allocated, slotType
 
     this.buffer = new ArrayBuffer(totalBytes);
 
@@ -393,6 +416,51 @@ class System implements Root.System {
 
     this.allocated = new Uint8Array(this.buffer, offset, maxP);
     offset += blockU8;
+
+    this.slotType = new Uint8Array(this.buffer, offset, maxP);
+    offset += blockU8;
+  }
+
+  /**
+   * Replaces the free-list allocator, transferring any existing entries to the new one.
+   * Called by ManifoldManager to wire in TMR protection after construction.
+   */
+  public setAllocator(allocator: Root.FreeList): void {
+    while (this.freeList.length > 0) {
+      const id = this.freeList.pop();
+      if (id !== undefined) allocator.push(id);
+    }
+    this.freeList = allocator;
+  }
+
+  /**
+   * Returns all currently allocated IDs that carry the given scope value.
+   * O(1) amortized, backed by the internal scope index.
+   */
+  public getIdsByScope(scope: number): ReadonlySet<number> {
+    return this.scopeIndex.get(scope) ?? _EMPTY_SET;
+  }
+
+  /**
+   * Updates a precept's scope and keeps the scope index consistent.
+   * Must be used instead of direct assignment whenever scope changes after creation.
+   */
+  public updateScope(id: number, newScope: number): void {
+    const oldScope = this.scope[id];
+    if (oldScope === newScope) return;
+    const oldSet = this.scopeIndex.get(oldScope);
+    if (oldSet) {
+      oldSet.delete(id);
+      if (oldSet.size === 0) this.scopeIndex.delete(oldScope);
+    }
+    this.scope[id] = newScope;
+    let newSet = this.scopeIndex.get(newScope);
+    if (!newSet) {
+      newSet = new Set();
+      this.scopeIndex.set(newScope, newSet);
+    }
+    newSet.add(id);
+    this.update(id, "updateScope");
   }
 
   /**
@@ -401,12 +469,13 @@ class System implements Root.System {
   public reset(): void {
     this.length = 0;
     this.freeList = [];
+    this.scopeIndex.clear();
     // Clear entire buffer to zero.
     new Uint8Array(this.buffer).fill(0);
     // Clear view cache.
     this.viewCache.fill(undefined);
 
-    // Reset sequence index — hydrated nodes are re-registered when next ingested
+    // Reset sequence index, hydrated nodes are re-registered when next ingested
     this.sequenceRing = new RingBuffer<{ scope0: number; startId: number }>(
       DOPAT_CONFIG.SEQUENCE_INDEX_SIZE
     );
@@ -476,6 +545,14 @@ class System implements Root.System {
     this.scope[id] = initialScope;
     this.decayRate[id] = 0.01; // Default decay rate.
 
+    // Register in scope index.
+    let scopeSet = this.scopeIndex.get(initialScope);
+    if (!scopeSet) {
+      scopeSet = new Set();
+      this.scopeIndex.set(initialScope, scopeSet);
+    }
+    scopeSet.add(id);
+
     // Trigger update to calculate derived properties.
     this.update(id, from || "createLocation");
     return id;
@@ -500,6 +577,13 @@ class System implements Root.System {
   public freeLocation(id: number, from?: string): void {
     if (id < 0 || id >= this.length) return;
 
+    // Deregister from scope index before zeroing scope.
+    const oldSet = this.scopeIndex.get(this.scope[id]);
+    if (oldSet) {
+      oldSet.delete(id);
+      if (oldSet.size === 0) this.scopeIndex.delete(this.scope[id]);
+    }
+
     this.allocated[id] = 0;
 
     // Zero out all physical properties to prevent stale data.
@@ -518,6 +602,7 @@ class System implements Root.System {
     this.decayRate[id] = 0;
     this.checksum[id] = 0;
     this.operatorClass[id] = OperatorClass.None;
+    this.slotType[id] = SlotType.None;
 
     // Invalidate view cache for this ID.
     const maxP = DOPAT_CONFIG.MAX_PRECEPTS;
@@ -760,7 +845,7 @@ class System implements Root.System {
  * A mutable reference cell wrapping a System instance.
  * Components that hold a SystemRef always dereference via `.current`, so
  * ManifoldManager can atomically redirect every holder to a new System in a
- * single call to `swap()` — no per-component update required.
+ * single call to `swap()`, no per-component update required.
  */
 class SystemRef {
   private _current: System;

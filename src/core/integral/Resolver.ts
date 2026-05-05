@@ -6,7 +6,7 @@ import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
 import Mapper from "./Mapper";
 import Synthesizer from "./Synthesizer";
-import System, { OperatorClass, SystemRef } from "./System";
+import System, { OperatorClass, SlotType, SystemRef } from "./System";
 
 /**
  * The Resolver is the primary logical engine, modeled as a physical simulation
@@ -14,7 +14,7 @@ import System, { OperatorClass, SystemRef } from "./System";
  * dynamical system where energy (resonance) vibrates through a manifold.
  */
 export default class Resolver implements Resolution.Engine {
-  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
   private get system(): System {
     return this.systemRef.current;
@@ -66,7 +66,7 @@ export default class Resolver implements Resolution.Engine {
     this.atomizer = atomizer;
     this.store = store;
     this.mapper = new Mapper(this.systemRef);
-    this.synthesizer = new Synthesizer(this.atomizer);
+    this.synthesizer = new Synthesizer();
 
     const maxN = Resolver.MAX_SEQUENCE_LENGTH;
     this.T_buffer = new Float64Array(maxN);
@@ -163,11 +163,11 @@ export default class Resolver implements Resolution.Engine {
       // Check if this logical interference pattern has already been crystallized.
       if (this.store) {
         const cached = await this.store.checkInterferencePattern(sequenceIds);
-        if (cached && cached.length > 0) {
+        if (cached && cached.ids.length > 0) {
           logger.debug(
-            `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.join(",")}, words: ${this.atomizer.decodeSequence(cached, this.system)}`
+            `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.ids.join(",")}, words: ${this.atomizer.decodeSequence(cached.ids, this.system)}`
           );
-          return cached;
+          return cached.ids;
         }
       }
 
@@ -458,97 +458,112 @@ export default class Resolver implements Resolution.Engine {
   /**
    * Dedicated logic for physicalized code synthesis via sequential geodesic routing.
    */
+  /**
+   * Code synthesis via learned pattern retrieval and composition.
+   *
+   * Pipeline:
+   *  1. Abstract the input sequence to get an intent signature.
+   *  2. Query the Memory vault for a stored code pattern matching that intent.
+   *  3. If a single direct match is found, use it.
+   *  4. If no direct match, gather pattern attractors along a geodesic (precepts
+   *     with SlotType.Body set, sorted outer→inner by posZ descending), retrieve
+   *     their patterns, and compose.
+   *  5. Instantiate the composed template with concrete tokens from the query context.
+   *  6. Ingest the resulting code string back into the manifold and return its quanta.
+   */
   private async resolveCodeSynthesis(
     sequenceIds: Uint32Array
   ): Promise<Uint32Array> {
-    const N = sequenceIds.length;
     logger.debug(
-      `[DEBUG RESOLVER] Code Trigger Detected. Routing Sequential Geodesic...`
+      `[DEBUG RESOLVER] Code Synthesis: querying learned pattern vault...`
     );
 
-    const sequenceSet = new Set(sequenceIds);
-
-    // 2. Build a unique sequence of waypoints sorted strictly by Context (posW) and Sequence (posY)
-    const candidates: number[] = [];
-    let hasCodeGoal = false;
-    const targetScope = this.getSymbolScope("executable_code");
-
-    for (let i = 0; i < this.system.length; i++) {
-      const opClass = this.system.operatorClass[i];
-      const isHighMass = this.system.mass[i] >= 500.0;
-      const isInInquiry = sequenceSet.has(i);
-
-      if (opClass === OperatorClass.SyntaxAnchor || isHighMass || isInInquiry) {
-        candidates.push(i);
-        if (this.system.scope[i] === targetScope) hasCodeGoal = true;
-      }
-    }
-
-    // If no explicit Code Goal is physically activated, admit ignorance
-    if (!hasCodeGoal) {
+    if (!this.store)
       return this.atomizer.ingestSequence("unknown", this.system);
-    }
 
-    // Sort by Context (W) then Sequence Order (Y)
-    candidates.sort((a, b) => {
-      const wa = this.system.posW[a];
-      const wb = this.system.posW[b];
-      if (Math.abs(wa - wb) < 0.0001)
-        return this.system.posY[a] - this.system.posY[b];
-      return wa - wb;
-    });
-
-    const waypoints: number[] = [];
-    const seenIds = new Set<number>();
-    for (const id of candidates) {
-      if (!seenIds.has(id)) {
-        waypoints.push(id);
-        seenIds.add(id);
-      }
-    }
-
-    logger.debug(
-      `[DEBUG RESOLVER] Strict Waypoints: ${waypoints.map(id => this.atomizer.decodeSequence(new Uint32Array([id]), this.system)).join(" -> ")}`
-    );
-
-    const fullPathIds: number[] = [];
-    if (waypoints.length > 0) fullPathIds.push(waypoints[0]);
-
-    for (let i = 0; i < waypoints.length - 1; i++) {
-      // Routing segment: use minimal steps to enforce straight-line functional order
-      const segment = await this.mapper.route(waypoints[i], waypoints[i + 1], {
-        steps: 1,
-      });
-
-      // Skip the first node of the segment if we already have it from the previous segment
-      const startIndex = i === 0 ? 0 : 1;
-      for (let j = startIndex; j < segment.length; j++) {
-        const id = segment[j];
-        if (
-          fullPathIds.length === 0 ||
-          fullPathIds[fullPathIds.length - 1] !== id
-        ) {
-          fullPathIds.push(id);
-        }
-      }
-    }
-    const geodesicPath = new Uint32Array(fullPathIds);
-    logger.debug(
-      `[DEBUG RESOLVER] Final Concatenated Path: ${Array.from(geodesicPath)
+    // 1. Direct vault query on the full intent sequence.
+    const direct = await this.store.checkInterferencePattern(sequenceIds);
+    if (direct && direct.ids.length > 0) {
+      const template = this.atomizer.decodeSequence(direct.ids, this.system);
+      const contextTokens = Array.from(sequenceIds)
         .map(id =>
-          this.atomizer.decodeSequence(new Uint32Array([id]), this.system)
+          this.atomizer
+            .decodeSequence(new Uint32Array([id]), this.system)
+            .trim()
         )
-        .join(", ")}`
-    );
+        .filter(
+          t =>
+            t &&
+            this.system.operatorClass[
+              sequenceIds[
+                Array.from(sequenceIds).indexOf(
+                  sequenceIds.find(
+                    (_, i) =>
+                      this.atomizer
+                        .decodeSequence(
+                          new Uint32Array([sequenceIds[i]]),
+                          this.system
+                        )
+                        .trim() === t
+                  ) ?? 0
+                )
+              ]
+            ] === OperatorClass.None
+        );
 
-    if (geodesicPath.length > 0) {
-      const synthesizedCode = this.synthesizer.collapse(
-        geodesicPath,
-        this.system
+      const varBindings = this.synthesizer.buildBindings(
+        contextTokens,
+        direct.slotFlags
       );
-      logger.debug(`[DEBUG RESOLVER] Synthesized Code: ${synthesizedCode}`);
-      if (synthesizedCode) {
-        return this.atomizer.ingestSequence(synthesizedCode, this.system);
+      const instantiated = this.synthesizer.instantiate(template, varBindings);
+      logger.debug(`[DEBUG RESOLVER] Direct pattern match: "${instantiated}"`);
+      if (instantiated && instantiated !== "unknown") {
+        return this.atomizer.ingestSequence(instantiated, this.system);
+      }
+    }
+
+    // 2. Composite synthesis: find pattern attractors (Body-slotted precepts)
+    //    in the manifold, sort outer→inner by posZ descending, retrieve each
+    //    pattern from the vault, compose them.
+    const attractors: { id: number; posZ: number }[] = [];
+    for (let i = 0; i < this.system.length; i++) {
+      if (!this.system.isAllocated(i)) continue;
+      if (this.system.slotType[i] & (SlotType.Body | SlotType.Condition)) {
+        attractors.push({ id: i, posZ: this.system.posZ[i] });
+      }
+    }
+    // Sort outer→inner (higher posZ = outermost structure first).
+    attractors.sort((a, b) => b.posZ - a.posZ);
+
+    const patterns: import("./Synthesizer").CodePattern[] = [];
+    for (const { id } of attractors.slice(0, 6)) {
+      const attrSeq = new Uint32Array([id]);
+      const result = await this.store.checkInterferencePattern(attrSeq);
+      if (result && result.ids.length > 0) {
+        patterns.push({
+          template: this.atomizer.decodeSequence(result.ids, this.system),
+          slotFlags: result.slotFlags,
+        });
+      }
+    }
+
+    if (patterns.length > 0) {
+      const composed = this.synthesizer.compose(patterns);
+      const contextTokens = Array.from(sequenceIds)
+        .map(id =>
+          this.atomizer
+            .decodeSequence(new Uint32Array([id]), this.system)
+            .trim()
+        )
+        .filter(t => t.length > 0);
+      const varBindings = this.synthesizer.buildBindings(
+        contextTokens,
+        patterns[0].slotFlags
+      );
+      const instantiated = this.synthesizer.instantiate(composed, varBindings);
+      logger.debug(`[DEBUG RESOLVER] Composed pattern: "${instantiated}"`);
+      if (instantiated && instantiated !== "unknown") {
+        return this.atomizer.ingestSequence(instantiated, this.system);
       }
     }
 
@@ -602,7 +617,7 @@ export default class Resolver implements Resolution.Engine {
     const length = this.system.length;
 
     // 1. Ring fast-path: O(SEQUENCE_INDEX_SIZE) scan over recently ingested sequences.
-    //    Iterates newest-first so recency bias aligns with thermodynamic forgetting —
+    //    Iterates newest-first so recency bias aligns with thermodynamic forgetting,
     //    the most recently ingested (hottest) facts are checked first.
     //    Falls through to the full scan for facts older than the ring window.
     //
@@ -644,37 +659,60 @@ export default class Resolver implements Resolution.Engine {
       }
     }
 
-    // 2. Full manifold scan: O(N × M) fallback for sequences older than the ring.
+    // 2. Scope-indexed scan: O(k) where k = occurrences of the first subject
+    //    scope, replaces the previous O(N × M) full-manifold iteration.
+    //
     // Forward Match: Inquiry Subject matches Memory Subject
-    for (let i = 0; i < length - subjectIds.length - 1; i++) {
+    const firstSubjectScope = this.system.scope[subjectIds[0]];
+    for (const i of this.system.getIdsByScope(firstSubjectScope)) {
+      if (queryIdSet.has(i)) continue; // skip the query's own tokens
+      if (i + subjectIds.length >= length) continue;
+
       let match = true;
       for (let j = 0; j < subjectIds.length; j++) {
-        if (this.system.scope[i + j] !== this.system.scope[subjectIds[j]]) {
+        const cId = i + j;
+        if (
+          cId >= length ||
+          !this.system.isAllocated(cId) ||
+          this.system.scope[cId] !== this.system.scope[subjectIds[j]]
+        ) {
           match = false;
           break;
         }
       }
-      if (match && this.system.scope[i + subjectIds.length] === operatorScope) {
-        return this.collectSequence(i + subjectIds.length + 1, 1);
+      if (!match) continue;
+
+      const opId = i + subjectIds.length;
+      if (
+        opId < length &&
+        this.system.isAllocated(opId) &&
+        this.system.scope[opId] === operatorScope
+      ) {
+        return this.collectSequence(opId + 1, 1);
       }
     }
 
-    // Backward Match: Inquiry Subject matches Memory Object (Identity Shift only)
+    // Backward Match: Inquiry Subject matches Memory Object (Identity Shift only).
+    // Index on operatorScope to find operator positions in O(k).
     if (operatorIdClass === OperatorClass.IdentityShift) {
-      for (let i = 1; i < length - subjectIds.length; i++) {
-        if (this.system.scope[i] === operatorScope) {
-          let match = true;
-          for (let j = 0; j < subjectIds.length; j++) {
-            if (
-              this.system.scope[i + 1 + j] !== this.system.scope[subjectIds[j]]
-            ) {
-              match = false;
-              break;
-            }
+      for (const i of this.system.getIdsByScope(operatorScope)) {
+        if (queryIdSet.has(i)) continue;
+        if (i + subjectIds.length >= length) continue;
+
+        let match = true;
+        for (let j = 0; j < subjectIds.length; j++) {
+          const cId = i + 1 + j;
+          if (
+            cId >= length ||
+            !this.system.isAllocated(cId) ||
+            this.system.scope[cId] !== this.system.scope[subjectIds[j]]
+          ) {
+            match = false;
+            break;
           }
-          if (match) {
-            return this.collectSequence(i - 1, -1);
-          }
+        }
+        if (match) {
+          return this.collectSequence(i - 1, -1);
         }
       }
     }

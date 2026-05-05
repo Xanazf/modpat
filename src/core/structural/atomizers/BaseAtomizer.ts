@@ -54,7 +54,15 @@ export abstract class BaseAtomizer {
    */
   public getSymbolScope(symbol: string, isOperator: boolean): number {
     const idx = this.getSymbolIdx(symbol);
-    // Apply an offset to separate logical and semantic frequency bands.
+    // Guard: operator indices must stay below the semantic band to prevent scope collisions.
+    // Increase SEMANTIC_OFFSET in config if this fires.
+    if (isOperator && idx >= SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET) {
+      throw new Error(
+        `Operator band overflow: "${symbol}" idx=${idx} would collide with the semantic band ` +
+          `(SEMANTIC_OFFSET=${SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET}). ` +
+          `Increase SEMANTIC_OFFSET or reduce the number of distinct operators.`
+      );
+    }
     const offset = isOperator
       ? SYSTEM_CONFIG.DOD_EMBEDDING.LOGIC_OFFSET
       : SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET;

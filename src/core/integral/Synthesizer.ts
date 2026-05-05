@@ -1,119 +1,134 @@
-import System, { OperatorClass } from "./System";
+import { SlotType } from "./System";
 
 /**
- * The Synthesizer is responsible for collapsing a logical Geodesic path
- * into structured TypeScript code. It relies on the topological order
- * provided by the Mapper and performs minimal syntactic cleanup.
+ * A retrieved code pattern ready for composition.
+ */
+export interface CodePattern {
+  /** Abstract pattern string, e.g. "function VAR_0(VAR_1) { VAR_BODY }" */
+  template: string;
+  /** Packed slot-type bitmap from wave_forms.slot_flags */
+  slotFlags: bigint;
+}
+
+/**
+ * The Synthesizer collapses a set of retrieved code patterns into a single
+ * concrete code string.
+ *
+ * Two operations:
+ *  - compose(): nest patterns from outer→inner by filling continuation slots
+ *  - instantiate(): bind concrete names into the composed template
  */
 export default class Synthesizer {
-  private atomizer: Atomic.Engine;
+  private readonly BITS_PER_VAR = 5;
+  private readonly SLOT_MASK = 0x1fn;
 
   /**
-   * Initializes the Synthesizer.
-   *
-   * @param atomizer The semantic atomizer for decoding tokens.
+   * Reads the SlotType for VAR_N from a packed slot_flags BigInt.
    */
-  constructor(atomizer: Atomic.Engine) {
-    this.atomizer = atomizer;
+  public slotTypeFor(varId: number, slotFlags: bigint): SlotType {
+    return Number(
+      (slotFlags >> BigInt(varId * this.BITS_PER_VAR)) & this.SLOT_MASK
+    ) as SlotType;
   }
 
   /**
-   * Collapses a sequence of quantum IDs into a TypeScript string.
+   * Composes an ordered list of patterns (outer → inner) into a single template
+   * by filling each outer pattern's first Body/Condition VAR slot with the next
+   * pattern's template, recursively.
+   *
+   * Patterns should be sorted from highest posZ (outermost structure, e.g. function)
+   * to lowest posZ (innermost expression, e.g. addition).
    */
-  public collapse(pathIds: Uint32Array, system: System): string {
-    if (pathIds.length === 0) return "";
+  public compose(patterns: CodePattern[]): string {
+    if (patterns.length === 0) return "";
+    if (patterns.length === 1) return patterns[0].template;
 
-    const tokens: string[] = [];
-    const seenIds = new Set<number>();
+    let accumulated = patterns[0].template;
+    const { slotFlags } = patterns[0];
 
-    for (let i = 0; i < pathIds.length; i++) {
-      const id = pathIds[i];
-      const opClass = system.operatorClass[id];
-      const rawToken = this.atomizer
-        .decodeSequence(new Uint32Array([id]), system)
-        .trim();
-      const token = rawToken.toLowerCase();
+    for (let p = 1; p < patterns.length; p++) {
+      const inner = patterns[p].template;
+      accumulated = this.fillFirstContinuationSlot(
+        accumulated,
+        slotFlags,
+        inner
+      );
+    }
 
-      // Skip meta-targets
-      if (
-        token === "executable_code" ||
-        token === "implies" ||
-        token === "goal"
-      )
-        continue;
+    return accumulated;
+  }
 
-      // De-duplicate: only emit a unique particle once
-      if (seenIds.has(id)) continue;
-      seenIds.add(id);
+  /**
+   * Finds the first VAR_N in the template whose SlotType has the Body or
+   * Condition bit set, and replaces it with the provided inner template.
+   * If no continuation slot is found, appends to the last open block.
+   */
+  private fillFirstContinuationSlot(
+    outer: string,
+    slotFlags: bigint,
+    inner: string
+  ): string {
+    // Find all VAR_N tokens and test each for Body|Condition bits.
+    const varPattern = /VAR_(\d+)/g;
+    let match: RegExpExecArray | null;
 
-      if (opClass === OperatorClass.SyntaxAnchor) {
-        if (
-          ["+", "-", "*", "/", "=", ":", ",", "(", ")", "{", "}", ";"].includes(
-            token
-          )
-        ) {
-          tokens.push(token);
-        } else {
-          tokens.push(" " + token + " ");
-        }
-      } else {
-        const identifier = this.sanitizeIdentifier(rawToken);
-        tokens.push(" " + identifier + " ");
+    while ((match = varPattern.exec(outer)) !== null) {
+      const varId = parseInt(match[1], 10);
+      const st = this.slotTypeFor(varId, slotFlags);
+      if (st & SlotType.Body || st & SlotType.Condition) {
+        return (
+          outer.slice(0, match.index) +
+          inner +
+          outer.slice(match.index + match[0].length)
+        );
       }
     }
 
-    const result = tokens.join("").trim();
-    return this.postProcess(result);
+    // No continuation slot found, append inner before the last closing brace.
+    const lastBrace = outer.lastIndexOf("}");
+    if (lastBrace !== -1) {
+      return outer.slice(0, lastBrace) + inner + outer.slice(lastBrace);
+    }
+
+    return `${outer} ${inner}`;
   }
 
   /**
-   * Ensures tokens are valid TypeScript identifiers.
+   * Replaces all remaining VAR_N placeholders in a composed template with
+   * their concrete bound values.  Unbound VARs become "_".
    */
-  private sanitizeIdentifier(text: string): string {
-    return text
-      .split(/\s+/)
-      .map((word, index) => {
-        if (index === 0) return word.toLowerCase();
-        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-      })
-      .join("")
-      .replace(/[^a-zA-Z0-9_]/g, "");
+  public instantiate(
+    template: string,
+    varBindings: Map<number, string>
+  ): string {
+    return template.replace(
+      /VAR_(\d+)/g,
+      (_, id) => varBindings.get(+id) ?? "_"
+    );
   }
 
   /**
-   * Final pass to clean up whitespace and ensure strict TS formatting.
+   * Builds a varBindings map from a decoded sequence of concrete tokens.
+   * Tokens are bound to VARs in order of first appearance (matching the
+   * abstractSequence VAR assignment order used during ingestion).
    */
-  private postProcess(code: string): string {
-    let result = code
-      .replace(/\s+\(/g, "(")
-      .replace(/\(\s+/g, "(")
-      .replace(/\s+\)/g, ")")
-      .replace(/\s+:/g, ":")
-      .replace(/:\s+/g, ":")
-      .replace(/\s+,\s+/g, ", ")
-      .replace(/\s+\+/g, " +")
-      .replace(/\+\s+/g, "+ ")
-      .replace(/\s+\{/g, " {")
-      .replace(/\{\s+/g, "{")
-      .replace(/\s+\}/g, "}")
-      .replace(/\s+/g, " ")
-      .trim();
+  public buildBindings(
+    tokens: string[],
+    slotFlags: bigint
+  ): Map<number, string> {
+    const bindings = new Map<number, string>();
+    let nextVar = 0;
 
-    // Balance fundamental structures
-    let openParens = (result.match(/\(/g) || []).length;
-    let closeParens = (result.match(/\)/g) || []).length;
-    while (openParens > closeParens) {
-      result += ")";
-      closeParens++;
+    for (const token of tokens) {
+      if (!token || token === "unknown") continue;
+      // Only bind Leaf/Parameter slots, Body/Condition slots are filled by compose().
+      const st = this.slotTypeFor(nextVar, slotFlags);
+      if (!(st & SlotType.Body) && !(st & SlotType.Condition)) {
+        bindings.set(nextVar, token);
+      }
+      nextVar++;
     }
 
-    let openBraces = (result.match(/\{/g) || []).length;
-    let closeBraces = (result.match(/\}/g) || []).length;
-    while (openBraces > closeBraces) {
-      result += " }";
-      closeBraces++;
-    }
-
-    return result.replace(/\s+/g, " ").replace(/\s+}/g, "}").trim();
+    return bindings;
   }
 }

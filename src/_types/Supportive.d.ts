@@ -87,3 +87,23 @@ declare module "google-it" {
 
   export = googleIt;
 }
+
+declare module "abstract-syntax-tree" {
+  export function parse(source: string, options?: Record<string, any>): any;
+  export function generate(ast: any, options?: Record<string, any>): string;
+  export function walk(
+    ast: any,
+    callback: (node: any, parent?: any) => void
+  ): void;
+  export function replace(ast: any, callback: (node: any) => any): void;
+  export function find(ast: any, selector: string | Record<string, any>): any[];
+  export function has(
+    ast: any,
+    selector: string | Record<string, any>
+  ): boolean;
+  export function each(
+    ast: any,
+    type: string,
+    callback: (node: any) => void
+  ): void;
+}

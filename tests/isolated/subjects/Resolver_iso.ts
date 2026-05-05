@@ -209,11 +209,11 @@ export default class Resolver implements Resolution.Engine {
       // Check if this logical interference pattern has already been crystallized.
       if (this.store) {
         const cached = await this.store.checkInterferencePattern(sequenceIds);
-        if (cached) {
+        if (cached && cached.ids.length > 0) {
           console.log(
-            `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.join(",")}, words: ${this.atomizer.decodeSequence(cached, this.system)}`
+            `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.ids.join(",")}, words: ${this.atomizer.decodeSequence(cached.ids, this.system)}`
           );
-          return cached;
+          return cached.ids;
         }
       }
 

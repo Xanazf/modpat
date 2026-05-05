@@ -16,6 +16,13 @@ declare namespace Root {
   type Setter = (value: number) => number;
   type Signal = [get: Accessor, set: Setter];
 
+  /** Injectable free-list allocator — satisfied by plain number[] or TMRFreeList. */
+  interface FreeList {
+    pop(): number | undefined;
+    push(id: number): void;
+    readonly length: number;
+  }
+
   // Valid buffers for createView
   type ComplexF64Array = {
     real: Float64Array;

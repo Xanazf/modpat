@@ -115,8 +115,7 @@ export async function executeSignalManagerSuite() {
       );
 
       logger.log("  [TMR] Simulating memory corruption in sub-module A...");
-      // @ts-expect-error - accessing private for simulation
-      manager.tmrFreeListA.push(9999);
+      manager.primaryAllocator.injectCorruptionToBufferA(9999);
 
       const securePop = manager.popFromFreeList();
       logger.log(

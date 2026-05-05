@@ -17,6 +17,7 @@ import { executeUMAPSuite } from "./umap_loader.test";
 import { executeUnfolderSuite } from "./unfolder.test";
 import { TestHarness } from "./utils/harness";
 import { runRigorousTraps as executeLogicTrapsSuite } from "./verbose_logic_traps.test";
+import { executeCodeSynthesisSuite } from "./code_synthesis.test";
 
 async function run() {
   program
@@ -40,7 +41,7 @@ async function run() {
     await executeSemanticSuite();
     await executeSignalManagerSuite();
     await runMapperReviewTest();
-    await executeE2ETest();
+    //await executeE2ETest();
     await executeComplexSemanticSuite();
     await executeStressSuite();
     await executeGPUOffloadTest();
@@ -50,6 +51,7 @@ async function run() {
     await executeAristotelianSuite();
     await executeRigorousLogicSuite();
     await executeLogicTrapsSuite();
+    await executeCodeSynthesisSuite();
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

@@ -2,7 +2,7 @@ import nlp from "compromise";
 import logger from "@utils/SpectralLogger";
 import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
-import { SystemRef } from "./System";
+import { SlotType, SystemRef } from "./System";
 import type Unfolder from "@core_s/Unfolder";
 import { DOPAT_CONFIG } from "@config";
 
@@ -17,7 +17,7 @@ import { DOPAT_CONFIG } from "@config";
  * 4. Age Coordinates (posW): The temporal context/loom.
  */
 class Mapper implements Mapping.Engine {
-  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
   private get system(): System {
     return this.systemRef.current;
@@ -48,7 +48,7 @@ class Mapper implements Mapping.Engine {
    */
   public setGPU(gpu: TensorMath_GPU | null): void {
     this.gpu = gpu;
-    this.geodesicPipeline = null;
+    this.geodesicPipeline = null; // force re-creation with updated shader
   }
 
   /**
@@ -253,6 +253,7 @@ class Mapper implements Mapping.Engine {
     const sysLength = this.system.length;
 
     const sysInfluence = new Float32Array(sysLength);
+    const sysSlotType = new Uint32Array(sysLength);
     for (let j = 0; j < sysLength; j++) {
       // Influence is derived from Matter Density and Energy Intensity
       // Syntactic Markov Chain Baseline: +5.0 to ensure operands are visible
@@ -264,6 +265,7 @@ class Mapper implements Mapping.Engine {
         influence += 50.0;
       }
       sysInfluence[j] = influence;
+      sysSlotType[j] = this.system.slotType[j];
     }
 
     const penaltyData = new Float32Array(Math.max(1, penalties.length) * 8);
@@ -312,6 +314,11 @@ class Mapper implements Mapping.Engine {
       sysInfluence.byteLength,
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     );
+    const bSysSlotType = createB(
+      sysSlotType,
+      sysSlotType.byteLength,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    );
     const bPenalties = createB(
       penaltyData,
       penaltyData.byteLength,
@@ -331,10 +338,12 @@ class Mapper implements Mapping.Engine {
     view.setFloat32(28, phys.INFLUENCE_FALLOFF, true);
     view.setFloat32(32, phys.PENALTY_RADIUS, true);
     view.setFloat32(36, phys.PENALTY_FALLOFF, true);
+    view.setFloat32(40, phys.BODY_SLOT_ATTRACTION, true);
+    view.setFloat32(44, phys.COND_SLOT_ATTRACTION, true);
 
     const bParams = createB(
       params,
-      48,
+      64, // expanded: added bodySlotAttr + condSlotAttr floats
       GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     );
     const bReadPath = createB(
@@ -351,6 +360,7 @@ class Mapper implements Mapping.Engine {
         { binding: 2, resource: { buffer: bSysInfluence } },
         { binding: 3, resource: { buffer: bPenalties } },
         { binding: 4, resource: { buffer: bParams } },
+        { binding: 5, resource: { buffer: bSysSlotType } },
       ],
     });
 
@@ -373,9 +383,15 @@ class Mapper implements Mapping.Engine {
       pe[i] = resPath[i * 4 + 2];
       pa[i] = resPath[i * 4 + 3];
     }
-    [bPath, bSysPos, bSysInfluence, bPenalties, bParams, bReadPath].forEach(b =>
-      b.destroy()
-    );
+    [
+      bPath,
+      bSysPos,
+      bSysInfluence,
+      bSysSlotType,
+      bPenalties,
+      bParams,
+      bReadPath,
+    ].forEach(b => b.destroy());
   }
 
   /**
@@ -390,8 +406,12 @@ class Mapper implements Mapping.Engine {
         @group(0) @binding(2) var<storage, read> sysInfluence: array<f32>;
         struct Penalty { pos: vec4<f32>, strength: f32, _p1: f32, _p2: f32, _p3: f32 };
         @group(0) @binding(3) var<storage, read> penalties: array<Penalty>;
-        struct Params { steps: u32, sysLength: u32, lr: f32, penCount: u32, iter: u32, h: f32, iR: f32, iF: f32, pR: f32, pF: f32 };
+        struct Params { steps: u32, sysLength: u32, lr: f32, penCount: u32, iter: u32, h: f32, iR: f32, iF: f32, pR: f32, pF: f32, bodyAttr: f32, condAttr: f32 };
         @group(0) @binding(4) var<uniform> params: Params;
+        @group(0) @binding(5) var<storage, read> sysSlotType: array<u32>;
+
+        const SLOT_BODY: u32      = 2u;  // SlotType.Body      = 1 << 1
+        const SLOT_CONDITION: u32 = 4u;  // SlotType.Condition = 1 << 2
 
         fn potentialAt(p: vec4<f32>) -> f32 {
             var d = 1.0;
@@ -400,6 +420,10 @@ class Mapper implements Mapping.Engine {
                 let distSq = dot(diff, diff);
                 if (distSq < params.iR) {
                     var influence = sysInfluence[j];
+                    // Slot-type attractions: Body/Condition slots act as funnels.
+                    let st = sysSlotType[j];
+                    if ((st & SLOT_BODY) != 0u)      { influence = influence + params.bodyAttr; }
+                    if ((st & SLOT_CONDITION) != 0u)  { influence = influence + params.condAttr; }
                     let dw = diff.w; // Age Context
                     influence = influence * exp(-(dw * 50.0) * (dw * 50.0)); // Context Anisotropy
                     if (sysPos[j].w < p.w - 0.01) { influence = influence * 0.01; } // Temporal Anisotropy
@@ -557,6 +581,11 @@ class Mapper implements Mapping.Engine {
           this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
         // Moderate additive boost: 10x baseline, not 556x.
         if (boost?.has(this.system.scope[j])) infl += 50.0;
+        // Slot-type attractions: Body and Condition slots create topological funnels
+        // that pull the geodesic toward continuation points.
+        const st = this.system.slotType[j];
+        if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
+        if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2)); // Contextual Anisotropy
         if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Temporal Anisotropy
         pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
@@ -603,6 +632,9 @@ class Mapper implements Mapping.Engine {
         let infl =
           this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
         if (boost?.has(this.system.scope[j])) infl += 50.0;
+        const st = this.system.slotType[j];
+        if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
+        if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
         infl *= Math.exp(-Math.pow(dw * 50.0, 2));
         if (this.system.posW[j] < w - 0.01) infl *= 0.01;
         pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);

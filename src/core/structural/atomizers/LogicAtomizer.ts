@@ -1,5 +1,5 @@
 import type System from "@core_i/System";
-import { classifyOperatorToken, OperatorClass } from "@core_i/System";
+import { SlotType, classifyOperatorToken, OperatorClass } from "@core_i/System";
 import { BaseAtomizer } from "./BaseAtomizer";
 // TODO:
 // import { RIGHT_DIRECTIONAL_PATTERNS } from "@config";
@@ -93,6 +93,15 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
     }
 
     return sequenceIds;
+  }
+
+  /** Pattern ingestion is handled by SemanticAtomizer; LogicAtomizer delegates to ingestSequence. */
+  public ingestPattern(
+    template: string,
+    _slotTypes: Map<number, SlotType>,
+    system: System
+  ): Uint32Array {
+    return this.ingestSequence(template, system);
   }
 
   /**

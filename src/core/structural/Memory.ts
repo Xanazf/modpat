@@ -1,5 +1,10 @@
 import type System from "@core_i/System";
-import { OperatorClass, SystemRef } from "@core_i/System";
+import {
+  classifyOperatorToken,
+  OperatorClass,
+  SlotType,
+  SystemRef,
+} from "@core_i/System";
 import Atomizer from "@atomics/LogicAtomizer";
 import {
   type DuckDBConnection,
@@ -41,7 +46,7 @@ export default class Store implements Memory.Vault {
   private instance!: DuckDBInstance;
   /** The active connection to the persistent vault. */
   private _connection!: DuckDBConnection;
-  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
   private get system(): System {
     return this.systemRef.current;
@@ -87,7 +92,8 @@ export default class Store implements Memory.Vault {
         anchor_x DOUBLE,
         anchor_y DOUBLE,
         anchor_z DOUBLE,
-        anchor_w DOUBLE
+        anchor_w DOUBLE,
+        slot_flags BIGINT DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_wave_sig ON wave_forms (signature);
 
@@ -101,6 +107,15 @@ export default class Store implements Memory.Vault {
       CREATE INDEX IF NOT EXISTS idx_raw_facts_sig ON raw_facts (signature);
     `);
 
+    // Migrate existing wave_forms tables that pre-date the slot_flags column.
+    try {
+      await this._connection.run(
+        `ALTER TABLE wave_forms ADD COLUMN IF NOT EXISTS slot_flags BIGINT DEFAULT 0`
+      );
+    } catch {
+      // Column already exists in this DuckDB build, safe to ignore
+    }
+
     // Migrate existing raw_facts tables that may lack the newer columns
     for (const col of [
       "source VARCHAR DEFAULT 'user'",
@@ -113,7 +128,7 @@ export default class Store implements Memory.Vault {
           `ALTER TABLE raw_facts ADD COLUMN IF NOT EXISTS ${col}`
         );
       } catch {
-        // Column already exists in this DuckDB build — safe to ignore
+        // Column already exists in this DuckDB build, safe to ignore
       }
     }
   }
@@ -151,6 +166,31 @@ export default class Store implements Memory.Vault {
       w += this.system.posW[id];
     }
     return [x / count, y / count, z / count, w / count];
+  }
+
+  /**
+   * Packs a varId→SlotType map into a single BigInt.
+   * Layout: bits [N*5 .. N*5+4] = SlotType for VAR_N. Supports up to 12 VARs (60 bits).
+   */
+  public packSlotFlags(slots: Map<number, SlotType>): bigint {
+    let flags = 0n;
+    for (const [varId, slotType] of slots) {
+      flags |= BigInt(slotType) << BigInt(varId * 5);
+    }
+    return flags;
+  }
+
+  /**
+   * Unpacks a BigInt slot_flags value back into a varId→SlotType map.
+   */
+  public unpackSlotFlags(flags: bigint): Map<number, SlotType> {
+    const result = new Map<number, SlotType>();
+    const MASK = 0x1fn;
+    for (let varId = 0; varId < 12; varId++) {
+      const st = Number((flags >> BigInt(varId * 5)) & MASK) as SlotType;
+      if (st !== SlotType.None) result.set(varId, st);
+    }
+    return result;
   }
 
   /**
@@ -218,14 +258,16 @@ export default class Store implements Memory.Vault {
         .decodeSequence(new Uint32Array([id]), this.system)
         .trim();
 
-      // Use VAR placeholder only if it was part of the original input manifold
+      // Use VAR placeholder for semantic atoms (operatorClass None) that appeared
+      // in the input. Using operatorClass instead of a mass threshold avoids
+      // misclassifying operators whose mass has decayed below the threshold.
       if (
-        this.system.mass[id] <= this.system.epsilon * 10 &&
+        this.system.operatorClass[id] === OperatorClass.None &&
         varMap.has(scope)
       ) {
         targetTokens.push(`VAR_${varMap.get(scope)}`);
       } else {
-        // Operators or new variables not in the input retain their literal identity
+        // Operators or atoms not in the original input retain their literal identity.
         targetTokens.push(symbol);
       }
     }
@@ -246,7 +288,8 @@ export default class Store implements Memory.Vault {
   public async crystallizeProof(
     inputSequence: Uint32Array,
     outputSequence: Uint32Array,
-    energy: number
+    energy: number,
+    slotFlags: bigint = 0n
   ) {
     const { signature, varMap } = this.abstractSequence(inputSequence);
     const targetPattern = this.abstractTarget(outputSequence, varMap);
@@ -298,8 +341,8 @@ export default class Store implements Memory.Vault {
     }
 
     const stmt = await this._connection.prepare(`
-      INSERT INTO wave_forms (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO wave_forms (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w, slot_flags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
@@ -310,6 +353,7 @@ export default class Store implements Memory.Vault {
       stmt.bindDouble(5, ay);
       stmt.bindDouble(6, az);
       stmt.bindDouble(7, aw);
+      stmt.bindBigInt(8, slotFlags);
       await stmt.run();
     } finally {
       stmt.destroySync();
@@ -328,7 +372,7 @@ export default class Store implements Memory.Vault {
    */
   public async checkInterferencePattern(
     inputSequence: Uint32Array
-  ): Promise<Uint32Array | null> {
+  ): Promise<{ ids: Uint32Array; slotFlags: bigint } | null> {
     const { signature, varMap } = this.abstractSequence(inputSequence);
     const [qx, qy, qz, qw] = this.calculateCentroid(inputSequence);
 
@@ -338,10 +382,11 @@ export default class Store implements Memory.Vault {
     }
 
     let targetPattern: string | null = null;
+    let slotFlags = 0n;
 
     // Spatial Resonance Query: Find the structurally identical signature that is physically closest to our query
     const stmt = await this._connection.prepare(`
-      SELECT target_pattern,
+      SELECT target_pattern, slot_flags,
              (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2) + pow(anchor_w - ?, 2)) as resonance
       FROM wave_forms
       WHERE signature = ?
@@ -358,12 +403,13 @@ export default class Store implements Memory.Vault {
       const res = await stmt.runAndReadAll();
       const rows = res.getRows();
       if (rows && rows.length > 0) {
-        const resonance = Number(rows[0][1]);
+        const resonance = Number(rows[0][2]);
         // Tight Resonance Threshold:
         // A distance < 0.1 indicates the query is physically targeting the same logical entity.
         // A larger distance suggests a structural coincidence but a different topological identity.
         if (resonance < 0.1) {
           targetPattern = rows[0][0]?.toString() || null;
+          slotFlags = BigInt(String(rows[0][1] ?? "0"));
         }
       }
     } catch (err) {
@@ -382,11 +428,13 @@ export default class Store implements Memory.Vault {
         const varId = parseInt(token.replace("VAR_", ""), 10);
         const physicalScope = reverseVarMap.get(varId);
 
-        // Find the corresponding quantum in the input sequence that matches the scope
+        // Find the corresponding quantum in the input sequence that matches the scope.
+        // Use operatorClass (not mass) to identify semantic atoms, mass can decay
+        // below the threshold on operators, causing silent misclassification.
         for (let i = 0; i < inputSequence.length; i++) {
           if (
             this.system.scope[inputSequence[i]] === physicalScope &&
-            this.system.mass[inputSequence[i]] <= this.system.epsilon * 10
+            this.system.operatorClass[inputSequence[i]] === OperatorClass.None
           ) {
             resultIds.push(inputSequence[i]);
             break;
@@ -411,7 +459,7 @@ export default class Store implements Memory.Vault {
       }
     }
 
-    return new Uint32Array(resultIds);
+    return { ids: new Uint32Array(resultIds), slotFlags };
   }
 
   /**
@@ -470,6 +518,62 @@ export default class Store implements Memory.Vault {
    */
   public async flush(): Promise<void> {
     await this._connection.run("DELETE FROM wave_forms");
+  }
+
+  /**
+   * Checks whether the exact fact string exists in the persistent vault.
+   * Used by the contradiction detector as a pre-ingestion check that does not
+   * create any manifold precepts.
+   */
+  public async rawFactExists(fact: string): Promise<boolean> {
+    const stmt = await this._connection.prepare(
+      `SELECT 1 FROM raw_facts WHERE fact = ? LIMIT 1`
+    );
+    try {
+      stmt.bindVarchar(1, fact);
+      const res = await stmt.runAndReadAll();
+      return res.getRows().length > 0;
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /**
+   * Computes the abstract VAR_N signature for a text string without creating
+   * any manifold precepts. Mirrors the logic of abstractSequence() but operates
+   * purely on the atomizer's symbol map and classifyOperatorToken().
+   *
+   * Used by the contradiction detector so it can query wave_forms without
+   * ingesting the inverted statement into the live manifold.
+   */
+  public signatureForText(text: string): string {
+    const tokens = text
+      .replace(/\|-/g, " SINK_MARKER ")
+      .replace(/([(){}\[\]:;.,+\-*/=<>])/g, " $1 ")
+      .replace(/SINK_MARKER/g, "|-")
+      .split(/\s+/)
+      .filter(t => t.length > 0);
+
+    const varMap = new Map<number, number>();
+    const parts: string[] = [];
+    let nextVarId = 0;
+
+    for (const token of tokens) {
+      const norm = token.toLowerCase().trim();
+      const isOp = classifyOperatorToken(norm) !== OperatorClass.None;
+      // getSymbolScope() registers the symbol in the atomizer's symbolMap (no
+      // manifold side effects) and returns the scope value used for VAR keying.
+      const scope = this.atomizer.getSymbolScope(norm, isOp);
+
+      if (isOp) {
+        parts.push(norm);
+      } else {
+        if (!varMap.has(scope)) varMap.set(scope, nextVarId++);
+        parts.push(`VAR_${varMap.get(scope)}`);
+      }
+    }
+
+    return parts.join(" ");
   }
 
   /**
