@@ -6,7 +6,7 @@ import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
 import Mapper from "./Mapper";
 import Synthesizer from "./Synthesizer";
-import System, { OperatorClass } from "./System";
+import System, { OperatorClass, SystemRef } from "./System";
 
 /**
  * The Resolver is the primary logical engine, modeled as a physical simulation
@@ -14,8 +14,11 @@ import System, { OperatorClass } from "./System";
  * dynamical system where energy (resonance) vibrates through a manifold.
  */
 export default class Resolver implements Resolution.Engine {
-  /** The logical manifold hosting the physical state. */
-  private system: System;
+  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  private systemRef: SystemRef;
+  private get system(): System {
+    return this.systemRef.current;
+  }
   /** The engine for transforming between text and quanta. */
   private atomizer: Atomic.Engine;
   /** Persistent storage for logical proofs. */
@@ -54,14 +57,15 @@ export default class Resolver implements Resolution.Engine {
    * @param store Optional persistent memory store.
    */
   constructor(
-    system: System,
+    system: System | SystemRef,
     atomizer: Atomic.Engine,
     store: Store | null = null
   ) {
-    this.system = system;
+    this.systemRef =
+      system instanceof SystemRef ? system : new SystemRef(system);
     this.atomizer = atomizer;
     this.store = store;
-    this.mapper = new Mapper(this.system);
+    this.mapper = new Mapper(this.systemRef);
     this.synthesizer = new Synthesizer(this.atomizer);
 
     const maxN = Resolver.MAX_SEQUENCE_LENGTH;

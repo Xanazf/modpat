@@ -2,6 +2,7 @@ import nlp from "compromise";
 import logger from "@utils/SpectralLogger";
 import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
+import { SystemRef } from "./System";
 import type Unfolder from "@core_s/Unfolder";
 import { DOPAT_CONFIG } from "@config";
 
@@ -16,8 +17,11 @@ import { DOPAT_CONFIG } from "@config";
  * 4. Age Coordinates (posW): The temporal context/loom.
  */
 class Mapper implements Mapping.Engine {
-  /** The logical manifold providing the physical state of all precepts. */
-  private system: System;
+  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  private systemRef: SystemRef;
+  private get system(): System {
+    return this.systemRef.current;
+  }
   /** Optional GPU math engine for acceleration. */
   private gpu: TensorMath_GPU | null = null;
   /** Optional Fractal Unfolder for expanding logical voids. */
@@ -29,11 +33,12 @@ class Mapper implements Mapping.Engine {
    * Initializes the mapper with a reference to the dual-layer manifold.
    */
   constructor(
-    system: System,
+    system: System | SystemRef,
     gpu: TensorMath_GPU | null = null,
     unfolder: Unfolder | null = null
   ) {
-    this.system = system;
+    this.systemRef =
+      system instanceof SystemRef ? system : new SystemRef(system);
     this.gpu = gpu;
     this.unfolder = unfolder;
   }

@@ -756,5 +756,27 @@ class System implements Root.System {
   }
 }
 
-export { LogicOperations, TargetBuffer, classifyOperatorToken };
+/**
+ * A mutable reference cell wrapping a System instance.
+ * Components that hold a SystemRef always dereference via `.current`, so
+ * ManifoldManager can atomically redirect every holder to a new System in a
+ * single call to `swap()` — no per-component update required.
+ */
+class SystemRef {
+  private _current: System;
+
+  constructor(system: System) {
+    this._current = system;
+  }
+
+  get current(): System {
+    return this._current;
+  }
+
+  swap(system: System): void {
+    this._current = system;
+  }
+}
+
+export { LogicOperations, TargetBuffer, classifyOperatorToken, SystemRef };
 export default System;

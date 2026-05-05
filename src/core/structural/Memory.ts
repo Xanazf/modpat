@@ -1,5 +1,5 @@
 import type System from "@core_i/System";
-import { OperatorClass } from "@core_i/System";
+import { OperatorClass, SystemRef } from "@core_i/System";
 import Atomizer from "@atomics/LogicAtomizer";
 import {
   type DuckDBConnection,
@@ -41,8 +41,11 @@ export default class Store implements Memory.Vault {
   private instance!: DuckDBInstance;
   /** The active connection to the persistent vault. */
   private _connection!: DuckDBConnection;
-  /** Reference to the integral system state. */
-  private system: System;
+  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  private systemRef: SystemRef;
+  private get system(): System {
+    return this.systemRef.current;
+  }
   /** The atomic engine for encoding/decoding logic quanta. */
   private atomizer: Atomic.Engine;
   /** File path to the database (defaults to :memory:). */
@@ -58,11 +61,12 @@ export default class Store implements Memory.Vault {
    * @param dbPath - The path to the persistent DuckDB file.
    */
   constructor(
-    system: System,
+    system: System | SystemRef,
     atomizer: Atomic.Engine,
     dbPath: string = ":memory:"
   ) {
-    this.system = system;
+    this.systemRef =
+      system instanceof SystemRef ? system : new SystemRef(system);
     this.atomizer = atomizer;
     this.dbPath = dbPath;
     this.initPromise = this.init();

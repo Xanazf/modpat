@@ -2,7 +2,7 @@ import nlp from "compromise";
 
 import type Resolver from "@core_i/Resolver";
 import type System from "@core_i/System";
-import { OperatorClass } from "@core_i/System";
+import { OperatorClass, SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import logger from "@utils/SpectralLogger";
@@ -14,8 +14,11 @@ import Unfolder from "@core_s/Unfolder";
  * through active memory, persistent DuckDB storage.
  */
 export class LiveInference {
-  /** The core logical manifold where physical states are managed. */
-  private system: System;
+  /** Shared reference cell — swap fires on ManifoldManager failover. */
+  private systemRef: SystemRef;
+  private get system(): System {
+    return this.systemRef.current;
+  }
   /** Responsible for breaking down text into atomic logical quanta. */
   private atomizer: SemanticAtomizer;
   /** Executes the logical resolution and pathfinding algorithms. */
@@ -38,17 +41,18 @@ export class LiveInference {
    * @param store The persistent memory controller.
    */
   constructor(
-    system: System,
+    system: System | SystemRef,
     atomizer: SemanticAtomizer,
     resolver: Resolver,
     store: Store,
     unfolder?: Unfolder
   ) {
-    this.system = system;
+    this.systemRef =
+      system instanceof SystemRef ? system : new SystemRef(system);
     this.atomizer = atomizer;
     this.resolver = resolver;
     this.store = store;
-    this.unfolder = unfolder || new Unfolder(system, atomizer);
+    this.unfolder = unfolder || new Unfolder(this.systemRef, atomizer);
     this.resolver.setUnfolder(this.unfolder);
   }
 

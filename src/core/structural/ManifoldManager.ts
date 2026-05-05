@@ -1,6 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
-import { OperatorClass } from "@core_i/System";
+import { OperatorClass, SystemRef } from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import type { SystemPersistence } from "./Persistence";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
@@ -19,6 +19,8 @@ export class ManifoldManager {
   public primarySystem: System;
   /** A parallel backup universe, used when the primary system encounters a critical anomaly. */
   public emergencySystem: System;
+  /** Shared mutable reference cell — components hold this and always see the active system. */
+  private systemRef: SystemRef;
   /** Persistence layer for snapshotting and hydrating the manifold. */
   private persistence: SystemPersistence;
   /** The atomizer for ingestion processing. */
@@ -59,6 +61,7 @@ export class ManifoldManager {
     this.emergencySystem = emergency;
     this.persistence = persistence;
     this.activeSystem = primary;
+    this.systemRef = new SystemRef(primary);
     this.atomizer = new SpectralAtomizer();
   }
 
@@ -67,6 +70,14 @@ export class ManifoldManager {
    */
   public getActiveSystem(): System {
     return this.activeSystem;
+  }
+
+  /**
+   * Returns the shared SystemRef that components should hold.
+   * When a failover fires, all holders are redirected atomically via the ref.
+   */
+  public getSystemRef(): SystemRef {
+    return this.systemRef;
   }
 
   /**
@@ -171,6 +182,8 @@ export class ManifoldManager {
       `[ManifoldManager] CRITICAL INTERRUPT: ${reason}. Switching to Emergency Manifold!`
     );
     this.activeSystem = this.emergencySystem;
+    // Atomically redirect all SystemRef holders to the emergency system.
+    this.systemRef.swap(this.emergencySystem);
 
     // Attempt to hydrate emergency system from persistence to prevent operating on stale/empty state
     if (this.isHydrating) return this.stabilityPromise || Promise.resolve();

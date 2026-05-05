@@ -1,4 +1,5 @@
 import type System from "@core_i/System";
+import { SystemRef } from "@core_i/System";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import wiki from "wikipedia";
 import axios from "axios";
@@ -66,7 +67,10 @@ export interface SearchResult {
  * data from external sources like Context7 technical docs or Wikipedia.
  */
 export default class Unfolder {
-  private system: System;
+  private systemRef: SystemRef;
+  private get system(): System {
+    return this.systemRef.current;
+  }
   private atomizer: SemanticAtomizer;
   private expandCount: number = 0;
 
@@ -76,8 +80,9 @@ export default class Unfolder {
    * @param system The logical manifold to expand.
    * @param atomizer The semantic atomizer for text ingestion.
    */
-  constructor(system: System, atomizer: SemanticAtomizer) {
-    this.system = system;
+  constructor(system: System | SystemRef, atomizer: SemanticAtomizer) {
+    this.systemRef =
+      system instanceof SystemRef ? system : new SystemRef(system);
     this.atomizer = atomizer;
   }
 
@@ -97,7 +102,7 @@ export default class Unfolder {
     const fullContent = await this.fetchContent(activeTopic);
     if (!fullContent) return false;
 
-    const newPreceptIds = this.ingestContent(fullContent, this.system);
+    const newPreceptIds = this.ingestContent(fullContent);
     if (newPreceptIds.length === 0) return false;
 
     // 4. Assign physical parameters to create a "Sub-Gradient" that bridges the void
@@ -167,8 +172,8 @@ export default class Unfolder {
    * @param text The content to ingest.
    * @param system The target logical manifold.
    */
-  public ingestContent(text: string, system: System): Uint32Array {
-    return this.atomizer.ingestSequence(text, system);
+  public ingestContent(text: string, system?: System): Uint32Array {
+    return this.atomizer.ingestSequence(text, system ?? this.systemRef.current);
   }
 
   /**
