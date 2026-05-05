@@ -26,6 +26,8 @@ export class LiveInference {
   private unfolder: Unfolder;
   /** Tracks the signature of the last processed intent for feedback reinforcement. */
   private last_signature: string | null = null;
+  /** Counter for periodic maintenance tasks (e.g., wave form culling). */
+  private intentCount: number = 0;
 
   /**
    * Initializes the inference engine with its required structural dependencies.
@@ -58,6 +60,9 @@ export class LiveInference {
    * @returns A string response representing the logical result.
    */
   public async processIntent(query: string): Promise<string> {
+    if (++this.intentCount % 50 === 0) {
+      await this.store.cullWeakWaveForms();
+    }
     const doc = nlp(query);
     // Identify questions by grammar or punctuation.
     const isQuestion = doc.questions().length > 0 || query.trim().endsWith("?");
@@ -164,6 +169,10 @@ export class LiveInference {
       topologicalQuery,
       this.system
     );
+    // Track for feedback reinforcement — lets the user correct a bad question answer
+    const { signature: questionSignature } =
+      this.store.abstractSequence(queryQuanta);
+    this.last_signature = questionSignature;
     const derivationPath = await this.resolver.resolveSequence(queryQuanta);
     const inferredMeaning = this.atomizer
       .decodeSequence(derivationPath, this.system)

@@ -94,35 +94,10 @@ export default class Unfolder {
         .decodeSequence(new Uint32Array([voidPreceptId]), this.system)
         .trim();
 
-    const isCodeRelated =
-      /api|code|function|programming|library|framework|script|typescript|javascript|python|rust|c\+\+|java|ruby|go|php|swift|kotlin|scala|sql|html|css|react|vue|angular|node|express|django|flask|spring|rails|laravel|dotnet|kubernetes|docker|aws|gcp|azure|linux|macos|windows|android|ios/i.test(
-        activeTopic
-      );
+    const fullContent = await this.fetchContent(activeTopic);
+    if (!fullContent) return false;
 
-    let fullContent = "";
-
-    if (isCodeRelated) {
-      // 1. Fetch technical data via Context7
-      const technicalData = await this.queryContext7(activeTopic);
-      if (technicalData) {
-        fullContent += `${technicalData.title}. ${technicalData.snippet}\n`;
-      }
-    } else {
-      // 2. Fetch encyclopedic data via Wikipedia
-      const wikiData = await this.queryWikipedia(activeTopic);
-      if (wikiData) {
-        fullContent += `${wikiData}\n`;
-      }
-    }
-
-    if (!fullContent.trim()) return false;
-
-    // 3. Ingest this text into the manifold via SemanticAtomizer
-    const newPreceptIds = this.atomizer.ingestSequence(
-      fullContent,
-      this.system
-    );
-
+    const newPreceptIds = this.ingestContent(fullContent, this.system);
     if (newPreceptIds.length === 0) return false;
 
     // 4. Assign physical parameters to create a "Sub-Gradient" that bridges the void
@@ -156,6 +131,55 @@ export default class Unfolder {
     }
 
     return true;
+  }
+
+  /**
+   * Fetches raw text content for a topic from Wikipedia or Context7.
+   * Does NOT ingest into the manifold — safe to call from background tasks.
+   *
+   * @param topic The subject to fetch content for.
+   * @returns The fetched text, or an empty string if unavailable.
+   */
+  public async fetchContent(topic: string): Promise<string> {
+    const isCodeRelated =
+      /api|code|function|programming|library|framework|script|typescript|javascript|python|rust|c\+\+|java|ruby|go|php|swift|kotlin|scala|sql|html|css|react|vue|angular|node|express|django|flask|spring|rails|laravel|dotnet|kubernetes|docker|aws|gcp|azure|linux|macos|windows|android|ios/i.test(
+        topic
+      );
+
+    if (isCodeRelated) {
+      const technicalData = await this.queryContext7(topic);
+      if (technicalData) {
+        return `${technicalData.title}. ${technicalData.snippet}`.trim();
+      }
+    } else {
+      const wikiData = await this.queryWikipedia(topic);
+      if (wikiData) {
+        return wikiData.trim();
+      }
+    }
+    return "";
+  }
+
+  /**
+   * Synchronously ingests pre-fetched text into the given system.
+   * Returns the allocated precept IDs so callers can adjust properties (e.g., decayRate).
+   *
+   * @param text The content to ingest.
+   * @param system The target logical manifold.
+   */
+  public ingestContent(text: string, system: System): Uint32Array {
+    return this.atomizer.ingestSequence(text, system);
+  }
+
+  /**
+   * Resolves a scope hash back to its original token string.
+   * Delegates to the internal SemanticAtomizer's reverse-lookup table.
+   *
+   * @param scope The numeric scope hash to resolve.
+   * @returns The token string, or undefined if not in the dictionary.
+   */
+  public resolveScope(scope: number): string | undefined {
+    return this.atomizer.resolveScope(scope);
   }
 
   /**

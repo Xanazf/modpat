@@ -1,8 +1,10 @@
 import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
+import { OperatorClass } from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import type { SystemPersistence } from "./Persistence";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
+import type Unfolder from "@core_s/Unfolder";
 
 /**
  * The ManifoldManager acts as the guardian and regulator of the logical manifolds.
@@ -33,6 +35,13 @@ export class ManifoldManager {
   private isHydrating: boolean = false;
   /** Promise tracking the current hydration process. */
   private stabilityPromise: Promise<void> | null = null;
+
+  /** Phase 4: Async fetched knowledge pending safe synchronous ingestion on the next tick. */
+  private pendingDreams: string[] = [];
+  /** Guard preventing concurrent dream cycles. */
+  private isDreaming: boolean = false;
+  /** External knowledge expansion engine for Phase 4 (Subconscious Void Expansion). */
+  private unfolder: Unfolder | null = null;
 
   /**
    * Initializes the Manifold Manager with primary and emergency systems.
@@ -209,6 +218,78 @@ export class ManifoldManager {
   }
 
   /**
+   * Wires the knowledge expansion engine for Phase 4 (Subconscious Void Expansion).
+   * Must be called before tick() for dreamCycle to activate.
+   */
+  public setUnfolder(unfolder: Unfolder): void {
+    this.unfolder = unfolder;
+  }
+
+  /**
+   * Phase 4: Subconscious Void Expansion
+   * Runs asynchronously during low-pressure idle ticks to detect tension zones
+   * (high-entropy operands near high-mass action anchors) and pre-fetches
+   * relevant knowledge, queuing it for safe synchronous ingestion on the next tick.
+   */
+  private async dreamCycle(): Promise<void> {
+    if (this.isDreaming || !this.unfolder) return;
+
+    const sys = this.activeSystem;
+    const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
+    if (pressure > 0.5) return;
+
+    this.isDreaming = true;
+    try {
+      const VACUUM_THRESHOLD = DOPAT_CONFIG.DRIFT_THRESHOLD * 0.001;
+
+      // Collect high-mass action anchors (conceptually active operators)
+      const actionAnchors: number[] = [];
+      for (let i = 0; i < sys.length; i++) {
+        if (!sys.isAllocated(i)) continue;
+        if (
+          (sys.operatorClass[i] === OperatorClass.Action ||
+            sys.operatorClass[i] === OperatorClass.IdentityShift) &&
+          sys.mass[i] > sys.c * 10
+        ) {
+          actionAnchors.push(i);
+        }
+      }
+      if (actionAnchors.length === 0) return;
+
+      // Find a tension zone: isolated high-entropy operand near an action anchor
+      for (let i = 0; i < sys.length; i++) {
+        if (!sys.isAllocated(i)) continue;
+        if (sys.operatorClass[i] !== OperatorClass.None) continue;
+        if (
+          sys.entropyRate[i] < 5.0 ||
+          Math.abs(sys.mass[i]) < VACUUM_THRESHOLD
+        )
+          continue;
+
+        let nearAnchor = false;
+        for (const a of actionAnchors) {
+          const dx = sys.posX[i] - sys.posX[a];
+          const dy = sys.posY[i] - sys.posY[a];
+          if (dx * dx + dy * dy < 4.0) {
+            nearAnchor = true;
+            break;
+          }
+        }
+        if (!nearAnchor) continue;
+
+        const token = this.unfolder.resolveScope(sys.scope[i]);
+        if (!token || token.length <= 2) continue;
+
+        const content = await this.unfolder.fetchContent(token);
+        if (content) this.pendingDreams.push(content);
+        return; // One tension zone per cycle
+      }
+    } finally {
+      this.isDreaming = false;
+    }
+  }
+
+  /**
    * Phase 2: Gravitational Consolidation
    * Runs in the background to merge exact matches and pull similar concepts into orbits.
    */
@@ -238,8 +319,8 @@ export class ManifoldManager {
 
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
-        // EXACT MATCH FUSION
-        if (sys.scope[i] === sys.scope[j] && distSq < 0.0001) {
+        // EXACT MATCH FUSION — epsilon comparison guards against float drift
+        if (Math.abs(sys.scope[i] - sys.scope[j]) < 1e-9 && distSq < 0.0001) {
           // i absorbs j
           sys.mass[i] += sys.mass[j];
           sys.depth[i] += sys.depth[j];
@@ -255,11 +336,12 @@ export class ManifoldManager {
           const root = sys.mass[i] > sys.mass[j] ? i : j;
           const satellite = root === i ? j : i;
 
-          // Gently shift satellite towards root (Gravity)
+          // Gently shift satellite towards root in all 4 dimensions (Gravity)
           const pull = 0.1 * dt; // Attenuation factor
           sys.posX[satellite] += (sys.posX[root] - sys.posX[satellite]) * pull;
           sys.posY[satellite] += (sys.posY[root] - sys.posY[satellite]) * pull;
           sys.posZ[satellite] += (sys.posZ[root] - sys.posZ[satellite]) * pull;
+          sys.posW[satellite] += (sys.posW[root] - sys.posW[satellite]) * pull;
 
           // Blend Scope (Harmonic Resonance)
           // Gradually align the frequency band of the satellite to the root
@@ -287,8 +369,28 @@ export class ManifoldManager {
     // Apply temporal decay across the manifold
     this.activeSystem.decay(dt);
 
+    // Phase 4: Atomically apply dreamt knowledge fetched during the last idle cycle.
+    // Runs in the same sync block as decay to guarantee no race with the Resolver.
+    if (this.pendingDreams.length > 0 && this.unfolder) {
+      const dream = this.pendingDreams.shift()!;
+      const newIds = this.unfolder.ingestContent(dream, this.activeSystem);
+      // Dreamt nodes start with an elevated decay rate so irrelevant content GCs itself.
+      for (let k = 0; k < newIds.length; k++) {
+        const id = newIds[k];
+        if (this.activeSystem.isAllocated(id)) {
+          this.activeSystem.decayRate[id] = 0.05;
+        }
+      }
+    }
+
     // Consolidate similar patterns
     this.consolidationRoutine(dt);
+
+    // Phase 4: Queue the next dream cycle asynchronously.
+    // Safe because dreamCycle only writes to pendingDreams, never to activeSystem directly.
+    this.dreamCycle().catch(err => {
+      console.error("[ManifoldManager] Error during dream cycle:", err);
+    });
 
     // Scan for destabilizing anomalies
     this.monitorThreats().catch(err => {
