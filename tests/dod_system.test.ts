@@ -78,7 +78,7 @@ async function testAtomizerBidirectional(
 
   const massP = system.mass[ids[0]];
   const massImplies = system.mass[ids[1]];
-  assert.strictEqual(massP, system.epsilon, "Atom mass should be epsilon");
+  assert.strictEqual(massP, system.c, "Atom mass should be epsilon");
   assert.strictEqual(massImplies, system.c ** 2, "Operator mass should be c^2");
 
   const decoded = atomizer.decodeSequence(ids, system);

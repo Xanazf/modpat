@@ -144,7 +144,7 @@ export async function executeSemanticSuite() {
         "she was running fast",
         env.system
       );
-      // "running" is at index 2 (after "she", "was") — not preceded by determiner
+      // "running" is at index 2 (after "she", "was") - not preceded by determiner
       const runningVerb = verbIds[2];
       assert.strictEqual(
         env.system.operatorClass[runningVerb],
@@ -155,12 +155,12 @@ export async function executeSemanticSuite() {
 
     await it("Track 12 Fix B: triplet inheritance mass is capped", async () => {
       const { DOPAT_CONFIG } = await import("@config");
-      // Use "mango" — a plain semantic atom (not a math/operator token) so mass starts at epsilon.
+      // Use "mango" - a plain semantic atom (not a math/operator token) so mass starts at epsilon.
       const ids = env.atomizer.ingestSequence("the the the mango", env.system);
       const mangoId = ids[3]; // "mango" at index 3, preceded by three "the"s
       // With cap applied, mass must not exceed epsilon * MAX_INHERITANCE_MASS_FACTOR
       const maxAllowed =
-        env.system.epsilon * DOPAT_CONFIG.atomizer.MAX_INHERITANCE_MASS_FACTOR;
+        env.system.c * DOPAT_CONFIG.atomizer.MAX_INHERITANCE_MASS_FACTOR;
       assert.ok(
         env.system.mass[mangoId] <= maxAllowed,
         `"the the the mango" mass ${env.system.mass[mangoId]} exceeds cap ${maxAllowed}`

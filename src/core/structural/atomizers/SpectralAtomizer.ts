@@ -101,6 +101,14 @@ export default class SpectralAtomizer
 
         // Materialize the spectral peak in the Dual-Layer Manifold.
         const id = system.createLocation(mass, scope);
+
+        // Link sequence continuity
+        if (peakIds.length > 0) {
+          const prevId = peakIds[peakIds.length - 1];
+          system.PartLayer[prevId] = id;
+          system.ComplexLayer[id] = prevId;
+        }
+
         system.operatorClass[id] = opClass;
 
         // Matter Layer Content:
@@ -168,6 +176,11 @@ export default class SpectralAtomizer
     if (isDrifting) {
       // Inject a Destructive Interference Precept (Void).
       const voidId = system.createLocation(-mass, scope);
+
+      // Link sequence continuity
+      system.PartLayer[id] = voidId;
+      system.ComplexLayer[voidId] = id;
+
       system.posX[voidId] = gps.lon;
       system.posY[voidId] = gps.lat;
 

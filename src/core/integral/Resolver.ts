@@ -187,14 +187,27 @@ export default class Resolver implements Resolution.Engine {
       );
     }
 
-    // Phase 0: Handle semantic queries (e.g., "The sky is").
+    // Phase 0: Handle semantic queries (e.g., "The sky is" or "The sky is |-").
     // These are open-ended questions that require lookup or memory resonance.
     const lastId = sequenceIds[N - 1];
     const lastClass = this.system.operatorClass[lastId];
 
-    if (lastClass === OperatorClass.IdentityShift && N >= 2) {
-      const subjectIds = sequenceIds.slice(0, N - 1);
+    let queryOpId = lastId;
+    let queryOpClass = lastClass;
+    let subjectIds = sequenceIds.slice(0, N - 1);
 
+    // If query ends in a Sink marker, look at the token before it for the intent.
+    if (lastClass === OperatorClass.Sink && N >= 3) {
+      const prevId = sequenceIds[N - 2];
+      const prevClass = this.system.operatorClass[prevId];
+      if (prevClass === OperatorClass.IdentityShift) {
+        queryOpId = prevId;
+        queryOpClass = prevClass;
+        subjectIds = sequenceIds.slice(0, N - 2);
+      }
+    }
+
+    if (queryOpClass === OperatorClass.IdentityShift && subjectIds.length > 0) {
       // Check if this logical interference pattern has already been crystallized.
       if (this.store) {
         const cached = await this.store.checkInterferencePattern(sequenceIds);
@@ -207,7 +220,10 @@ export default class Resolver implements Resolution.Engine {
       }
 
       // Perform a multi-token semantic lookup in the manifold.
-      const result = this.resolveMultiTokenSemanticLookup(subjectIds, lastId);
+      const result = this.resolveMultiTokenSemanticLookup(
+        subjectIds,
+        queryOpId
+      );
 
       logger.debug(
         `[DEBUG RESOLVER] Phase 0 matched IDs: ${result.join(",")}, words: ${this.atomizer.decodeSequence(result, this.system)}`
@@ -865,31 +881,36 @@ export default class Resolver implements Resolution.Engine {
     //
     // Forward Match: Inquiry Subject matches Memory Subject
     const firstSubjectScope = this.system.scope[subjectIds[0]];
-    for (const i of this.system.getIdsByScope(firstSubjectScope)) {
+    const candidatesForScope = this.system.getIdsByScope(firstSubjectScope);
+
+    for (const i of candidatesForScope) {
       if (queryIdSet.has(i)) continue; // skip the query's own tokens
-      if (i + subjectIds.length >= length) continue;
 
       let match = true;
+      let curr = i;
       for (let j = 0; j < subjectIds.length; j++) {
-        const cId = i + j;
         if (
-          cId >= length ||
-          !this.system.isAllocated(cId) ||
-          this.system.scope[cId] !== this.system.scope[subjectIds[j]]
+          curr === 0 ||
+          !this.system.isAllocated(curr) ||
+          this.system.scope[curr] !== this.system.scope[subjectIds[j]]
         ) {
           match = false;
           break;
         }
+        if (j < subjectIds.length - 1) {
+          curr = this.system.PartLayer[curr];
+        }
       }
       if (!match) continue;
 
-      const opId = i + subjectIds.length;
+      const opId = this.system.PartLayer[curr];
+
       if (
-        opId < length &&
+        opId !== 0 &&
         this.system.isAllocated(opId) &&
         this.system.scope[opId] === operatorScope
       ) {
-        return this.collectSequence(opId + 1, 1);
+        return this.collectSequence(this.system.PartLayer[opId], 1);
       }
     }
 
@@ -898,22 +919,22 @@ export default class Resolver implements Resolution.Engine {
     if (operatorIdClass === OperatorClass.IdentityShift) {
       for (const i of this.system.getIdsByScope(operatorScope)) {
         if (queryIdSet.has(i)) continue;
-        if (i + subjectIds.length >= length) continue;
 
         let match = true;
+        let curr = this.system.PartLayer[i];
         for (let j = 0; j < subjectIds.length; j++) {
-          const cId = i + 1 + j;
           if (
-            cId >= length ||
-            !this.system.isAllocated(cId) ||
-            this.system.scope[cId] !== this.system.scope[subjectIds[j]]
+            curr === 0 ||
+            !this.system.isAllocated(curr) ||
+            this.system.scope[curr] !== this.system.scope[subjectIds[j]]
           ) {
             match = false;
             break;
           }
+          curr = this.system.PartLayer[curr];
         }
         if (match) {
-          return this.collectSequence(i - 1, -1);
+          return this.collectSequence(this.system.ComplexLayer[i], -1);
         }
       }
     }
@@ -950,7 +971,7 @@ export default class Resolver implements Resolution.Engine {
       const dw = this.system.posW[id] - subW;
       variance += dx * dx + dy * dy + dz * dz + dw * dw;
     }
-    const dynamicThreshold = Math.max(50.0, variance * 2.0);
+    const dynamicThreshold = Math.max(5.0, variance * 2.0);
 
     // Spatial index: limit candidates to nodes within sqrt(dynamicThreshold) of the
     // subject centroid instead of scanning all N manifold nodes.
@@ -966,11 +987,18 @@ export default class Resolver implements Resolution.Engine {
 
     const results: { ids: Uint32Array; score: number }[] = [];
     for (const i of candidates) {
+      // Skip tokens that are part of the input sequence (self-match prevention)
+      if (queryIdSet.has(i)) continue;
+
       const opClass = this.system.operatorClass[i];
 
-      if (opClass === operatorIdClass) {
+      if (
+        opClass === operatorIdClass &&
+        Math.abs(this.system.scope[i] - operatorScope) <
+          DOPAT_CONFIG.resolver.SCOPE_EPSILON
+      ) {
         // Try Memory Subject Match
-        const memSub = this.getClusterCentroid(i - 1, -1);
+        const memSub = this.getClusterCentroid(this.system.ComplexLayer[i], -1);
         if (memSub.count > 0) {
           const dx = memSub.x - subX;
           const dy = memSub.y - subY;
@@ -980,7 +1008,7 @@ export default class Resolver implements Resolution.Engine {
 
           if (distSq < dynamicThreshold) {
             results.push({
-              ids: this.collectSequence(i + 1, 1),
+              ids: this.collectSequence(this.system.PartLayer[i], 1),
               score: distSq,
             });
           }
@@ -988,7 +1016,7 @@ export default class Resolver implements Resolution.Engine {
 
         // Try Memory Object Match (Identity Shift)
         if (opClass === OperatorClass.IdentityShift) {
-          const memObj = this.getClusterCentroid(i + 1, 1);
+          const memObj = this.getClusterCentroid(this.system.PartLayer[i], 1);
           if (memObj.count > 0) {
             const dx = memObj.x - subX;
             const dy = memObj.y - subY;
@@ -998,7 +1026,7 @@ export default class Resolver implements Resolution.Engine {
 
             if (distSq < dynamicThreshold) {
               results.push({
-                ids: this.collectSequence(i - 1, -1),
+                ids: this.collectSequence(this.system.ComplexLayer[i], -1),
                 score: distSq * 0.1, // Identity objects get priority
               });
             }
@@ -1036,19 +1064,10 @@ export default class Resolver implements Resolution.Engine {
       w = 0,
       totalMass = 0,
       count = 0;
-    const length = this.system.length;
     let k = startId;
-    let lastY = -1;
 
-    while (k >= 0 && k < length) {
+    while (k !== 0 && this.system.isAllocated(k)) {
       if (this.system.operatorClass[k] !== OperatorClass.None) break;
-
-      const currY = this.system.posY[k];
-      if (count > 0) {
-        // Continuity Check: stop if posY jumps (indicates a different sequence/sentence)
-        if (direction === 1 && currY <= lastY) break;
-        if (direction === -1 && currY >= lastY) break;
-      }
 
       const m = this.system.mass[k] || 1.0;
       x += this.system.posX[k] * m;
@@ -1057,8 +1076,11 @@ export default class Resolver implements Resolution.Engine {
       w += this.system.posW[k] * m;
       totalMass += m;
       count++;
-      lastY = currY;
-      k += direction;
+
+      k =
+        direction === 1
+          ? this.system.PartLayer[k]
+          : this.system.ComplexLayer[k];
     }
 
     if (totalMass > 0) {
@@ -1076,25 +1098,18 @@ export default class Resolver implements Resolution.Engine {
    */
   public collectSequence(startId: number, direction: 1 | -1): Uint32Array {
     const ids: number[] = [];
-    const length = this.system.length;
     let k = startId;
-    let lastY = -1;
 
-    while (k >= 0 && k < length) {
+    while (k !== 0 && this.system.isAllocated(k)) {
       if (this.system.operatorClass[k] !== OperatorClass.None) break;
 
-      const currY = this.system.posY[k];
-      if (ids.length > 0) {
-        // Continuity Check: stop if posY jumps
-        if (direction === 1 && currY <= lastY) break;
-        if (direction === -1 && currY >= lastY) break;
+      if (direction === 1) {
+        ids.push(k);
+        k = this.system.PartLayer[k];
+      } else {
+        ids.unshift(k);
+        k = this.system.ComplexLayer[k];
       }
-
-      if (direction === 1) ids.push(k);
-      else ids.unshift(k);
-
-      lastY = currY;
-      k += direction;
     }
     return new Uint32Array(ids);
   }

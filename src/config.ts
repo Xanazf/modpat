@@ -66,6 +66,8 @@ const DOPAT_CONFIG = {
     /** Grid cell size for the DuckDB covering index on (grid_x, grid_y, grid_z, grid_w).
      *  R = ceil(VAULT_QUERY_THRESHOLD / GRID_CELL) cells are searched per axis. */
     GRID_CELL: 0.05,
+    USAGE_WEIGHT: 3,
+    FEEDBACK_BOOST: 1.2,
   },
 
   structural: {
@@ -146,7 +148,7 @@ const SYSTEM_CONFIG = {
   },
   DOD_EMBEDDING: {
     LOGIC_OFFSET: 0,
-    SEMANTIC_OFFSET: 96,
+    SEMANTIC_OFFSET: 1024,
     BASE_FREQUENCY: 1.0,
     GLOVE_PATH:
       "data/wiki_giga_2024_50_MFT20_vectors_seed_123_alpha_0.75_eta_0.075_combined.txt",

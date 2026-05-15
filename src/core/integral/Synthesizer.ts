@@ -48,7 +48,7 @@ export default class Synthesizer {
 
     for (let p = 1; p < patterns.length; p++) {
       const inner = patterns[p].template;
-      accumulated = this.fillFirstContinuationSlot(
+      accumulated = this.fillAllContinuationSlots(
         accumulated,
         slotFlags,
         inner
@@ -60,10 +60,12 @@ export default class Synthesizer {
 
   /**
    * Finds the first VAR_N in the template whose SlotType has the Body or
-   * Condition bit set, and replaces it with the provided inner template.
-   * If no continuation slot is found, appends to the last open block.
+   * Condition bit set, and replaces ALL occurrences of that VAR token with
+   * the provided inner template. This ensures a token used more than once
+   * (e.g. a recursive call) is fully substituted.
+   * If no continuation slot is found, appends inner before the last closing brace.
    */
-  private fillFirstContinuationSlot(
+  private fillAllContinuationSlots(
     outer: string,
     slotFlags: bigint,
     inner: string
@@ -76,11 +78,8 @@ export default class Synthesizer {
       const varId = parseInt(match[1], 10);
       const st = this.slotTypeFor(varId, slotFlags);
       if (st & SlotType.Body || st & SlotType.Condition) {
-        return (
-          outer.slice(0, match.index) +
-          inner +
-          outer.slice(match.index + match[0].length)
-        );
+        const escaped = match[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return outer.replace(new RegExp(escaped, "g"), inner);
       }
     }
 

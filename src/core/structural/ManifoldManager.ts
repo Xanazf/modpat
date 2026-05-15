@@ -2,6 +2,7 @@ import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import { OperatorClass, SystemRef } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
+import { DeltaQueue } from "@core_s/DeltaQueue";
 import type { TargetBuffer } from "@core_i/System";
 import type { SystemPersistence } from "./Persistence";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
@@ -225,8 +226,10 @@ export class ManifoldManager {
   /** Promise tracking the current hydration process. */
   private stabilityPromise: Promise<void> | null = null;
 
-  /** Phase 4: Async fetched knowledge pending safe synchronous ingestion on the next tick. */
-  private pendingDreams: string[] = [];
+  /** Typed delta queue — the only path through which async code mutates the manifold. */
+  private readonly deltaQueue = new DeltaQueue(
+    DOPAT_CONFIG.structural.DELTA_QUEUE_MAX
+  );
   /** Guard preventing concurrent dream cycles. */
   private isDreaming: boolean = false;
   /** External knowledge expansion engine for Phase 4 (Subconscious Void Expansion). */
@@ -422,10 +425,8 @@ export class ManifoldManager {
   private async dreamCycle(): Promise<void> {
     if (this.isDreaming || !this.unfolder) return;
 
-    // Shed load when the delta queue is full — prevents burst of concurrent fetches.
-    if (
-      this.pendingDreams.length >= DOPAT_CONFIG.structural.PENDING_DREAMS_MAX
-    ) {
+    // Shed load when the delta queue is filling up — prevents fetch bursts.
+    if (this.deltaQueue.length >= DOPAT_CONFIG.structural.PENDING_DREAMS_MAX) {
       metrics.increment("dream.queue_full");
       return;
     }
@@ -440,7 +441,7 @@ export class ManifoldManager {
 
     this.isDreaming = true;
     try {
-      const VACUUM_THRESHOLD = DOPAT_CONFIG.DRIFT_THRESHOLD * 0.001;
+      const VACUUM_THRESHOLD = sys.c * 0.01;
 
       // Collect high-mass action anchors (conceptually active operators)
       const actionAnchors: number[] = [];
@@ -461,7 +462,7 @@ export class ManifoldManager {
         if (!sys.isAllocated(i)) continue;
         if (sys.operatorClass[i] !== OperatorClass.None) continue;
         if (
-          sys.entropyRate[i] < 5.0 ||
+          sys.entropyRate[i] < 1e-6 ||
           Math.abs(sys.mass[i]) < VACUUM_THRESHOLD
         )
           continue;
@@ -482,7 +483,13 @@ export class ManifoldManager {
 
         const content = await this.unfolder.fetchContent(token);
         if (content) {
-          this.pendingDreams.push(content);
+          this.deltaQueue.post({
+            kind: "ingest",
+            text: content,
+            basePosX: sys.posX[i],
+            basePosY: sys.posY[i],
+            factDisplacementZ: 0,
+          });
           metrics.increment("dream.ingested");
         }
         return; // One tension zone per cycle
@@ -525,16 +532,6 @@ export class ManifoldManager {
 
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
 
-        // EXACT MATCH FUSION, epsilon comparison guards against float drift
-        if (Math.abs(sys.scope[i] - sys.scope[j]) < 1e-9 && distSq < 0.0001) {
-          // i absorbs j
-          sys.mass[i] += sys.mass[j];
-          sys.depth[i] += sys.depth[j];
-          sys.freeLocation(j, "exact_match_fusion");
-          sys.update(i, "fusion");
-          continue;
-        }
-
         // ORBITAL CLUSTERING (Semantic Proximity)
         const ORBIT_RADIUS_SQ = DOPAT_CONFIG.mapper.ORBIT_RADIUS_SQ; // Threshold for similar meaning
         if (distSq < ORBIT_RADIUS_SQ) {
@@ -542,23 +539,82 @@ export class ManifoldManager {
           const root = sys.mass[i] > sys.mass[j] ? i : j;
           const satellite = root === i ? j : i;
 
-          // Gently shift satellite towards root in all 4 dimensions (Gravity)
-          const pull = 0.1 * dt; // Attenuation factor
+          // Gently shift satellite towards root in Matter dimension (Gravity)
+          // Attenuation factor (scaled to seconds to prevent oscillation at high FPS)
+          const pull = 0.1 * (dt / 1000);
           sys.posX[satellite] += (sys.posX[root] - sys.posX[satellite]) * pull;
-          sys.posY[satellite] += (sys.posY[root] - sys.posY[satellite]) * pull;
-          sys.posZ[satellite] += (sys.posZ[root] - sys.posZ[satellite]) * pull;
-          sys.posW[satellite] += (sys.posW[root] - sys.posW[satellite]) * pull;
 
-          // Blend Scope via setScope to keep the scope index consistent.
-          // setScope only calls update() when scope actually changes; the
-          // explicit update() below ensures the checksum reflects pos* changes
-          // even when the scope value is unchanged (floating-point equality).
-          const blendedScope =
-            sys.scope[satellite] +
-            (sys.scope[root] - sys.scope[satellite]) * pull * 0.5;
-          sys.setScope(satellite, blendedScope);
+          // Update the satellite to reflect coordinate shifts.
           sys.update(satellite, "orbital_clustering");
         }
+      }
+    }
+  }
+
+  /**
+   * Post a typed delta for safe deferred application inside the next tick().
+   * Use this from any async context instead of writing to the manifold directly.
+   */
+  public postDelta(delta: Delta.Any): void {
+    this.deltaQueue.post(delta);
+  }
+
+  private applyDelta(delta: Delta.Any): void {
+    switch (delta.kind) {
+      case "ingest": {
+        if (!this.unfolder) break;
+        const newIds = this.unfolder.ingestContent(
+          delta.text,
+          this.activeSystem
+        );
+        const jitter = DOPAT_CONFIG.structural.DREAM_POS_X_JITTER;
+        for (let k = 0; k < newIds.length; k++) {
+          const id = newIds[k];
+          if (!this.activeSystem.isAllocated(id)) continue;
+          this.activeSystem.decayRate[id] = 0.05;
+          if (delta.basePosX !== 0 || delta.basePosY !== 0) {
+            const j = (Math.random() - 0.5) * jitter;
+            this.activeSystem.posX[id] = delta.basePosX + j;
+            this.activeSystem.posY[id] += delta.basePosY;
+            this.activeSystem.posZ[id] += delta.factDisplacementZ;
+            this.activeSystem.update(id);
+          }
+        }
+        break;
+      }
+      case "update": {
+        switch (delta.field) {
+          case "mass":
+            this.activeSystem.mass[delta.id] = delta.value;
+            break;
+          case "posX":
+            this.activeSystem.posX[delta.id] = delta.value;
+            break;
+          case "posY":
+            this.activeSystem.posY[delta.id] = delta.value;
+            break;
+          case "posZ":
+            this.activeSystem.posZ[delta.id] = delta.value;
+            break;
+          case "posW":
+            this.activeSystem.posW[delta.id] = delta.value;
+            break;
+          case "decayRate":
+            this.activeSystem.decayRate[delta.id] = delta.value;
+            break;
+          case "depth":
+            this.activeSystem.depth[delta.id] = delta.value;
+            break;
+          case "time":
+            this.activeSystem.time[delta.id] = delta.value;
+            break;
+        }
+        this.activeSystem.update(delta.id);
+        break;
+      }
+      case "free": {
+        this.activeSystem.freeLocation(delta.id, "delta_queue");
+        break;
       }
     }
   }
@@ -578,24 +634,15 @@ export class ManifoldManager {
     metrics.onTick();
     metrics.gauge("system.length", this.activeSystem.length);
     metrics.gauge("system.free_list_size", this.activeAllocator.length);
-    metrics.gauge("delta_queue.length", this.pendingDreams.length);
+    metrics.gauge("delta_queue.length", this.deltaQueue.length);
+
+    // Drain the typed delta queue — the sole write path from all async producers.
+    for (const delta of this.deltaQueue.drain()) {
+      this.applyDelta(delta);
+    }
 
     // Apply temporal decay across the manifold
     this.activeSystem.decay(dt);
-
-    // Phase 4: Atomically apply dreamt knowledge fetched during the last idle cycle.
-    // Runs in the same sync block as decay to guarantee no race with the Resolver.
-    if (this.pendingDreams.length > 0 && this.unfolder) {
-      const dream = this.pendingDreams.shift()!;
-      const newIds = this.unfolder.ingestContent(dream, this.activeSystem);
-      // Dreamt nodes start with an elevated decay rate so irrelevant content GCs itself.
-      for (let k = 0; k < newIds.length; k++) {
-        const id = newIds[k];
-        if (this.activeSystem.isAllocated(id)) {
-          this.activeSystem.decayRate[id] = 0.05;
-        }
-      }
-    }
 
     // Consolidate similar patterns
     this.consolidationRoutine(dt);

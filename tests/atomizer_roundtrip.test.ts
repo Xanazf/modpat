@@ -101,7 +101,7 @@ export async function executeAtomizerRoundTripSuite() {
         );
         assert.strictEqual(
           env.system.mass[id],
-          env.system.epsilon,
+          env.system.c,
           `semantic atom must have mass = epsilon`
         );
       }

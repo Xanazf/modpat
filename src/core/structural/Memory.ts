@@ -99,7 +99,8 @@ export default class Store implements Memory.Vault {
         grid_x INTEGER,
         grid_y INTEGER,
         grid_z INTEGER,
-        grid_w INTEGER
+        grid_w INTEGER,
+        usage_count INTEGER DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_wave_sig ON wave_forms (signature);
 
@@ -120,6 +121,7 @@ export default class Store implements Memory.Vault {
       "grid_y INTEGER",
       "grid_z INTEGER",
       "grid_w INTEGER",
+      "usage_count INTEGER DEFAULT 0",
     ]) {
       try {
         await this._connection.run(
@@ -438,16 +440,18 @@ export default class Store implements Memory.Vault {
       gz = this.gridKey(qz),
       gw = this.gridKey(qw);
 
+    const uw = DOPAT_CONFIG.memory.USAGE_WEIGHT;
     const stmt = await this._connection.prepare(`
-      SELECT target_pattern, slot_flags,
-             (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2) + pow(anchor_w - ?, 2)) as resonance
+      SELECT target_pattern, slot_flags, signature AS matched_sig,
+             (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2) + pow(anchor_w - ?, 2)) as resonance,
+             net_energy * (1 + LN(1 + COALESCE(usage_count, 0)) * ${uw}) AS combined_score
       FROM wave_forms
       WHERE signature = ?
         AND (grid_x IS NULL OR grid_x BETWEEN ? AND ?)
         AND (grid_y IS NULL OR grid_y BETWEEN ? AND ?)
         AND (grid_z IS NULL OR grid_z BETWEEN ? AND ?)
         AND (grid_w IS NULL OR grid_w BETWEEN ? AND ?)
-      ORDER BY resonance ASC
+      ORDER BY resonance ASC, combined_score DESC
       LIMIT 1
     `);
     try {
@@ -468,13 +472,27 @@ export default class Store implements Memory.Vault {
       const res = await stmt.runAndReadAll();
       const rows = res.getRows();
       if (rows && rows.length > 0) {
-        const resonance = Number(rows[0][2]);
+        const resonance = Number(rows[0][3]);
         // Tight Resonance Threshold:
         // A distance < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD indicates the query is physically targeting the same logical entity.
         // A larger distance suggests a structural coincidence but a different topological identity.
         if (resonance < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD) {
           targetPattern = rows[0][0]?.toString() || null;
           slotFlags = BigInt(String(rows[0][1] ?? "0"));
+          const matchedSig = rows[0][2]?.toString() ?? null;
+          if (matchedSig) {
+            // Fire-and-forget: increment usage count without blocking the retrieval.
+            const conn = this._connection;
+            const sig = matchedSig;
+            (async () => {
+              const upd = await conn.prepare(
+                `UPDATE wave_forms SET usage_count = COALESCE(usage_count, 0) + 1 WHERE signature = ?`
+              );
+              upd.bindVarchar(1, sig);
+              await upd.run();
+              upd.destroySync();
+            })().catch(() => {});
+          }
         }
       }
     } catch (err) {
@@ -575,11 +593,56 @@ export default class Store implements Memory.Vault {
   }
 
   /**
+   * Applies a multiplicative decay to usage_count across all stored patterns.
+   * Called from cullWeakWaveForms so older popular patterns don't permanently dominate.
+   */
+  public async decayUsageCounts(): Promise<void> {
+    const rate = DOPAT_CONFIG.memory.USAGE_DECAY_RATE;
+    await this._connection.run(
+      `UPDATE wave_forms SET usage_count = CAST(COALESCE(usage_count, 0) * ${rate} AS INTEGER) WHERE COALESCE(usage_count, 0) > 0`
+    );
+  }
+
+  /**
+   * Adjusts the usage_count of all wave forms matching the given signature.
+   * Pass a positive delta for positive feedback (FEEDBACK_BOOST), or 0 to zero out
+   * (negative feedback — let decay remove it, don't delete immediately).
+   */
+  public async adjustUsageCount(
+    signature: string,
+    delta: number
+  ): Promise<void> {
+    if (delta <= 0) {
+      const stmt = await this._connection.prepare(
+        `UPDATE wave_forms SET usage_count = 0 WHERE signature = ?`
+      );
+      try {
+        stmt.bindVarchar(1, signature);
+        await stmt.run();
+      } finally {
+        stmt.destroySync();
+      }
+    } else {
+      const stmt = await this._connection.prepare(
+        `UPDATE wave_forms SET usage_count = COALESCE(usage_count, 0) + ? WHERE signature = ?`
+      );
+      try {
+        stmt.bindInteger(1, Math.round(delta));
+        stmt.bindVarchar(2, signature);
+        await stmt.run();
+      } finally {
+        stmt.destroySync();
+      }
+    }
+  }
+
+  /**
    * Periodically clears out cached patterns that have accumulated zero or negative energy.
    * This permanently removes "hallucinated" or incorrect logical paths.
    */
   public async cullWeakWaveForms(): Promise<void> {
     await this._connection.run("DELETE FROM wave_forms WHERE net_energy <= 0");
+    await this.decayUsageCounts();
   }
 
   /**

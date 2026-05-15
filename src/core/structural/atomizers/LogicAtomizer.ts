@@ -48,6 +48,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
       .filter(s => s.length > 0);
 
     const sequenceIds = new Uint32Array(tokens.length);
+    let prevId = 0; // NULL
 
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
@@ -56,7 +57,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
       // 1. Calculate Logical Mass (m = E/c^2).
       // Operators are massive attractors that define the "gravitational" field of the statement.
       // Variables are near-weightless particles that flow between these attractors.
-      let mass = isOperator ? system.c ** 2 : system.epsilon;
+      let mass = isOperator ? system.c ** 2 : system.c;
 
       // Right-directional operators (conclusions) are modeled with Negative Mass.
       // This repels the current logic path, forcing it to "fall" toward a new state.
@@ -69,6 +70,14 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
 
       // 3. Materialize the token as a physical location in the System manifold.
       const id = system.createLocation(mass, scope);
+
+      // Link sequence continuity
+      if (prevId !== 0) {
+        system.PartLayer[prevId] = id;
+        system.ComplexLayer[id] = prevId;
+      }
+      prevId = id;
+
       system.operatorClass[id] = classifyOperatorToken(token);
       sequenceIds[i] = id;
 

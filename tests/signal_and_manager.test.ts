@@ -1,7 +1,9 @@
 import assert from "node:assert";
 import { OperatorClass } from "@core_i/System";
+import { DOPAT_CONFIG } from "@config";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldManager, TMRFreeList } from "@core_s/ManifoldManager";
+import { DeltaQueue } from "@core_s/DeltaQueue";
 import { SystemPersistence } from "@core_s/Persistence";
 import type SpectralAtomizer from "@atomics/SpectralAtomizer";
 import logger from "@utils/SpectralLogger";
@@ -164,8 +166,8 @@ export async function executeSignalManagerSuite() {
       logger.log(
         `  [Decay] Precept ${decayingId} - Initial Mass: ${startMass.toFixed(2)}, Age: ${startAge}`
       );
-      logger.log("  [Decay] Advancing system time (dt=50.0)...");
-      env.system.decay(50.0);
+      logger.log("  [Decay] Advancing system time (dt=50000.0)...");
+      env.system.decay(50000.0);
 
       const finalMass = env.system.mass[decayingId];
       const finalAge = env.system.time[decayingId];
@@ -184,7 +186,7 @@ export async function executeSignalManagerSuite() {
       );
 
       env.system.decayRate[decayingId] = 1.0;
-      env.system.decay(1.0);
+      env.system.decay(1000.0);
       logger.log(
         `  [Decay] Spatial position drifted from ${startX} to ${env.system.posX[decayingId].toFixed(2)}`
       );
@@ -275,6 +277,65 @@ export async function executeSignalManagerSuite() {
         undefined,
         "halted allocator must continue to return undefined"
       );
+    });
+
+    // ── Track 6 — DeltaQueue concurrency model ──
+
+    await it("Test 8: DeltaQueue unit — drain returns all posted records and resets length", async () => {
+      const dq = new DeltaQueue(100);
+      assert.strictEqual(dq.length, 0);
+
+      dq.post({ kind: "free", id: 1 });
+      dq.post({ kind: "free", id: 2 });
+      dq.post({ kind: "update", id: 0, field: "mass", value: 99 });
+      assert.strictEqual(dq.length, 3);
+
+      const batch = dq.drain();
+      assert.strictEqual(batch.length, 3);
+      assert.strictEqual(dq.length, 0, "length resets to 0 after drain");
+
+      const second = dq.drain();
+      assert.strictEqual(
+        second.length,
+        0,
+        "drain on empty queue returns empty array"
+      );
+    });
+
+    await it("Test 9: ManifoldManager — FreeDelta is buffered until tick()", async () => {
+      const base2 = await TestHarness.getEnvironment("base");
+      const emergency2 = (await TestHarness.getEnvironment("base")).system;
+      const dbCtx2 = new DatabaseContext(":memory:");
+      const dbConn2 = await dbCtx2.connect();
+      const persistence2 = new SystemPersistence(dbConn2);
+      const manager2 = new ManifoldManager(
+        base2.system,
+        emergency2,
+        persistence2
+      );
+
+      const id = base2.system.createLocation(base2.system.c ** 2, 0);
+      assert.ok(
+        base2.system.isAllocated(id),
+        "precept must be allocated before posting delta"
+      );
+
+      manager2.postDelta({ kind: "free", id });
+
+      assert.ok(
+        base2.system.isAllocated(id),
+        "FreeDelta must NOT take effect before tick()"
+      );
+
+      manager2.tick(DOPAT_CONFIG.DELTA);
+
+      assert.ok(
+        !base2.system.isAllocated(id),
+        "FreeDelta must take effect inside tick()"
+      );
+
+      await dbCtx2.close();
+      await TestHarness.disposeEnvironment(base2);
     });
 
     await dbCtx.close();

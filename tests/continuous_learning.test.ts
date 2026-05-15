@@ -83,7 +83,7 @@ export async function executeContinuousLearningSuite() {
 
       let merged = false;
       for (let i = 0; i < 1000 && !merged; i++) {
-        manager.tick(0.1);
+        manager.tick(1.1);
         if (!sys.isAllocated(id1) || !sys.isAllocated(id2)) merged = true;
       }
       await manager.waitForStability();
@@ -128,7 +128,7 @@ export async function executeContinuousLearningSuite() {
       let posWCorrected = false;
 
       for (let i = 0; i < 1000; i++) {
-        manager.tick(0.1);
+        manager.tick(1.1);
         if (!sys.isAllocated(satId)) break;
         if (
           Math.abs(sys.scope[satId] - rootScope) <

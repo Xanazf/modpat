@@ -20,6 +20,7 @@ import { executeUnfolderSuite } from "./unfolder.test";
 import { TestHarness } from "./utils/harness";
 import { runRigorousTraps as executeLogicTrapsSuite } from "./verbose_logic_traps.test";
 import { executeCodeSynthesisSuite } from "./code_synthesis.test";
+import { executeEnduranceSuite } from "./endurance.test";
 
 async function run() {
   program
@@ -61,6 +62,7 @@ async function run() {
     await executeCodeSynthesisSuite();
     await runGroundingTests();
     await executeAtomizerRoundTripSuite();
+    await executeEnduranceSuite();
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

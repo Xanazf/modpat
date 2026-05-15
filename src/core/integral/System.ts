@@ -354,7 +354,7 @@ class System implements Root.ManifoldView {
    */
   constructor() {
     validateConfig();
-    this.length = 0;
+    this.length = 1; // Reserve index 0 as NULL
     const maxP = DOPAT_CONFIG.MAX_PRECEPTS;
 
     // View Cache initialization (14 properties * max precepts)
@@ -626,6 +626,8 @@ class System implements Root.ManifoldView {
     this.checksum[id] = 0;
     this.operatorClass[id] = OperatorClass.None;
     this.slotType[id] = SlotType.None;
+    this.PartLayer[id] = 0;
+    this.ComplexLayer[id] = 0;
 
     // Invalidate view cache for this ID.
     const maxP = DOPAT_CONFIG.MAX_PRECEPTS;
@@ -778,10 +780,10 @@ class System implements Root.ManifoldView {
 
       const rate = this.decayRate[i] || 0.01;
 
-      // Age increases based on the decay constant.
-      this.time[i] += rate * deltaTime;
-      // Matter decays exponentially over time.
-      this.mass[i] *= Math.exp(-rate * deltaTime);
+      // Age increases based on the decay constant (scaled to seconds).
+      this.time[i] += rate * (deltaTime / 1000);
+      // Matter decays exponentially over time (scaled to seconds).
+      this.mass[i] *= Math.exp(-rate * (deltaTime / 1000));
 
       // Thermodynamic Forgetting (Topological Pruning)
       // If a precept's mass drops below the vacuum threshold and its entropy is critically high,

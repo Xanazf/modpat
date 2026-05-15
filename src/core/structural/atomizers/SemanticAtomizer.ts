@@ -121,6 +121,7 @@ export default class SemanticAtomizer
 
     const sequenceIds = new Uint32Array(tokens.length);
     let currentLoom = 1.0;
+    let prevId = 0; // NULL
 
     // 2. Physical Materialization
     for (let i = 0; i < tokens.length; i++) {
@@ -132,11 +133,11 @@ export default class SemanticAtomizer
       else if (norm === "(") currentLoom = 0.5;
       else if (norm === ")") currentLoom = 1.5;
       else if (norm === "{") currentLoom = 2.0;
-      else if (norm === "}") currentLoom = 3.0;
+      if (norm === "}") currentLoom = 3.0;
       else if (norm === "executable_code") currentLoom = 4.0;
       else if (norm === "|-") currentLoom = 5.0;
 
-      let mass = isOp ? system.c ** 2 : system.epsilon;
+      let mass = isOp ? system.c ** 2 : system.c;
       if (isPlural) mass *= 1.5;
 
       const scope = this.getSymbolScope(norm);
@@ -144,6 +145,13 @@ export default class SemanticAtomizer
       // We ALWAYS create a new location during sequence ingestion to preserve
       // the unique physical identity of each token in the functional chain.
       const id = system.createLocation(mass, scope);
+
+      // Link sequence continuity
+      if (prevId !== 0) {
+        system.PartLayer[prevId] = id;
+        system.ComplexLayer[id] = prevId;
+      }
+      prevId = id;
 
       let opClass = classifyOperatorToken(text);
       if (opClass === OperatorClass.None && isVerb) {
@@ -203,7 +211,7 @@ export default class SemanticAtomizer
         }
       }
       // Apply cap relative to the initial mass so the multiplier never exceeds MAX_INHERITANCE_MASS_FACTOR.
-      const baseMassForCap = isOp ? system.c ** 2 : system.epsilon;
+      const baseMassForCap = isOp ? system.c ** 2 : system.c;
       system.mass[id] = Math.min(
         system.mass[id],
         baseMassForCap * DOPAT_CONFIG.atomizer.MAX_INHERITANCE_MASS_FACTOR

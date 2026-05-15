@@ -39,6 +39,19 @@ const BIGRAM_VOCABULARY = new Set([
   "language_model",
 ]);
 
+/**
+ * Two-group code-intent classifier: a query must match BOTH the verb phrase
+ * group AND the code-noun group to be routed to resolveCodeSynthesis.
+ */
+const CODE_INTENT_PATTERNS = [
+  /\b(write|generate|create|implement|show me how to|how (?:do|would) (?:i|you))\b/i,
+  /\b(function|method|class|code|snippet|example)\b/i,
+];
+
+function isCodeIntent(query: string): boolean {
+  return CODE_INTENT_PATTERNS.every(p => p.test(query));
+}
+
 /** Maps JS/TS binary operator symbols to semantic intent words. */
 const OPERATOR_INTENT: Record<string, string> = {
   "+": "addition",
@@ -293,6 +306,7 @@ export class LiveInference {
     if (/^(no|incorrect|wrong|that'?s wrong|false)\b/i.test(query)) {
       if (this.last_signature) {
         await this.store.adjustEnergy(this.last_signature, -0.5);
+        await this.store.adjustUsageCount(this.last_signature, 0);
         const response =
           "Feedback acknowledged. Structural confidence reduced.";
         this.respond(response);
@@ -302,6 +316,10 @@ export class LiveInference {
     if (/^(yes|correct|right|true)\b/i.test(query)) {
       if (this.last_signature) {
         await this.store.adjustEnergy(this.last_signature, 0.1);
+        await this.store.adjustUsageCount(
+          this.last_signature,
+          DOPAT_CONFIG.memory.FEEDBACK_BOOST
+        );
         const response =
           "Feedback acknowledged. Structural confidence increased.";
         this.respond(response);
@@ -329,6 +347,27 @@ export class LiveInference {
    */
   public async processQuestion(query: string): Promise<string> {
     const sanitizedQuery = query.replace(/\?$/, "").trim();
+
+    // Code-intent routing: if the query reads like "write a function that X",
+    // route it through resolveCodeSynthesis by appending the Sink operator.
+    // Falls through to normal resolution if synthesis returns nothing.
+    if (isCodeIntent(sanitizedQuery)) {
+      const syntheticQuery = sanitizedQuery + " |-";
+      const syntheticQuanta = this.atomizer.ingestSequence(
+        syntheticQuery,
+        this.system
+      );
+      const synthesisPath =
+        await this.resolver.resolveSequence(syntheticQuanta);
+      const synthesisResult = this.atomizer
+        .decodeSequence(synthesisPath, this.system)
+        .trim();
+      if (synthesisResult && synthesisResult !== "unknown") {
+        metrics.increment("resolution.code_synthesis.hit");
+        this.respond(`[Code Synthesis]: ${synthesisResult}`);
+        return synthesisResult;
+      }
+    }
 
     let topologicalQuery = sanitizedQuery;
     const whatIsMatch = sanitizedQuery.match(/what is (.*)/i);
