@@ -103,6 +103,7 @@ function classifyOperatorToken(token: string): OperatorClass {
     case "implies":
     case "=>":
     case "is":
+    case "am": // first-person singular present of "to be"
     case "are":
     case "was":
     case "were":
@@ -475,7 +476,7 @@ class System implements Root.ManifoldView {
    * Clears the manifold and resets all allocation pointers.
    */
   public reset(): void {
-    this.length = 0;
+    this.length = 1; // Reserve index 0 as NULL, same as the constructor.
     this.freeList = [];
     this.scopeIndex.clear();
     // Clear entire buffer to zero.

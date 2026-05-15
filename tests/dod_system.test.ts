@@ -91,9 +91,11 @@ async function testMemoryFreeList(system: System) {
   const id2 = system.createLocation(20, 2);
   const id3 = system.createLocation(30, 3);
 
-  assert.strictEqual(id1, 0);
-  assert.strictEqual(id2, 1);
-  assert.strictEqual(id3, 2);
+  // ID 0 is the NULL sentinel (reserved by reset() same as the constructor).
+  // Real allocations start from ID 1.
+  assert.strictEqual(id1, 1);
+  assert.strictEqual(id2, 2);
+  assert.strictEqual(id3, 3);
 
   system.freeLocation(id2);
 

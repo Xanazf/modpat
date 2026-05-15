@@ -148,7 +148,6 @@ export class SystemPersistence {
     }
 
     const length = parseInt(meta.get("length") ?? "0", 10);
-    system.reset();
 
     const dataRes = await this.connection.run(
       "SELECT * FROM precepts ORDER BY id ASC"
@@ -157,6 +156,9 @@ export class SystemPersistence {
 
     if (!dataRows) return;
 
+    // Validate all ids before touching the system so a bad snapshot never
+    // leaves the manifold in a half-reset state (system.reset() is irreversible
+    // and the caller cannot restore the previous state after it fires).
     for (const row of dataRows) {
       const id = Number(row[0]);
       if (id < 0 || id >= DOPAT_CONFIG.MAX_PRECEPTS) {
@@ -165,6 +167,12 @@ export class SystemPersistence {
             `Increase MAX_PRECEPTS or reduce the snapshot.`
         );
       }
+    }
+
+    system.reset();
+
+    for (const row of dataRows) {
+      const id = Number(row[0]);
       system.mass[id] = Number(row[1]);
       system.scope[id] = Number(row[2]);
       system.depth[id] = Number(row[3]);

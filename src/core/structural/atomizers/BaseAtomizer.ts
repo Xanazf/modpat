@@ -2,6 +2,36 @@ import { SYSTEM_CONFIG } from "@src/config";
 import { UMAPLoader } from "@core_s/UMAPLoader";
 
 /**
+ * All first-person pronouns are normalised to their canonical form before scope
+ * computation.  This gives every "I", "me", "my", "we", "us" etc. the same scope
+ * value — they constructively interfere in the resonance matrix and share the
+ * same self-concept attractor in the manifold topology.
+ *
+ * The canonical form is "i" so that decoding a self-scope precept always returns
+ * a recognisable, human-readable token.
+ */
+const PRONOUN_CANONICAL = new Map<string, string>([
+  // First person — canonical self
+  ["i", "i"],
+  ["me", "i"],
+  ["my", "i"],
+  ["myself", "i"],
+  ["mine", "i"],
+  ["we", "i"],
+  ["us", "i"],
+  ["our", "i"],
+  ["ours", "i"],
+  ["ourselves", "i"],
+  // Second person — in this system "you" is always the system itself, so it
+  // shares the same scope as "i".  Any fact about "you" constructively interferes
+  // with self-facts in the resonance matrix.
+  ["you", "i"],
+  ["your", "i"],
+  ["yourself", "i"],
+  ["yours", "i"],
+]);
+
+/**
  * BaseAtomizer: Foundational logic for symbol-to-topology mapping.
  * It manages the "Heat Field" of available symbols and their base frequencies,
  * acting as the primary translator between discrete language and continuous manifold properties.
@@ -53,7 +83,9 @@ export abstract class BaseAtomizer {
    * @returns The calculated physical scope (frequency).
    */
   public getSymbolScope(symbol: string, isOperator: boolean): number {
-    const idx = this.getSymbolIdx(symbol);
+    const norm = symbol.toLowerCase().trim();
+    const canonical = PRONOUN_CANONICAL.get(norm) ?? norm;
+    const idx = this.getSymbolIdx(canonical);
     // Guard: operator indices must stay below the semantic band to prevent scope collisions.
     // Increase SEMANTIC_OFFSET in config if this fires.
     if (isOperator && idx >= SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET) {

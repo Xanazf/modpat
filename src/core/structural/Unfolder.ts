@@ -1,6 +1,9 @@
+import path from "node:path";
+import { createRequire } from "node:module";
 import type System from "@core_i/System";
 import { SystemRef } from "@core_i/System";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
+import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { DOPAT_CONFIG } from "@config";
 import wiki from "wikipedia";
@@ -47,6 +50,140 @@ interface CTX7_ContextResponse {
   infoSnippets: CTX7_InfoSnippet[];
 }
 
+// ── DictionaryExpander ────────────────────────────────────────────────────────
+// WordNet-based local expansion: fast, offline, no network.  Tried first inside
+// Unfolder.expand(); Wikipedia / Context7 is the fallback when the word is not
+// in the dictionary or produces no useful cluster.
+
+function resolveWordNetPath(): string {
+  const req = createRequire(import.meta.url);
+  const wnPkg = req.resolve("en-wordnet/package.json");
+  return path.join(path.dirname(wnPkg), "database", "3.1");
+}
+
+export interface DictionaryExpansion {
+  found: boolean;
+  word: string;
+  definitions: string[];
+  synonyms: string[];
+}
+
+/**
+ * Wraps WordNet (via en-dictionary) to cluster unknown words by their
+ * definitions and synonyms.  Ingests facts into the manifold so future
+ * resonance passes can traverse the semantic cluster.
+ */
+export class DictionaryExpander {
+  private dict: import("en-dictionary").default | null = null;
+  private readonly initPromise: Promise<void>;
+
+  constructor() {
+    this.initPromise = this._init();
+  }
+
+  private async _init(): Promise<void> {
+    try {
+      const { default: Dictionary } = await import("en-dictionary");
+      this.dict = new Dictionary(resolveWordNetPath());
+      await this.dict.init();
+    } catch {
+      // Dictionary is optional; Unfolder falls back to Wikipedia when unavailable.
+    }
+  }
+
+  public get isReady(): boolean {
+    return this.dict !== null;
+  }
+
+  public async waitForInit(): Promise<void> {
+    return this.initPromise;
+  }
+
+  public async expand(
+    word: string,
+    system: Root.ManifoldView,
+    atomizer: Atomic.Engine,
+    store?: Store
+  ): Promise<DictionaryExpansion> {
+    const result: DictionaryExpansion = {
+      found: false,
+      word,
+      definitions: [],
+      synonyms: [],
+    };
+    if (!this.dict) return result;
+
+    const norm = word.toLowerCase().trim().replace(/\s+/g, "_");
+    if (norm.length < 2) return result;
+
+    let searchResult: Map<string, Map<string, any>>;
+    try {
+      searchResult = this.dict.searchFor([norm]);
+    } catch {
+      return result;
+    }
+
+    const posEntries = searchResult.get(norm);
+    if (!posEntries?.size) return result;
+
+    for (const [, entry] of posEntries) {
+      for (const data of entry?.offsetData ?? []) {
+        const def = data.glossary?.[0]
+          ?.replace(/["']/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (def && !result.definitions.includes(def))
+          result.definitions.push(def);
+
+        for (const ptr of data.pointers ?? []) {
+          if (
+            ptr.offset === 0 &&
+            typeof ptr.symbol === "string" &&
+            /^[a-z][a-z\-_ ]*$/i.test(ptr.symbol) &&
+            ptr.symbol.toLowerCase() !== norm
+          ) {
+            const syn = ptr.symbol.replace(/_/g, " ").toLowerCase();
+            if (!result.synonyms.includes(syn)) result.synonyms.push(syn);
+          }
+        }
+      }
+    }
+
+    if (!result.definitions.length && !result.synonyms.length) return result;
+    result.found = true;
+
+    const seen = new Set<string>();
+    const wordStr = norm.replace(/_/g, " ");
+
+    for (const def of result.definitions.slice(0, 3)) {
+      const fact = `${wordStr} is ${def.split(" ").slice(0, 8).join(" ")}`;
+      if (!seen.has(fact)) {
+        seen.add(fact);
+        const ids = atomizer.ingestSequence(fact, system);
+        if (store) await store.crystallizeProof(ids, ids, 0.8);
+      }
+    }
+
+    for (const syn of result.synonyms.slice(0, 6)) {
+      for (const [a, b] of [
+        [wordStr, syn],
+        [syn, wordStr],
+      ] as const) {
+        const fact = `${a} is ${b}`;
+        if (!seen.has(fact)) {
+          seen.add(fact);
+          const ids = atomizer.ingestSequence(fact, system);
+          if (store) await store.crystallizeProof(ids, ids, 0.9);
+        }
+      }
+    }
+
+    return result;
+  }
+}
+
+// ── Unfolder sources ──────────────────────────────────────────────────────────
+
 export interface SearchResult {
   title?: string;
   link?: string;
@@ -91,6 +228,8 @@ export default class Unfolder {
   }
   private atomizer: SemanticAtomizer;
   private expandCount: number = 0;
+  /** Local dictionary: tried first in expand() before any network fetch. */
+  public readonly dictionary = new DictionaryExpander();
   /**
    * Optional delta sink. When set (by ManifoldManager.setUnfolder()), expand()
    * posts a Delta.Ingest instead of writing to the manifold directly — ensuring
@@ -116,13 +255,29 @@ export default class Unfolder {
    * Delta.Ingest records and applied during the next tick(). Otherwise falls
    * back to direct manifold writes for standalone / test usage.
    */
-  public async expand(voidPreceptId: number, topic?: string): Promise<boolean> {
+  public async expand(
+    voidPreceptId: number,
+    topic?: string,
+    store?: Store
+  ): Promise<boolean> {
     const activeTopic =
       topic ||
       this.atomizer
         .decodeSequence(new Uint32Array([voidPreceptId]), this.system)
         .trim();
 
+    // Fast path: local WordNet dictionary (offline, ~milliseconds).
+    if (this.dictionary.isReady) {
+      const dictResult = await this.dictionary.expand(
+        activeTopic,
+        this.system,
+        this.atomizer,
+        store
+      );
+      if (dictResult.found) return true;
+    }
+
+    // Slow path: Wikipedia / Context7 (network, seconds).
     const fullContent = await this.fetchContent(activeTopic);
     if (!fullContent) return false;
 

@@ -55,6 +55,45 @@ declare namespace PMath {
 }
 
 declare namespace Memory {
+  const enum KnowledgeState {
+    Heard = 0,
+    Remembered = 1,
+    Learned = 2,
+    Generalized = 3,
+  }
+
+  interface ChallengeCandidate {
+    factText: string;
+    signature: string;
+    targetPattern: string;
+    reproductionCount: number;
+    knowledgeState: KnowledgeState;
+    contextHash: string;
+  }
+
+  interface ChallengeResult {
+    success: boolean;
+    reproduced: string;
+    expected: string;
+    contextHash: string;
+    coherence: number;
+    /** Actions taken by the coherence loop during this challenge. */
+    learned: string[];
+  }
+
+  interface ValidationReport {
+    challenged: number;
+    promoted: number;
+    failed: number;
+    expandedTopics: string[];
+    summary: {
+      heard: number;
+      remembered: number;
+      learned: number;
+      generalized: number;
+    };
+  }
+
   interface Vault {
     abstractSequence(sequenceIds: Uint32Array): {
       signature: string;
@@ -72,6 +111,20 @@ declare namespace Memory {
 
     signatureForText(text: string): string;
     rawFactExists(fact: string): Promise<boolean>;
+
+    sampleForChallenge(limit: number): Promise<ChallengeCandidate[]>;
+    updateKnowledgeState(
+      signature: string,
+      state: KnowledgeState,
+      repCount: number,
+      ctxHash: string
+    ): Promise<void>;
+    getKnowledgeSummary(): Promise<{
+      heard: number;
+      remembered: number;
+      learned: number;
+      generalized: number;
+    }>;
 
     flush(): Promise<void>;
     close?(): Promise<void>;

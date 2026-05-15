@@ -633,6 +633,23 @@ __metadata:
   languageName: node
   linkType: hard
 
+"en-dictionary@npm:^2.0.3":
+  version: 2.0.3
+  resolution: "en-dictionary@npm:2.0.3"
+  dependencies:
+    en-wordnet: "npm:^2.0.11"
+    reiterator: "npm:^1.1.4"
+  checksum: 10c0/cecc391f882792518199a8ddf42c3b6680891b43d7194b67345c6919fe23262dd2b4d9fb906b0229ac8911416300ffd3c46087c714a0ff3211763d2fb23a17b1
+  languageName: node
+  linkType: hard
+
+"en-wordnet@npm:^2.0.11":
+  version: 2.0.11
+  resolution: "en-wordnet@npm:2.0.11"
+  checksum: 10c0/2e16933c4c07143d6dbda9f0b67b2a4857668be34b45a80fa3f6790cd5ca6c9d3bd5ff322c7457011166c6c4f96b1f28f1b2b1825957fccedfc7d14afbffe1b9
+  languageName: node
+  linkType: hard
+
 "env-paths@npm:^2.2.0":
   version: 2.2.1
   resolution: "env-paths@npm:2.2.1"
@@ -1175,6 +1192,7 @@ __metadata:
     chalk: "npm:^5.6.2"
     commander: "npm:^14.0.3"
     compromise: "npm:^14.15.0"
+    en-dictionary: "npm:^2.0.3"
     ring-buffer-ts: "npm:^1.2.0"
     tsx: "npm:^4.21.0"
     typescript: "npm:^6.0.3"
@@ -1269,6 +1287,13 @@ __metadata:
   version: 1.2.3
   resolution: "pure-conditions@npm:1.2.3"
   checksum: 10c0/f97d368cce472906cd60dc2299e1c214dfe2e212e420182d66212f43217f2adfbfa9c07e85f008a407e77f7faeb7102c1c5850e946dcd47168b936d9c7aefd39
+  languageName: node
+  linkType: hard
+
+"reiterator@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "reiterator@npm:1.1.4"
+  checksum: 10c0/b44c01d52ba0a373f1f96a7957fcecb08a93eb15efdcfc4c3f5986ef6e0f6c461a690aadf9ff8df9e060402298c3515c204d0e00389fac80994066d4c3fbdcc6
   languageName: node
   linkType: hard
 

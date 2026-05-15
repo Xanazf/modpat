@@ -10,7 +10,8 @@ export async function executeStressSuite() {
     await it("Stress Test: System Capacity Overflow", async () => {
       const sys = env.system;
       sys.reset();
-      for (let i = 0; i < DOPAT_CONFIG.MAX_PRECEPTS; i++) {
+      // ID 0 is the NULL sentinel, so there are MAX_PRECEPTS-1 usable slots.
+      for (let i = 0; i < DOPAT_CONFIG.MAX_PRECEPTS - 1; i++) {
         sys.createLocation(1.0, 1.0);
       }
       assert.throws(() => {

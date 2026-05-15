@@ -31,7 +31,11 @@ export async function executePersistenceSuite() {
       await env.system.snapshot(persistence);
 
       env.system.reset();
-      assert.strictEqual(env.system.length, 0);
+      assert.strictEqual(
+        env.system.length,
+        1,
+        "reset() must reserve the NULL slot (id=0)"
+      );
 
       await env.system.hydrate(persistence);
 

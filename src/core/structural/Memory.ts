@@ -122,6 +122,9 @@ export default class Store implements Memory.Vault {
       "grid_z INTEGER",
       "grid_w INTEGER",
       "usage_count INTEGER DEFAULT 0",
+      "knowledge_state INTEGER DEFAULT 0",
+      "reproduction_count INTEGER DEFAULT 0",
+      "context_hash VARCHAR DEFAULT ''",
     ]) {
       try {
         await this._connection.run(
@@ -643,6 +646,98 @@ export default class Store implements Memory.Vault {
   public async cullWeakWaveForms(): Promise<void> {
     await this._connection.run("DELETE FROM wave_forms WHERE net_energy <= 0");
     await this.decayUsageCounts();
+  }
+
+  /**
+   * Returns up to `limit` crystallized facts that haven't yet been reproduced
+   * independently, ordered by lowest reproduction_count first so the least-proven
+   * facts are challenged before well-established ones.
+   */
+  public async sampleForChallenge(
+    limit: number
+  ): Promise<Memory.ChallengeCandidate[]> {
+    const stmt = await this._connection.prepare(`
+      SELECT r.fact, w.signature, w.target_pattern,
+             COALESCE(w.reproduction_count, 0) AS reproduction_count,
+             COALESCE(w.knowledge_state, 0)    AS knowledge_state,
+             COALESCE(w.context_hash, '')       AS context_hash
+      FROM raw_facts r
+      JOIN wave_forms w ON r.signature = w.signature
+      WHERE COALESCE(w.knowledge_state, 0) < 2
+        AND w.net_energy > 0
+        AND r.fact IS NOT NULL AND LENGTH(r.fact) > 0
+      ORDER BY COALESCE(w.reproduction_count, 0) ASC, w.net_energy DESC
+      LIMIT ?
+    `);
+    try {
+      stmt.bindInteger(1, limit);
+      const res = await stmt.runAndReadAll();
+      return res.getRows().map(row => ({
+        factText: String(row[0] ?? ""),
+        signature: String(row[1] ?? ""),
+        targetPattern: String(row[2] ?? ""),
+        reproductionCount: Number(row[3] ?? 0),
+        knowledgeState: Number(row[4] ?? 0) as Memory.KnowledgeState,
+        contextHash: String(row[5] ?? ""),
+      }));
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /**
+   * Updates the knowledge state, reproduction count, and context fingerprints
+   * for a crystallized wave form identified by signature.
+   */
+  public async updateKnowledgeState(
+    signature: string,
+    state: Memory.KnowledgeState,
+    repCount: number,
+    ctxHash: string
+  ): Promise<void> {
+    const stmt = await this._connection.prepare(`
+      UPDATE wave_forms
+      SET knowledge_state    = ?,
+          reproduction_count = ?,
+          context_hash       = ?
+      WHERE signature = ?
+    `);
+    try {
+      stmt.bindInteger(1, state);
+      stmt.bindInteger(2, repCount);
+      stmt.bindVarchar(3, ctxHash);
+      stmt.bindVarchar(4, signature);
+      await stmt.run();
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /**
+   * Returns a count of crystallized proofs per knowledge state tier.
+   */
+  public async getKnowledgeSummary(): Promise<{
+    heard: number;
+    remembered: number;
+    learned: number;
+    generalized: number;
+  }> {
+    const res = await this._connection.run(`
+      SELECT COALESCE(knowledge_state, 0) AS ks, COUNT(*) AS cnt
+      FROM wave_forms
+      GROUP BY ks
+    `);
+    const rows = (await res.getRows()) as [number | bigint, number | bigint][];
+    const map: Record<number, number> = {};
+    for (const [ks, cnt] of rows) {
+      map[Number(ks)] = Number(cnt);
+    }
+    return {
+      heard: map[0] ?? 0,
+      remembered: map[1] ?? 0,
+      learned: map[2] ?? 0,
+      generalized: map[3] ?? 0,
+    };
   }
 
   /**

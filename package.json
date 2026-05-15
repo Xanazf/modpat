@@ -4,6 +4,7 @@
   "packageManager": "yarn@4.12.0",
   "scripts": {
     "test": "tsx tests/runTests.ts",
+    "repl": "tsx scripts/repl.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write ."
@@ -15,6 +16,7 @@
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "compromise": "^14.15.0",
+    "en-dictionary": "^2.0.3",
     "ring-buffer-ts": "^1.2.0",
     "typescript": "^6.0.3",
     "wikipedia": "^2.4.2"

@@ -9,6 +9,53 @@ import Synthesizer from "./Synthesizer";
 import System, { OperatorClass, SlotType, SystemRef } from "./System";
 import { GridIndex4D } from "../structural/GridIndex4D";
 
+/**
+ * Result returned by resolveCoherent: the best answer found, a coherence score,
+ * how many iterations it took, what actions the loop took, and why it stopped.
+ */
+export interface CoherentResult {
+  /** The best answer IDs found (empty if the wave never converged). */
+  ids: Uint32Array;
+  /**
+   * Coherence score in [0, 1]: amplitude (normalised sink strength) multiplied by
+   * contrast (how far ahead the winner is of the second-best candidate).
+   * Values >= COHERENCE_THRESHOLD are considered a found answer.
+   */
+  coherence: number;
+  /** Number of resolveSequence passes executed. */
+  iterations: number;
+  /**
+   * Human-readable log of actions taken during the convergence loop:
+   * void expansions, conflict notes, reinforcement boosts.
+   */
+  learned: string[];
+  /**
+   * Why the loop stopped:
+   *  - "coherent"  — score crossed COHERENCE_THRESHOLD (answer found)
+   *  - "void"      — manifold lacks relevant topology; expansion attempted if available
+   *  - "conflict"  — two competing answers with similar strength; ambiguous
+   *  - "weak"      — one answer but weakly supported; reinforced and accepted
+   *  - "exhausted" — max iterations reached without crossing threshold
+   */
+  diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
+}
+
+/** A token found by resonance-peak analysis to exhibit operator-like wave topology. */
+export interface DiscoveredOperator {
+  /** Manifold ID of the promoted token. */
+  id: number;
+  /** Index within the resolved sequence (0..N-1). */
+  idx: number;
+  /** Human-readable label decoded from the manifold. */
+  label: string;
+  /** Operator class inferred from the resonance signature. */
+  inferredClass: OperatorClass;
+  /** Confidence score in [0, 1]: higher outbound ratio → higher confidence. */
+  confidence: number;
+  /** Fraction of total flow leaving this node (outbound / (outbound + incoming)). */
+  outboundRatio: number;
+}
+
 export interface ResolverDiagnostics {
   N: number;
   tokenLabels: string[];
@@ -31,6 +78,8 @@ export interface ResolverDiagnostics {
   }>;
   selectedTargetIdx: number;
   maxNetEnergy: number;
+  /** Operators discovered from wave resonance peaks during this resolution pass. */
+  discoveredOperators: DiscoveredOperator[];
 }
 
 /**
@@ -81,6 +130,10 @@ export default class Resolver implements Resolution.Engine {
   public lastSinkStrength = 0;
   /** Full diagnostic snapshot from the most recent resolveSequence physics run. */
   public lastDiagnostics: ResolverDiagnostics | null = null;
+  /** Operators discovered via resonance-peak analysis during the most recent resolveSequence call. */
+  public lastDiscoveredOperators: DiscoveredOperator[] = [];
+  /** When true, resolveSequence skips Phase 0 (vault) and Phase 1 (NLP derivation). */
+  private probeMode = false;
 
   /**
    * Initializes the Resolver and pre-allocates scratchpad memory for DOD performance.
@@ -147,13 +200,17 @@ export default class Resolver implements Resolution.Engine {
   }
 
   /**
-   * Sets or updates the Unfolder engine used by the resolver's internal mapper.
+   * Sets or updates the Unfolder engine used by the resolver's internal mapper
+   * and by the resolver itself for automatic void expansion on weak results.
    *
    * @param unfolder The unfolder engine.
    */
   public setUnfolder(unfolder: Unfolder): void {
+    this.unfolder = unfolder;
     this.mapper.setUnfolder(unfolder);
   }
+
+  private unfolder: Unfolder | null = null;
 
   /**
    * Disposes of GPU resources and clean up the engine state.
@@ -162,6 +219,23 @@ export default class Resolver implements Resolution.Engine {
     if (this.gpu) {
       await this.gpu.dispose();
       this.gpu = null;
+    }
+  }
+
+  /**
+   * Runs the physics simulation (Phases 2–7) without consulting the vault (Phase 0)
+   * or the NLP derivation rules (Phase 1). Used by SelfTeacher to test whether the
+   * system can independently reproduce a result from manifold topology alone.
+   *
+   * @param sequenceIds The input sequence of quantum IDs (should end with a Sink token).
+   * @returns The physics-derived conclusion sequence.
+   */
+  public async probeSequence(sequenceIds: Uint32Array): Promise<Uint32Array> {
+    this.probeMode = true;
+    try {
+      return await this.resolveSequence(sequenceIds);
+    } finally {
+      this.probeMode = false;
     }
   }
 
@@ -208,8 +282,10 @@ export default class Resolver implements Resolution.Engine {
     }
 
     if (queryOpClass === OperatorClass.IdentityShift && subjectIds.length > 0) {
-      // Check if this logical interference pattern has already been crystallized.
-      if (this.store) {
+      // Phase 0a: Vault cache — skip in probe mode.
+      // Probe mode tests "can I derive this from manifold topology alone?" so
+      // crystallized cached proofs must be bypassed.
+      if (!this.probeMode && this.store) {
         const cached = await this.store.checkInterferencePattern(sequenceIds);
         if (cached && cached.ids.length > 0) {
           logger.debug(
@@ -219,7 +295,10 @@ export default class Resolver implements Resolution.Engine {
         }
       }
 
-      // Perform a multi-token semantic lookup in the manifold.
+      // Phase 0b: Manifold semantic lookup — always runs, even in probe mode.
+      // This scans the live ingested token graph (scope index, ring buffer, fuzzy
+      // centroid) and is precisely what "reproducing on my own" means: using
+      // topology I built from facts I ingested, not a cached answer.
       const result = this.resolveMultiTokenSemanticLookup(
         subjectIds,
         queryOpId
@@ -229,16 +308,21 @@ export default class Resolver implements Resolution.Engine {
         `[DEBUG RESOLVER] Phase 0 matched IDs: ${result.join(",")}, words: ${this.atomizer.decodeSequence(result, this.system)}`
       );
 
-      // Crystallize the new proof into memory if a valid result was found.
-      if (this.store && result.length > 0) {
-        await this.store.crystallizeProof(sequenceIds, result, 1.0);
+      if (result.length > 0) {
+        // Crystallize only in normal mode — probe mode is read-only.
+        if (!this.probeMode && this.store) {
+          await this.store.crystallizeProof(sequenceIds, result, 1.0);
+        }
+        return result;
       }
-
-      return result;
+      // Empty result: fall through to Phase 1/2 physics so the wave simulation
+      // gets a chance to derive the answer from the manifold topology.
     }
 
     // Phase 1: Semantic Derivation (NLP-based logic rules).
-    const derivation = this.resolveSemanticDerivation(sequenceIds);
+    const derivation = this.probeMode
+      ? null
+      : this.resolveSemanticDerivation(sequenceIds);
     if (derivation) return derivation;
 
     // Phase 2: Physics Simulation (Resolution Matrix).
@@ -434,6 +518,16 @@ export default class Resolver implements Resolution.Engine {
       `[DEBUG RESOLVER] Accumulated Resonance (first row): ${Array.from(accumulatedResonance.subarray(0, N))}`
     );
 
+    // Phase 3.5: Operator Discovery via resonance-peak analysis.
+    // Scan tokens still classified as None and check whether their resonance topology
+    // (outbound vs incoming energy distribution) betrays operator-like behaviour.
+    // Discoveries update operatorClass and mass in the manifold for future resolutions.
+    this.lastDiscoveredOperators = this.discoverOperatorsByResonance(
+      sequenceIds,
+      N,
+      accumulatedResonance
+    );
+
     // If no explicit Sink node (|-) was provided, return the original sequence.
     if (sinkNodeIdx === -1) return sequenceIds;
 
@@ -494,6 +588,7 @@ export default class Resolver implements Resolution.Engine {
         .slice(0, 5),
       selectedTargetIdx: targetNodeIdx,
       maxNetEnergy,
+      discoveredOperators: this.lastDiscoveredOperators,
     };
 
     logger.debug(
@@ -760,6 +855,329 @@ export default class Resolver implements Resolution.Engine {
     }
 
     return this.atomizer.ingestSequence("unknown", this.system);
+  }
+
+  /**
+   * Scans the accumulated resonance matrix for tokens still classified as
+   * OperatorClass.None whose wave topology reveals operator-like behaviour.
+   *
+   * Operators are wave hubs: they distribute more energy than they absorb
+   * (high outbound resonance ratio). Operands are sinks: energy converges
+   * into them (low outbound ratio). Any None-class token sitting at a local
+   * amplitude peak of outbound flow is a candidate for promotion.
+   *
+   * Tokens promoted above OPERATOR_DISCOVERY_CONFIDENCE_THRESHOLD have their
+   * operatorClass and mass updated in the manifold so future geodesics and
+   * resonance passes treat them as proper massive attractor bodies.
+   *
+   * @param sequenceIds The current resolution sequence.
+   * @param N Length of the sequence.
+   * @param accumulated N×N accumulated resonance matrix (row-major, Phase 3 output).
+   * @returns All discovered operators (both below and above confidence threshold).
+   */
+  private discoverOperatorsByResonance(
+    sequenceIds: Uint32Array,
+    N: number,
+    accumulated: Float64Array
+  ): DiscoveredOperator[] {
+    const cfg = DOPAT_CONFIG.resolver;
+    const eps = this.system.epsilon;
+    const discovered: DiscoveredOperator[] = [];
+
+    for (let i = 0; i < N; i++) {
+      const id = sequenceIds[i];
+      if (this.system.operatorClass[id] !== OperatorClass.None) continue;
+
+      // Compute total outbound and incoming resonance for this node.
+      let outbound = 0;
+      let incoming = 0;
+      for (let j = 0; j < N; j++) {
+        if (j === i) continue;
+        outbound += Math.abs(accumulated[i * N + j]);
+        incoming += Math.abs(accumulated[j * N + i]);
+      }
+
+      const totalFlow = outbound + incoming;
+      if (totalFlow < cfg.OPERATOR_DISCOVERY_MIN_FLOW) continue;
+
+      const ratio = outbound / (totalFlow + eps);
+
+      // The lensing rule writes W[(lens-1)*N + (lens+1)] — a direct outbound edge
+      // FROM the token to the LEFT of an IdentityShift/Quantifier.  That injects
+      // outbound flow that has nothing to do with the token's own logical role, so
+      // its outbound ratio is artificially inflated.  Skip it.
+      const rightNeighborClass =
+        i < N - 1
+          ? this.system.operatorClass[sequenceIds[i + 1]]
+          : OperatorClass.None;
+      if (
+        rightNeighborClass === OperatorClass.IdentityShift ||
+        rightNeighborClass === OperatorClass.Quantifier
+      )
+        continue;
+
+      // Classify by outbound ratio, restricted to interior positions.
+      // Boundary tokens (i=0, i=N-1) are skipped: edge positions carry
+      // start/end-of-sequence bias that inflates their outbound ratios artificially.
+      let inferredClass = OperatorClass.None;
+      if (i > 0 && i < N - 1) {
+        if (ratio >= cfg.OPERATOR_DISCOVERY_OUTBOUND_THRESHOLD) {
+          // Strongly routing — bridges two semantic clusters like "is", "causes",
+          // "implies".  Classify as IdentityShift (the canonical bridge operator).
+          inferredClass = OperatorClass.IdentityShift;
+        } else if (ratio >= cfg.OPERATOR_DISCOVERY_CONJUNCTION_THRESHOLD) {
+          // Balanced relay — connects concepts without strongly redirecting,
+          // like "along with", "plus", "while".
+          inferredClass = OperatorClass.Conjunction;
+        }
+      }
+
+      if (inferredClass === OperatorClass.None) continue;
+
+      discovered.push({
+        id,
+        idx: i,
+        label: this.atomizer
+          .decodeSequence(new Uint32Array([id]), this.system)
+          .trim(),
+        inferredClass,
+        confidence: ratio,
+        outboundRatio: ratio,
+      });
+    }
+
+    // Apply high-confidence discoveries to the manifold.
+    // Promotes operatorClass and elevates mass to c² so the token becomes a
+    // proper massive attractor body in future resonance and geodesic passes.
+    for (const d of discovered) {
+      if (d.confidence < cfg.OPERATOR_DISCOVERY_CONFIDENCE_THRESHOLD) continue;
+      this.system.operatorClass[d.id] = d.inferredClass;
+      this.system.mass[d.id] = this.system.c ** 2;
+      this.system.update(d.id, "operator_discovery");
+      logger.debug(
+        `[OPERATOR DISCOVERY] "${d.label}" → ${OperatorClass[d.inferredClass]}` +
+          ` (outbound_ratio=${d.outboundRatio.toFixed(3)},` +
+          ` confidence=${d.confidence.toFixed(3)})`
+      );
+    }
+
+    return discovered;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Coherent Resolution Loop
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Resolves a sequence by iterating until the wave collapses to a coherent
+   * answer or the system learns from the attempt.
+   *
+   * Each iteration:
+   *  1. Runs resolveSequence (or probeSequence in probe mode).
+   *  2. Measures coherence = amplitude × contrast from lastDiagnostics.
+   *  3. If coherence >= COHERENCE_THRESHOLD → returns the answer.
+   *  4. Otherwise diagnoses WHY the wave didn't collapse:
+   *       "void"     → no resonance; expand topic via Unfolder, retry.
+   *       "conflict" → two equally strong sinks; note ambiguity, stop.
+   *       "weak"     → one sink but under-energised; reinforce vault, accept.
+   *  5. Accumulates a log of what actions were taken (the "learned" field).
+   *
+   * Callers that want intelligent resolution should prefer this over raw
+   * resolveSequence.  probeMode=true skips vault cache AND void expansion
+   * (probe mode tests manifold-only inference without external help).
+   */
+  public async resolveCoherent(
+    sequenceIds: Uint32Array,
+    opts: { probeMode?: boolean; maxIterations?: number } = {}
+  ): Promise<CoherentResult> {
+    const maxIter =
+      opts.maxIterations ?? DOPAT_CONFIG.resolver.COHERENCE_MAX_ITERS;
+    const threshold = DOPAT_CONFIG.resolver.COHERENCE_THRESHOLD;
+    const contrastMin = DOPAT_CONFIG.resolver.COHERENCE_CONTRAST;
+    const inProbe = opts.probeMode ?? false;
+
+    const learned: string[] = [];
+    let bestIds: Uint32Array = new Uint32Array(0);
+    let bestCoherence = 0;
+    let finalDiagnosis: CoherentResult["diagnosis"] = "exhausted";
+    let iter = 0;
+
+    for (; iter < maxIter; iter++) {
+      // One resolution pass.
+      const ids = inProbe
+        ? await this.probeSequence(sequenceIds)
+        : await this.resolveSequence(sequenceIds);
+
+      const diag = this.lastDiagnostics;
+      const coherence = this.measureCoherence(diag);
+
+      if (coherence > bestCoherence) {
+        bestCoherence = coherence;
+        bestIds = ids;
+      }
+
+      // Converged?
+      if (coherence >= threshold) {
+        finalDiagnosis = "coherent";
+        iter++;
+        break;
+      }
+
+      if (!diag) {
+        finalDiagnosis = "void";
+        break;
+      }
+
+      // Diagnose and act.
+      const dx = this.diagnoseLowCoherence(diag, contrastMin);
+
+      if (dx === "void") {
+        finalDiagnosis = "void";
+        if (inProbe) break; // probe mode is read-only; no expansion
+        const topic = this.extractContentWords(sequenceIds);
+        if (!topic) break;
+
+        // Route: known_word → already resolved above.
+        //        unknown_word → dictionary first (fast, local, offline),
+        //                       then Unfolder (Wikipedia/Context7) as fallback.
+        let expanded = false;
+
+        // The Unfolder tries its internal dictionary first, then Wikipedia.
+        if (!expanded && this.unfolder) {
+          const voidId = this.placeVoidAtCentroid(sequenceIds);
+          logger.debug(
+            `[COHERENCE] iter=${iter} void → unfolder expanding "${topic}"…`
+          );
+          const unfolded = await this.unfolder.expand(voidId, topic);
+          if (unfolded) {
+            expanded = true;
+            learned.push(`expanded "${topic}"`);
+          }
+        }
+
+        if (!expanded) break;
+        // Continue: next iteration sees a richer manifold.
+      } else if (dx === "conflict") {
+        finalDiagnosis = "conflict";
+        const a = diag.sinkCandidates[0]?.label ?? "?";
+        const b = diag.sinkCandidates[1]?.label ?? "?";
+        learned.push(`conflict: "${a}" vs "${b}"`);
+        logger.debug(
+          `[COHERENCE] iter=${iter} conflict between "${a}" and "${b}"`
+        );
+        break; // Cannot auto-resolve without user context.
+      } else {
+        // "weak" — one answer, under-energised.
+        finalDiagnosis = "weak";
+        if (!inProbe && this.store) {
+          const { signature } = this.store.abstractSequence(sequenceIds);
+          await this.store.adjustEnergy(signature, 0.2);
+          const label = diag.sinkCandidates[0]?.label ?? "?";
+          learned.push(`reinforced "${label}"`);
+          logger.debug(`[COHERENCE] iter=${iter} weak → reinforced "${label}"`);
+        }
+        // Weak is still an answer; accept the best we have.
+        break;
+      }
+    }
+
+    // If we never got anything meaningful, fall back to "unknown".
+    if (bestIds.length === 0) {
+      bestIds = this.atomizer.ingestSequence("unknown", this.system);
+    }
+
+    return {
+      ids: bestIds,
+      coherence: bestCoherence,
+      iterations: iter,
+      learned,
+      diagnosis: finalDiagnosis,
+    };
+  }
+
+  /**
+   * Coherence = amplitude × contrast, both in [0, 1].
+   *
+   * Amplitude captures how strongly the wave peaked at all (normalised sink
+   * strength).  Contrast captures how unambiguous the winner is relative to the
+   * runner-up.  Both must be high for the wave to be considered "collapsed".
+   */
+  private measureCoherence(diag: ResolverDiagnostics | null): number {
+    if (!diag || diag.maxNetEnergy <= 0 || diag.sinkCandidates.length === 0)
+      return 0;
+    const best = diag.sinkCandidates[0].strength;
+    if (best <= 0) return 0;
+    // Amplitude: normalise via sigmoid so arbitrarily large values still sit in [0,1).
+    const amplitude = diag.maxNetEnergy / (1 + diag.maxNetEnergy);
+    // Contrast: fraction of combined top-2 energy belonging to the winner.
+    const second = diag.sinkCandidates[1]?.strength ?? 0;
+    const contrast = second <= 0 ? 1.0 : best / (best + second);
+    return amplitude * contrast;
+  }
+
+  /** Returns "void", "conflict", or "weak" based on diagnostics. */
+  private diagnoseLowCoherence(
+    diag: ResolverDiagnostics,
+    contrastMin: number
+  ): "void" | "conflict" | "weak" {
+    if (diag.maxNetEnergy <= 0 || diag.sinkCandidates.length === 0)
+      return "void";
+    const best = diag.sinkCandidates[0].strength;
+    const second = diag.sinkCandidates[1]?.strength ?? 0;
+    if (second > 0 && best / second < contrastMin) return "conflict";
+    return "weak";
+  }
+
+  /** Decodes non-operator tokens in the sequence to a topic string. */
+  private extractContentWords(sequenceIds: Uint32Array): string {
+    const nonOpIds: number[] = [];
+    for (let i = 0; i < sequenceIds.length; i++) {
+      const id = sequenceIds[i];
+      if (
+        this.system.isAllocated(id) &&
+        this.system.operatorClass[id] === OperatorClass.None
+      )
+        nonOpIds.push(id);
+    }
+    return this.atomizer
+      .decodeSequence(new Uint32Array(nonOpIds), this.system)
+      .trim();
+  }
+
+  /**
+   * Creates a void precept at the 4D centroid of the query's content words.
+   * The Unfolder anchors new knowledge near this point so it participates in
+   * future resonance for the same concept.
+   */
+  private placeVoidAtCentroid(sequenceIds: Uint32Array): number {
+    const nonOpIds: number[] = [];
+    for (let i = 0; i < sequenceIds.length; i++) {
+      const id = sequenceIds[i];
+      if (
+        this.system.isAllocated(id) &&
+        this.system.operatorClass[id] === OperatorClass.None
+      )
+        nonOpIds.push(id);
+    }
+    let ax = 0,
+      ay = 0,
+      az = 0,
+      aw = 0;
+    for (const id of nonOpIds) {
+      ax += this.system.posX[id];
+      ay += this.system.posY[id];
+      az += this.system.posZ[id];
+      aw += this.system.posW[id];
+    }
+    const n = Math.max(1, nonOpIds.length);
+    const voidScope = this.atomizer.getSymbolScope("void", false);
+    const voidId = this.system.createLocation(-this.system.c, voidScope);
+    this.system.posX[voidId] = ax / n;
+    this.system.posY[voidId] = ay / n;
+    this.system.posZ[voidId] = az / n;
+    this.system.posW[voidId] = aw / n;
+    this.system.update(voidId);
+    return voidId;
   }
 
   /**
