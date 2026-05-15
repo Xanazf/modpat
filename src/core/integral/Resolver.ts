@@ -267,20 +267,72 @@ export default class Resolver implements Resolution.Engine {
       }
 
       // Gravitational Lenses: Identity shifts and quantifiers bend the logic path.
+      // Lens strength is proportional to operator mass / c², so higher-mass operators
+      // (e.g. future arithmetic '*' vs '+') naturally create stronger lenses — this is
+      // the "wave direction / meta-heat-map": the wave bends harder at massive operators.
       if (i > 0 && i < N - 1) {
         if (
           opClass === OperatorClass.IdentityShift ||
           opClass === OperatorClass.Quantifier
         ) {
-          // Allow energy to bypass the operator and flow directly between adjacent concepts.
-          transferMatrix[(i - 1) * N + (i + 1)] =
-            DOPAT_CONFIG.resolver.W_LENSING;
+          const massRatio = Math.abs(this.system.mass[id]) / this.system.c ** 2;
+          const lensStrength = massRatio * DOPAT_CONFIG.resolver.W_LENSING;
+          transferMatrix[(i - 1) * N + (i + 1)] = lensStrength;
           logger.debug(
             `[DEBUG RESOLVER] Gravitational Lens at ${i} bypassing to ${i + 1}`
           );
         } else if (opClass === OperatorClass.Inversion) {
           // Phase Inversion: Negation causes destructive interference (-1.0).
           transferMatrix[i * N + (i + 1)] = DOPAT_CONFIG.resolver.W_DESTRUCTIVE;
+        }
+      }
+    }
+
+    // Anti-particle back-propagation through implications.
+    //
+    // When ¬B is present (Inversion at i, negated scope S at i+1), and there
+    // is an implication A→B (IdentityShift at j with consequent scope S at j+1),
+    // the destructive wave propagates BACKWARD through the lens:
+    //   W[B_pos][A_pos] = −W_LENSING
+    //
+    // This models the anti-particle: ¬B flows through the A→B lens in reverse,
+    // making A accumulate negative incoming energy.  The most-negatively-affected
+    // non-directly-negated operand is the modus-tollens conclusion (¬A).
+    //
+    // ¬¬A does not match here because the second ¬ negates an operator token, not a
+    // semantic one, so no IdentityShift consequent is found and no edge is written.
+    {
+      const eps = DOPAT_CONFIG.resolver.SCOPE_EPSILON;
+      for (let i = 0; i < N - 1; i++) {
+        if (
+          this.system.operatorClass[sequenceIds[i]] !== OperatorClass.Inversion
+        )
+          continue;
+        // Only consider semantic (non-operator) negated tokens: operators are part of
+        // structural patterns (like ¬¬A) and must not trigger modus-tollens back-prop.
+        if (
+          this.system.operatorClass[sequenceIds[i + 1]] !== OperatorClass.None
+        )
+          continue;
+        const negatedScope = this.system.scope[sequenceIds[i + 1]];
+        for (let j = 1; j < N - 1; j++) {
+          if (
+            this.system.operatorClass[sequenceIds[j]] ===
+              OperatorClass.IdentityShift &&
+            j + 1 < N - 1
+          ) {
+            if (
+              Math.abs(this.system.scope[sequenceIds[j + 1]] - negatedScope) <
+              eps
+            ) {
+              const bPos = j + 1;
+              const aPos = j - 1;
+              const backVal = -DOPAT_CONFIG.resolver.W_LENSING;
+              if (transferMatrix[bPos * N + aPos] > backVal) {
+                transferMatrix[bPos * N + aPos] = backVal;
+              }
+            }
+          }
         }
       }
     }
@@ -431,6 +483,48 @@ export default class Resolver implements Resolution.Engine {
     logger.debug(
       `[DEBUG RESOLVER] Max Net Energy: ${maxNetEnergy}, Target Node Index: ${targetNodeIdx}`
     );
+
+    // Negated-conclusion detection (modus tollens via back-propagated anti-particle wave).
+    //
+    // If back-propagation was active (at least one Inversion in the query), check whether
+    // there is a non-directly-negated operand whose incoming energy has gone significantly
+    // negative.  That operand is the inferred ¬A from A→B, ¬B ⊢ ¬A.
+    //
+    // Condition: the directly-negated operands (scope appears right after an Inversion) are
+    // excluded — they are the *given* negation, not the *inferred* one.  The most-negatively-
+    // affected remaining operand is the new inference.  We return [not_token, that_operand].
+    {
+      const eps = DOPAT_CONFIG.resolver.SCOPE_EPSILON;
+      const directlyNegatedScopes = new Set<number>();
+      let inversionTokenId = -1;
+      for (let i = 0; i < N - 1; i++) {
+        if (
+          this.system.operatorClass[sequenceIds[i]] ===
+            OperatorClass.Inversion &&
+          this.system.operatorClass[sequenceIds[i + 1]] === OperatorClass.None
+        ) {
+          directlyNegatedScopes.add(this.system.scope[sequenceIds[i + 1]]);
+          if (inversionTokenId === -1) inversionTokenId = sequenceIds[i];
+        }
+      }
+      if (inversionTokenId !== -1 && directlyNegatedScopes.size > 0) {
+        let minStrength = -DOPAT_CONFIG.resolver.SCOPE_EPSILON; // must be meaningfully negative
+        let negatedConclusionId = -1;
+        for (const c of allSinkCandidates) {
+          const isDirectlyNegated = [...directlyNegatedScopes].some(
+            s => Math.abs(this.system.scope[c.id] - s) < eps
+          );
+          if (!isDirectlyNegated && c.strength < minStrength) {
+            minStrength = c.strength;
+            negatedConclusionId = c.id;
+          }
+        }
+        if (negatedConclusionId !== -1) {
+          this.lastSinkStrength = Math.abs(minStrength);
+          return new Uint32Array([inversionTokenId, negatedConclusionId]);
+        }
+      }
+    }
 
     // If no stable conclusion resonated, handle Code Trigger or return "unknown".
     if (maxNetEnergy <= 0) {

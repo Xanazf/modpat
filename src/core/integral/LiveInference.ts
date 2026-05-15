@@ -11,6 +11,34 @@ import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import logger from "@utils/SpectralLogger";
 import Unfolder from "@core_s/Unfolder";
 
+/**
+ * Fixed vocabulary of known technical bigrams that should be treated as single heat nodes.
+ * Extend this set as new compound terms become relevant; keeping it bounded prevents
+ * quadratic scan overhead during heat-node extraction.
+ */
+const BIGRAM_VOCABULARY = new Set([
+  "machine_learning",
+  "neural_network",
+  "binary_tree",
+  "hash_map",
+  "linked_list",
+  "decision_tree",
+  "random_forest",
+  "natural_language",
+  "deep_learning",
+  "reinforcement_learning",
+  "gradient_descent",
+  "back_propagation",
+  "transfer_learning",
+  "convolutional_network",
+  "recurrent_network",
+  "attention_mechanism",
+  "transformer_model",
+  "knowledge_graph",
+  "vector_database",
+  "language_model",
+]);
+
 /** Maps JS/TS binary operator symbols to semantic intent words. */
 const OPERATOR_INTENT: Record<string, string> = {
   "+": "addition",
@@ -348,13 +376,31 @@ export class LiveInference {
     }
 
     // Identify Heat Nodes (keywords) to find resonance in the topology.
+    // Issue C — bigram detection: extract known multi-word compounds as single heat nodes
+    // before the whitespace split so "machine learning" contributes one combined attractor
+    // rather than two weak independent ones.
     const queryDoc = nlp(query);
     const verbs = queryDoc.verbs().toInfinitive().out("array");
     const nouns = queryDoc.nouns().out("array");
-    const heatNodes = [...verbs, ...nouns]
+    const rawWords = [...verbs, ...nouns]
       .flatMap(w => w.toLowerCase().split(/[^a-z0-9]+/))
       .map(w => w.trim())
       .filter(w => w.length > 2);
+
+    const heatNodes: string[] = [];
+    let wi = 0;
+    while (wi < rawWords.length) {
+      if (wi + 1 < rawWords.length) {
+        const bigram = `${rawWords[wi]}_${rawWords[wi + 1]}`;
+        if (BIGRAM_VOCABULARY.has(bigram)) {
+          heatNodes.push(bigram);
+          wi += 2;
+          continue;
+        }
+      }
+      heatNodes.push(rawWords[wi]);
+      wi++;
+    }
 
     // Phase 1: Try the logic matrix in active memory (Direct Inference).
     const queryQuanta = this.atomizer.ingestSequence(

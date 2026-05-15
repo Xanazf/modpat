@@ -2,7 +2,7 @@ import type System from "@core_i/System";
 import { SlotType, classifyOperatorToken, OperatorClass } from "@core_i/System";
 import nlp from "compromise";
 import { BaseAtomizer } from "./BaseAtomizer";
-import { SYNTAX_ATTRACTORS } from "@config";
+import { SYNTAX_ATTRACTORS, DOPAT_CONFIG } from "@config";
 
 /**
  * The SemanticAtomizer serves as the Natural Language Interface (NLI) for the logical manifold.
@@ -147,7 +147,17 @@ export default class SemanticAtomizer
 
       let opClass = classifyOperatorToken(text);
       if (opClass === OperatorClass.None && isVerb) {
-        opClass = OperatorClass.Action;
+        // Issue A — gerund disambiguation: if a -ing verb directly follows a determiner
+        // (e.g. "the running dog"), treat it as a Modifier rather than an Action.
+        // Without this, "running" in "the running dog" and "she was running" get the
+        // same operator class despite playing different grammatical roles.
+        const prevNormText =
+          i > 0 ? tokens[i - 1].text.toLowerCase().trim() : "";
+        const isGerundAdjective =
+          norm.endsWith("ing") && ["the", "a", "an"].includes(prevNormText);
+        opClass = isGerundAdjective
+          ? OperatorClass.Modifier
+          : OperatorClass.Action;
       }
       system.operatorClass[id] = opClass;
       sequenceIds[i] = id;
@@ -179,18 +189,25 @@ export default class SemanticAtomizer
         if (!["{", "}", "return"].includes(norm)) context = 2.5;
       }
 
-      // Triplet Inheritance: if preceded by "the", this particle becomes a specific landmark
+      // Triplet Inheritance: if preceded by "the", this particle becomes a specific landmark.
+      // Issue B — cap the multiplier so deeply nested "the the the X" structures don't
+      // produce runaway mass (64×, 256×…) that distorts the potential field for unrelated queries.
       if (i > 0) {
         const prevNorm = tokens[i - 1].text.toLowerCase().trim();
-        // Check for "the [x]" or "the [x] [y]"
         if (
           prevNorm === "the" ||
           (i > 1 && tokens[i - 2].text.toLowerCase().trim() === "the")
         ) {
-          system.mass[id] *= 4.0; // Significant triplet boost
-          depth = 0.1; // Force high specificity
+          system.mass[id] *= DOPAT_CONFIG.atomizer.INHERITANCE_BASE_FACTOR;
+          depth = 0.1;
         }
       }
+      // Apply cap relative to the initial mass so the multiplier never exceeds MAX_INHERITANCE_MASS_FACTOR.
+      const baseMassForCap = isOp ? system.c ** 2 : system.epsilon;
+      system.mass[id] = Math.min(
+        system.mass[id],
+        baseMassForCap * DOPAT_CONFIG.atomizer.MAX_INHERITANCE_MASS_FACTOR
+      );
 
       system.posZ[id] = depth;
       system.posW[id] = context + i * 0.001;

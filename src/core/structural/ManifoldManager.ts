@@ -422,6 +422,14 @@ export class ManifoldManager {
   private async dreamCycle(): Promise<void> {
     if (this.isDreaming || !this.unfolder) return;
 
+    // Shed load when the delta queue is full — prevents burst of concurrent fetches.
+    if (
+      this.pendingDreams.length >= DOPAT_CONFIG.structural.PENDING_DREAMS_MAX
+    ) {
+      metrics.increment("dream.queue_full");
+      return;
+    }
+
     const sys = this.activeSystem;
     const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
     if (pressure > 0.5) {

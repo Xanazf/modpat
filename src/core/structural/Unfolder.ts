@@ -1,11 +1,12 @@
 import type System from "@core_i/System";
 import { SystemRef } from "@core_i/System";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
+import { metrics } from "@core_s/Metrics";
+import { DOPAT_CONFIG } from "@config";
 import wiki from "wikipedia";
 import axios from "axios";
 
 // Wikipedia API requires a valid User-Agent to avoid 403 Forbidden errors.
-// This identifies the engine as a research tool for topological logic.
 axios.defaults.headers.common["User-Agent"] =
   "MpatLogicEngine/1.0 (https://github.com/dopecodez/Wikipedia/)";
 
@@ -26,24 +27,18 @@ interface CTX7_SearchResult {
 interface CTX7_SearchResponse {
   results: CTX7_SearchResult[];
 }
-
 interface CTX7_CodeSnippet {
   codeTitle: string;
   codeDescription: string;
   codeLanguage: string;
   codeTokens: number;
-  codeId: string; // "lazy-loading.mdx#_snippet_7"
+  codeId: string;
   pageTitle: string;
-  codeList: [
-    {
-      language: string;
-      code: string;
-    },
-  ];
+  codeList: [{ language: string; code: string }];
 }
 interface CTX7_InfoSnippet {
-  pageId: string; // "lazy-loading.mdx"
-  breadcrumb: string; // "Examples > With no SSR";
+  pageId: string;
+  breadcrumb: string;
   content: string;
   contentTokens: number;
 }
@@ -61,6 +56,29 @@ export interface SearchResult {
   text?: string;
 }
 
+/** Thrown when an external fetch exceeds UNFOLDER_FETCH_TIMEOUT_MS. */
+export class UnfolderTimeoutError extends Error {
+  constructor(topic: string) {
+    super(
+      `Unfolder fetch timed out after ${DOPAT_CONFIG.structural.UNFOLDER_FETCH_TIMEOUT_MS}ms: ${topic}`
+    );
+    this.name = "UnfolderTimeoutError";
+  }
+}
+
+/**
+ * Races `promise` against a timeout. On expiry, rejects with UnfolderTimeoutError.
+ * The timer is always cleared regardless of which branch wins.
+ */
+function withTimeout<T>(promise: Promise<T>, topic: string): Promise<T> {
+  const ms = DOPAT_CONFIG.structural.UNFOLDER_FETCH_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new UnfolderTimeoutError(topic)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * The Unfolder is responsible for identifying "Logical Voids"
  * (areas with low density/information) and filling them by harvesting
@@ -74,12 +92,6 @@ export default class Unfolder {
   private atomizer: SemanticAtomizer;
   private expandCount: number = 0;
 
-  /**
-   * Initializes the Fractal Unfolder.
-   *
-   * @param system The logical manifold to expand.
-   * @param atomizer The semantic atomizer for text ingestion.
-   */
   constructor(system: System | SystemRef, atomizer: SemanticAtomizer) {
     this.systemRef =
       system instanceof SystemRef ? system : new SystemRef(system);
@@ -88,9 +100,6 @@ export default class Unfolder {
 
   /**
    * Performs a fractal expansion of a logical void.
-   *
-   * @param voidPreceptId The ID of the node with low density.
-   * @param topic The semantic topic to expand (e.g., "Security").
    */
   public async expand(voidPreceptId: number, topic?: string): Promise<boolean> {
     const activeTopic =
@@ -105,33 +114,23 @@ export default class Unfolder {
     const newPreceptIds = this.ingestContent(fullContent);
     if (newPreceptIds.length === 0) return false;
 
-    // 4. Assign physical parameters to create a "Sub-Gradient" that bridges the void
     const basePosX = this.system.posX[voidPreceptId];
     const basePosY = this.system.posY[voidPreceptId];
-
-    // Maintain grammatical coherence by applying a uniform displacement for the entire fact.
-    // By keeping X and Y displacement at 0, we strictly align the facts in vertical posZ layers.
-    // This allows the geodesic path to easily jump between layers (facts) to synthesize
-    // novel sentences without incurring massive X/Y spatial penalties.
-    const factDisplacementX = 0.0;
-    const factDisplacementY = 0.0;
     const factDisplacementZ = (this.expandCount + 1) * 10.0;
     this.expandCount++;
 
+    const jitterRange = DOPAT_CONFIG.structural.DREAM_POS_X_JITTER;
+
     for (const id of Array.from(newPreceptIds)) {
-      // Assign high mass to ensure these new precepts are authoritative
       this.system.mass[id] = this.system.c * 10;
 
-      // Override posX to the void centroid so all Wikipedia nodes share the same
-      // X position regardless of UMAP embedding. This ensures the geodesic path
-      // can reach all fact layers without XY deviation killing influence.
-      // posY still carries the grammatical index (i*0.1 + basePosY).
-      // posZ carries the layer identity (depth + factDisplacementZ).
-      this.system.posX[id] = basePosX;
+      // Concept-centroid posX with small jitter: keeps dreamt facts near their parent
+      // concept for geodesic reachability while giving each fact a distinct position
+      // so semantic diversity is not collapsed to a single coordinate.
+      const jitter = (Math.random() - 0.5) * jitterRange;
+      this.system.posX[id] = basePosX + jitter;
       this.system.posY[id] = this.system.posY[id] + basePosY;
       this.system.posZ[id] = this.system.posZ[id] + factDisplacementZ;
-
-      // Update the system state for each new precept
       this.system.update(id);
     }
 
@@ -140,10 +139,7 @@ export default class Unfolder {
 
   /**
    * Fetches raw text content for a topic from Wikipedia or Context7.
-   * Does NOT ingest into the manifold, safe to call from background tasks.
-   *
-   * @param topic The subject to fetch content for.
-   * @returns The fetched text, or an empty string if unavailable.
+   * Returns empty string when unavailable; never throws.
    */
   public async fetchContent(topic: string): Promise<string> {
     const isCodeRelated =
@@ -166,11 +162,7 @@ export default class Unfolder {
   }
 
   /**
-   * Synchronously ingests pre-fetched text into the given system.
-   * Returns the allocated precept IDs so callers can adjust properties (e.g., decayRate).
-   *
-   * @param text The content to ingest.
-   * @param system The target logical manifold.
+   * Synchronously ingests pre-fetched text into the manifold.
    */
   public ingestContent(text: string, system?: System): Uint32Array {
     return this.atomizer.ingestSequence(text, system ?? this.systemRef.current);
@@ -178,105 +170,111 @@ export default class Unfolder {
 
   /**
    * Resolves a scope hash back to its original token string.
-   * Delegates to the internal SemanticAtomizer's reverse-lookup table.
-   *
-   * @param scope The numeric scope hash to resolve.
-   * @returns The token string, or undefined if not in the dictionary.
    */
   public resolveScope(scope: number): string | undefined {
     return this.atomizer.resolveScope(scope);
   }
 
-  /**
-   * Fetches encyclopedic context from Wikipedia.
-   */
+  /** Fetches encyclopedic context from Wikipedia with a hard timeout. */
   private async queryWikipedia(topic: string): Promise<string | null> {
     try {
-      const page = await wiki.page(topic);
-      const summary = await page.summary();
-      const extract = summary.extract;
-      return extract.replace(/\n/g, " ").trim();
+      const extract = await withTimeout(
+        wiki
+          .page(topic)
+          .then(p => p.summary())
+          .then(s => s.extract),
+        topic
+      );
+      return extract.replace(/\n/g, " ").trim() || null;
     } catch (e) {
-      console.log("Error querying Wikipedia: ", e);
+      if (e instanceof UnfolderTimeoutError) {
+        metrics.increment("dream.rejected_timeout");
+      } else {
+        console.log("Error querying Wikipedia: ", e);
+      }
       return null;
     }
   }
 
-  /**
-   * Queries Context7 technical data via its API.
-   * Uses a placeholder API key from the environment or a default string.
-   */
+  /** Queries Context7 technical data with a hard timeout and no synthetic fallback. */
   private async queryContext7(
     query: string,
     libname?: string
   ): Promise<SearchResult | null> {
     const apiKey = process.env.CONTEXT7_API_KEY || "YOUR_CONTEXT7_API_KEY_HERE";
+    const ms = DOPAT_CONFIG.structural.UNFOLDER_FETCH_TIMEOUT_MS;
 
     try {
+      const makeController = () => {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), ms);
+        return { signal: c.signal, clear: () => clearTimeout(t) };
+      };
+
       let lib_id = "/microsoft/typescript";
-      const libs = await fetch(
-        `https://context7.com/api/v2/libs/search?libraryName=${libname}&query=${query}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
+      const libCtrl = makeController();
+      try {
+        const libs = await fetch(
+          `https://context7.com/api/v2/libs/search?libraryName=${libname}&query=${query}`,
+          {
+            method: "GET",
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: libCtrl.signal,
+          }
+        );
+        if (libs.ok) {
+          const lib_data = await libs.json();
+          lib_id =
+            (lib_data as CTX7_SearchResponse).results?.[0]?.id ?? "typescript";
+        } else {
+          console.warn(`Context7 API returned status: ${libs.status}`);
         }
-      );
-      if (!libs.ok) {
-        console.warn(`Context7 API returned status: ${libs.status}`);
-      } else {
-        const lib_data = await libs.json();
-        lib_id = (lib_data as CTX7_SearchResponse).results
-          ? (lib_data as CTX7_SearchResponse).results[0].id
-          : "typescript";
+      } finally {
+        libCtrl.clear();
       }
 
-      const context = await fetch(
-        `https://context7.com/api/v2/context?libraryId=${lib_id}&query=${query}&type=json`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-        }
-      );
+      const ctxCtrl = makeController();
+      try {
+        const context = await fetch(
+          `https://context7.com/api/v2/context?libraryId=${lib_id}&query=${query}&type=json`,
+          {
+            method: "GET",
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: ctxCtrl.signal,
+          }
+        );
 
-      if (!context.ok) {
-        console.warn(`Context7 API returned status: ${context.status}`);
-      } else {
+        if (!context.ok) {
+          console.warn(`Context7 API returned status: ${context.status}`);
+          return null;
+        }
+
         const data = await context.json();
-        if (
-          data &&
-          (data as CTX7_ContextResponse).codeSnippets &&
-          (data as CTX7_ContextResponse).codeSnippets.length > 0
-        ) {
-          const response = data as CTX7_ContextResponse;
-          console.log(JSON.stringify(response, null, 2));
+        const response = data as CTX7_ContextResponse;
+        if (response.codeSnippets?.length > 0) {
           return {
             title:
               response.codeSnippets[0].codeTitle ||
               response.codeSnippets[0].pageTitle ||
-              "Context7 Technical Documentation",
+              "Context7",
             url: response.codeSnippets[0].codeId || "https://context7.com/docs",
             snippet: response.codeSnippets[0].codeList[0].code || "",
-            text:
-              response.infoSnippets[0]?.content || "Context7 info snippet...",
+            text: response.infoSnippets[0]?.content || "",
           };
         }
+      } finally {
+        ctxCtrl.clear();
       }
-    } catch (e) {
-      console.log("Error querying Context7: ", e);
-    }
 
-    // Fallback if API fails (or if key is invalid) so tests still pass
-    return {
-      title: "Context7 Technical Documentation",
-      url: "https://context7.com/docs",
-      snippet:
-        "This is a mocked technical response containing advanced concepts regarding " +
-        query,
-      source: "Context7 Mock",
-    };
+      return null;
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        metrics.increment("dream.rejected_timeout");
+      } else {
+        metrics.increment("dream.context7_error");
+        console.log("Error querying Context7: ", e);
+      }
+      return null;
+    }
   }
 }

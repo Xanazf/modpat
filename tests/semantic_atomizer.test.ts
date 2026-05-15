@@ -128,6 +128,45 @@ export async function executeSemanticSuite() {
       assert.ok(ids.length >= 3);
     });
 
+    // Track 12 — Atomizer Hardening tests
+    await it("Track 12 Fix A: gerund after determiner is Modifier, not Action", async () => {
+      const { OperatorClass } = await import("@core_i/System");
+      const adjIds = env.atomizer.ingestSequence("the running dog", env.system);
+      // "running" is at index 1 (after "the")
+      const runningAdj = adjIds[1];
+      assert.strictEqual(
+        env.system.operatorClass[runningAdj],
+        OperatorClass.Modifier,
+        `"the running dog" — "running" should be Modifier (gerund-adjective), got ${env.system.operatorClass[runningAdj]}`
+      );
+
+      const verbIds = env.atomizer.ingestSequence(
+        "she was running fast",
+        env.system
+      );
+      // "running" is at index 2 (after "she", "was") — not preceded by determiner
+      const runningVerb = verbIds[2];
+      assert.strictEqual(
+        env.system.operatorClass[runningVerb],
+        OperatorClass.Action,
+        `"she was running fast" — "running" should be Action (verb), got ${env.system.operatorClass[runningVerb]}`
+      );
+    });
+
+    await it("Track 12 Fix B: triplet inheritance mass is capped", async () => {
+      const { DOPAT_CONFIG } = await import("@config");
+      // Use "mango" — a plain semantic atom (not a math/operator token) so mass starts at epsilon.
+      const ids = env.atomizer.ingestSequence("the the the mango", env.system);
+      const mangoId = ids[3]; // "mango" at index 3, preceded by three "the"s
+      // With cap applied, mass must not exceed epsilon * MAX_INHERITANCE_MASS_FACTOR
+      const maxAllowed =
+        env.system.epsilon * DOPAT_CONFIG.atomizer.MAX_INHERITANCE_MASS_FACTOR;
+      assert.ok(
+        env.system.mass[mangoId] <= maxAllowed,
+        `"the the the mango" mass ${env.system.mass[mangoId]} exceeds cap ${maxAllowed}`
+      );
+    });
+
     await TestHarness.disposeEnvironment(env);
   });
 }

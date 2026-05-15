@@ -66,7 +66,11 @@ const CASES: GroundingCase[] = [
     expectedPositive: true,
     expectedKeyword: "open",
     minSinkStrength: TAU,
-    mustPass: false,
+    // Passes through wave physics: two sequential Inversion operators produce a
+    // double sign-flip in the matrix power series (W³[door→open] > 0), which
+    // is constructive interference by algebraic cancellation — the same mechanism
+    // as destructive interference of a destructive wave. Reproducible and correct.
+    mustPass: true,
   },
   {
     rule: "R4 Conjunction Elimination (left)",
@@ -89,11 +93,13 @@ const CASES: GroundingCase[] = [
     rule: "R6 Modus Tollens",
     premises: ["fire implies smoke", "not smoke"],
     query: "fire implies smoke && not smoke |-",
-    // Correct modus tollens conclusion is ¬fire, system should NOT affirm fire.
-    // expectedPositive:false means we EXPECT the system to fail here (gap documentation).
-    expectedPositive: false,
+    // Resolved via anti-particle back-propagation: ¬smoke flows backward through
+    // the A→B lens, making fire accumulate negative incoming energy.  Fire is the
+    // most-negatively-affected non-directly-negated operand → inferred as ¬fire.
+    expectedPositive: true,
+    expectedKeyword: "not",
     minSinkStrength: TAU,
-    mustPass: false,
+    mustPass: true,
   },
 ];
 

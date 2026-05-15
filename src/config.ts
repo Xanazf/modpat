@@ -77,6 +77,19 @@ const DOPAT_CONFIG = {
     INTRA_LAYER_SKIP_FIRST: true,
     /** Consolidation iterations per tick [lo, hi]. */
     CONSOLIDATION_ITERS_PER_TICK: [10, 50] as [number, number],
+    /** Abort timeout for Unfolder external fetches (Wikipedia, Context7). */
+    UNFOLDER_FETCH_TIMEOUT_MS: 5_000,
+    /** Maximum entries in the pendingDreams queue before shedding new cycles. */
+    PENDING_DREAMS_MAX: 5,
+    /** Half-width of the random posX jitter applied to dreamt precepts. */
+    DREAM_POS_X_JITTER: 10,
+  },
+
+  atomizer: {
+    /** Multiplier applied per triplet-inheritance nesting level ("the X" → 4×). */
+    INHERITANCE_BASE_FACTOR: 4.0,
+    /** Hard cap on accumulated inheritance multiplier (prevents runaway mass). */
+    MAX_INHERITANCE_MASS_FACTOR: 16.0,
   },
 
   observability: {
