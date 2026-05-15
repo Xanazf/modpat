@@ -1,5 +1,3 @@
-// FFT, ..., ?
-
 /**
  * Typed deltas posted by async producers (dreamCycle, Unfolder, GPU readbacks)
  * and drained synchronously by ManifoldManager.tick().
