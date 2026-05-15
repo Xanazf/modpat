@@ -68,6 +68,8 @@ const DOPAT_CONFIG = {
     GRID_CELL: 0.05,
     USAGE_WEIGHT: 3,
     FEEDBACK_BOOST: 1.2,
+    /** Multiplicative decay applied to usage_count during cull cycles (0–1). */
+    USAGE_DECAY_RATE: 0.95,
   },
 
   structural: {
@@ -85,6 +87,8 @@ const DOPAT_CONFIG = {
     PENDING_DREAMS_MAX: 5,
     /** Half-width of the random posX jitter applied to dreamt precepts. */
     DREAM_POS_X_JITTER: 10,
+    /** Maximum entries in the DeltaQueue before shedding oldest deltas. */
+    DELTA_QUEUE_MAX: 10_000,
   },
 
   atomizer: {

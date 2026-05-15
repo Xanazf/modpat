@@ -91,6 +91,12 @@ export default class Unfolder {
   }
   private atomizer: SemanticAtomizer;
   private expandCount: number = 0;
+  /**
+   * Optional delta sink. When set (by ManifoldManager.setUnfolder()), expand()
+   * posts a Delta.Ingest instead of writing to the manifold directly — ensuring
+   * all mutations go through the single-writer tick-drain path.
+   */
+  private onDelta: ((delta: Delta.Any) => void) | null = null;
 
   constructor(system: System | SystemRef, atomizer: SemanticAtomizer) {
     this.systemRef =
@@ -98,8 +104,17 @@ export default class Unfolder {
     this.atomizer = atomizer;
   }
 
+  /** Wire a delta sink so expand() posts through the DeltaQueue. */
+  public setDeltaSink(sink: (delta: Delta.Any) => void): void {
+    this.onDelta = sink;
+  }
+
   /**
    * Performs a fractal expansion of a logical void.
+   *
+   * When a delta sink is wired (via setDeltaSink), mutations are posted as
+   * Delta.Ingest records and applied during the next tick(). Otherwise falls
+   * back to direct manifold writes for standalone / test usage.
    */
   public async expand(voidPreceptId: number, topic?: string): Promise<boolean> {
     const activeTopic =
@@ -111,13 +126,26 @@ export default class Unfolder {
     const fullContent = await this.fetchContent(activeTopic);
     if (!fullContent) return false;
 
-    const newPreceptIds = this.ingestContent(fullContent);
-    if (newPreceptIds.length === 0) return false;
-
     const basePosX = this.system.posX[voidPreceptId];
     const basePosY = this.system.posY[voidPreceptId];
     const factDisplacementZ = (this.expandCount + 1) * 10.0;
     this.expandCount++;
+
+    // Route through the DeltaQueue when wired, so tick() is the sole writer.
+    if (this.onDelta) {
+      this.onDelta({
+        kind: "ingest",
+        text: fullContent,
+        basePosX,
+        basePosY,
+        factDisplacementZ,
+      });
+      return true;
+    }
+
+    // Fallback: direct manifold write (standalone / tests without ManifoldManager).
+    const newPreceptIds = this.ingestContent(fullContent);
+    if (newPreceptIds.length === 0) return false;
 
     const jitterRange = DOPAT_CONFIG.structural.DREAM_POS_X_JITTER;
 

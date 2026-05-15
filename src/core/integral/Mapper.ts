@@ -3,7 +3,7 @@ import logger from "@utils/SpectralLogger";
 import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
 import { SlotType, SystemRef } from "./System";
-import { GridIndex4D } from "./GridIndex4D";
+import { GridIndex4D } from "../structural/GridIndex4D";
 import type Unfolder from "@core_s/Unfolder";
 import { DOPAT_CONFIG } from "@config";
 import { metrics } from "@core_s/Metrics";

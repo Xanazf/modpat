@@ -1,5 +1,190 @@
-import type { ComplexObject, HandleArray } from "./ComplexArray";
-import baseComplexArray from "./ComplexArray";
+/**
+ * Waves.ts — Unified wave mathematics for ModPAT's spectral logic layer.
+ *
+ * Consolidates complex-number storage (ComplexArray) and Fast Fourier Transform
+ * (FFT) implementations into a single module. All wave-based logic operators,
+ * frequency-space transforms, and complex signal primitives live here.
+ *
+ * @module Waves
+ */
+
+/**
+ * BaseComplexArray is the fundamental storage structure for wave-based logic
+ * patterns.
+ *
+ * It stores a series of logical signal quanta in separate real and imaginary
+ * arrays to optimize for vectorized operations and signal processing transforms
+ * like the FFT.
+ */
+class BaseComplexArray {
+  /** The constructor of the underlying array type. */
+  ArrayType: ArrayConstructor;
+  /** Contiguous storage for the real components of the logical signals. */
+  real: Wave.HandleArray;
+  /** Contiguous storage for the imaginary components of the logical signals. */
+  imag: Wave.HandleArray;
+  /** The total number of signal quanta in the array. */
+  length: number = 0;
+
+  /**
+   * Initializes a new complex logical signal array.
+   *
+   * @param other - Source data: another BaseComplexArray, a fixed size, or an array-like object.
+   * @param arrayType - The typed array constructor to use for storage (defaults to Float32Array).
+   */
+  constructor(
+    other: Wave.HandleArray | number | BaseComplexArray,
+    arrayType: ArrayConstructor = Float32Array as unknown as ArrayConstructor
+  ) {
+    if (other instanceof BaseComplexArray) {
+      // Copy constructor: preserves the existing logical pattern.
+      this.ArrayType = other.ArrayType;
+      this.real = new this.ArrayType(other.real) as unknown as Wave.HandleArray;
+      this.imag = new this.ArrayType(other.imag) as unknown as Wave.HandleArray;
+    } else if (typeof other === "number") {
+      // Size-based allocation: creates an empty logic buffer.
+      this.ArrayType = arrayType;
+      this.real = new this.ArrayType(other);
+      this.imag = new this.ArrayType(other);
+      if ((this.ArrayType as unknown) === Array) {
+        (this.real as number[]).fill(0);
+        (this.imag as number[]).fill(0);
+      }
+    } else {
+      // Array-like input: initializes the real component with the provided values.
+      this.ArrayType = arrayType;
+      this.real = new this.ArrayType(other) as unknown as Wave.HandleArray;
+      this.imag = new this.ArrayType(this.real.length);
+      if ((this.ArrayType as unknown) === Array) {
+        (this.imag as number[]).fill(0);
+      }
+    }
+
+    this.length = this.real.length;
+  }
+
+  /**
+   * Calculates the complex conjugate of the signal pattern.
+   *
+   * Physics: Inverts the phase component of the signal. Often used
+   * in signal correlation or specialized logical transformations.
+   *
+   * @returns A new BaseComplexArray containing the conjugated pattern.
+   */
+  conjugate(): BaseComplexArray {
+    const result = new BaseComplexArray(this);
+    for (let i = 0; i < this.length; i++) {
+      (result.imag as number[])[i] *= -1;
+    }
+    return result;
+  }
+
+  /**
+   * Generates a string representation of the logical wave pattern.
+   */
+  toString(): string {
+    const components: string[] = [];
+    for (let i = 0; i < this.length; i++) {
+      components.push(
+        `(${this.real[i].toFixed(2)}, ${this.imag[i].toFixed(2)})`
+      );
+    }
+    return `[${components.join(", ")}]`;
+  }
+
+  /**
+   * Iterates over each quantum in the logical signal.
+   *
+   * @param iterator - Callback function for each complex signal point.
+   */
+  forEach(
+    iterator: (value: Wave.ComplexObject, i: number, n: number) => void
+  ): void {
+    const n = this.length;
+    // For gc efficiency, reuse a single object to minimize pressure.
+    const value: Wave.ComplexObject = { real: 0, imag: 0 };
+
+    for (let i = 0; i < n; i++) {
+      value.real = this.real[i];
+      value.imag = this.imag[i];
+      iterator(value, i, n);
+    }
+  }
+
+  /**
+   * Performs an in-place transformation of the logical signal pattern.
+   *
+   * @param mapper - Callback function that modifies the real/imag components.
+   * @returns The current instance (useful for chaining).
+   */
+  map(mapper: (value: Wave.ComplexObject, i: number, n: number) => void): this {
+    const n = this.length;
+    const value: Wave.ComplexObject = { real: 0, imag: 0 };
+    for (let i = 0; i < n; i++) {
+      value.real = (this.real as number[])[i];
+      value.imag = (this.imag as number[])[i];
+      mapper(value, i, n);
+      (this.real as number[])[i] = value.real;
+      (this.imag as number[])[i] = value.imag;
+    }
+    return this;
+  }
+
+  /**
+   * Calculates the "logical intensity" (absolute magnitude) of the
+   * signal at each point.
+   *
+   * This represents the strength of the logical signal independent
+   * of its phase/polarity.
+   *
+   * @returns An array of magnitudes in the original ArrayType.
+   */
+  magnitude(): Wave.HandleArray {
+    const mags = new this.ArrayType(this.length);
+    for (let i = 0; i < this.length; i++) {
+      const r = (this.real as number[])[i];
+      const j = (this.imag as number[])[i];
+      (mags as number[])[i] = Math.sqrt(r * r + j * j);
+    }
+    return mags;
+  }
+}
+
+/**
+ * ComplexArray extends the base complex storage with Fast Fourier
+ * Transform capabilities tailored for logical signals.
+ *
+ * This is the primary public class — consumers should use this rather than
+ * BaseComplexArray directly.
+ */
+class ComplexArray extends BaseComplexArray {
+  /**
+   * Performs the Forward Fast Fourier Transform.
+   */
+  FFT(): ComplexArray {
+    return fft(this, false);
+  }
+
+  /**
+   * Performs the Inverse Fast Fourier Transform.
+   */
+  InvFFT(): ComplexArray {
+    return fft(this, true);
+  }
+
+  /**
+   * Chains FFT, a custom filterer, and InvFFT to process a signal.
+   *
+   * @param filterer - Function to apply in frequency space.
+   */
+  frequencyMap(filterer: Wave.Filterable): ComplexArray {
+    return this.FFT().map(filterer).InvFFT();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Wave Logic Operators
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * FFT_LOGIC provides a set of logical operators that operate on wave-based
@@ -10,7 +195,7 @@ import baseComplexArray from "./ComplexArray";
  * - Uncertainty or "OR" operations are represented as signal dampening or mixing.
  * - Negation is represented as a phase shift (polarity inversion).
  */
-export const FFT_LOGIC = {
+const FFT_LOGIC = {
   // NOTE: Abstract
   // The result of these transforms is not boolean logic
   // but the result of wave interference, i.e:
@@ -94,13 +279,6 @@ export const FFT_LOGIC = {
   },
 };
 
-// Math constants and functions we need.
-const PI: number = Math.PI;
-const SQRT1_2: number = Math.SQRT1_2;
-
-/** Function signature for filtering frequency-space signals. */
-type filterable = (value: ComplexObject, i: number, n: number) => void;
-
 /**
  * Transforms a logical signal from the real-space manifold to frequency-space.
  *
@@ -110,7 +288,7 @@ type filterable = (value: ComplexObject, i: number, n: number) => void;
  * @param input - The real-space logic signal.
  * @returns The frequency-space representation.
  */
-export function FFT(input: HandleArray): ComplexArray {
+function FFT(input: Wave.HandleArray): ComplexArray {
   return ensureComplexArray(input).FFT();
 }
 
@@ -123,7 +301,7 @@ export function FFT(input: HandleArray): ComplexArray {
  * @param input - The frequency-space logic signal.
  * @returns The restored real-space signal.
  */
-export function InvFFT(input: HandleArray): ComplexArray {
+function InvFFT(input: Wave.HandleArray): ComplexArray {
   return ensureComplexArray(input).InvFFT();
 }
 
@@ -138,47 +316,22 @@ export function InvFFT(input: HandleArray): ComplexArray {
  * @param filterer - The function that modifies frequency components.
  * @returns The filtered real-space signal.
  */
-export function frequencyMap(
-  input: HandleArray,
-  filterer: filterable
+function frequencyMap(
+  input: Wave.HandleArray,
+  filterer: Wave.Filterable
 ): ComplexArray {
   return ensureComplexArray(input).frequencyMap(filterer);
 }
 
-/**
- * ComplexArray extends the base complex storage with Fast Fourier
- * Transform capabilities tailored for logical signals.
- */
-export class ComplexArray extends baseComplexArray {
-  /**
-   * Performs the Forward Fast Fourier Transform.
-   */
-  FFT(): ComplexArray {
-    return fft(this, false);
-  }
-
-  /**
-   * Performs the Inverse Fast Fourier Transform.
-   */
-  InvFFT(): ComplexArray {
-    return fft(this, true);
-  }
-
-  /**
-   * Chains FFT, a custom filterer, and InvFFT to process a signal.
-   *
-   * @param filterer - Function to apply in frequency space.
-   */
-  frequencyMap(filterer: filterable): ComplexArray {
-    return this.FFT().map(filterer).InvFFT();
-  }
-}
+// Math constants.
+const PI: number = Math.PI;
+const SQRT1_2: number = Math.SQRT1_2;
 
 /**
  * Internal helper to ensure input is a ComplexArray.
  * @private
  */
-function ensureComplexArray(input: HandleArray): ComplexArray {
+function ensureComplexArray(input: Wave.HandleArray): ComplexArray {
   return (input instanceof ComplexArray && input) || new ComplexArray(input);
 }
 
@@ -347,3 +500,5 @@ function LowestOddFactor(n: number): number {
   }
   return n;
 }
+
+export { ComplexArray, FFT_LOGIC, FFT, InvFFT, frequencyMap };

@@ -7,6 +7,7 @@ import type { TargetBuffer } from "@core_i/System";
 import type { SystemPersistence } from "./Persistence";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import type Unfolder from "@core_s/Unfolder";
+import { GridIndex4D } from "@src/core/structural/GridIndex4D";
 
 function arraysEqual(a: number[], b: number[]): boolean {
   if (a.length !== b.length) return false;
@@ -414,6 +415,9 @@ export class ManifoldManager {
    */
   public setUnfolder(unfolder: Unfolder): void {
     this.unfolder = unfolder;
+    // Wire the delta sink so Unfolder.expand() posts through the DeltaQueue
+    // instead of writing to the manifold directly.
+    unfolder.setDeltaSink(delta => this.deltaQueue.post(delta));
   }
 
   /**
@@ -502,51 +506,72 @@ export class ManifoldManager {
   /**
    * Phase 2: Gravitational Consolidation
    * Runs in the background to merge exact matches and pull similar concepts into orbits.
+   *
+   * Uses a throwaway GridIndex4D built from allocated semantic atoms so that each
+   * sampled node queries only nearby cells (O(1) per sample at moderate density)
+   * instead of scanning the full manifold (previously O(N) per sample → O(sweeps×N)).
    */
   private consolidationRoutine(dt: number): void {
     const sys = this.activeSystem;
     const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
 
-    // Throttle: don't run every tick unless pressure is extremely high
-    // (Simulated by running a partial sweep each tick instead of full O(N^2))
+    const ORBIT_RADIUS_SQ = DOPAT_CONFIG.mapper.ORBIT_RADIUS_SQ;
+    const orbitRadius = Math.sqrt(ORBIT_RADIUS_SQ);
+    // Cell size must be ≤ orbit radius so that all candidates within range
+    // fall into the queried cell or its direct neighbours.
+    const cellSize = Math.max(orbitRadius, 0.5);
+
+    // Build a throwaway spatial index of allocated semantic atoms.
+    const grid = new GridIndex4D(cellSize);
+    const semanticIds: number[] = [];
+    for (let i = 0; i < sys.length; i++) {
+      if (!sys.isAllocated(i)) continue;
+      if (sys.operatorClass[i] !== 0) continue;
+      grid.insert(i, sys.posX[i], sys.posY[i], sys.posZ[i], sys.posW[i]);
+      semanticIds.push(i);
+    }
+    if (semanticIds.length < 2) return;
+
+    // Throttle: partial sweep per tick, scaled by pressure.
     const sweeps =
       pressure > 0.8
         ? DOPAT_CONFIG.structural.CONSOLIDATION_ITERS_PER_TICK[1]
         : DOPAT_CONFIG.structural.CONSOLIDATION_ITERS_PER_TICK[0];
 
     for (let k = 0; k < sweeps; k++) {
-      if (sys.length < 2) break;
-      const i = Math.floor(Math.random() * sys.length);
-      if (!sys.isAllocated(i)) continue;
-      if (sys.operatorClass[i] !== 0) continue; // Only consolidate semantic atoms (OperatorClass.None = 0)
+      const i = semanticIds[Math.floor(Math.random() * semanticIds.length)];
 
-      for (let j = 0; j < sys.length; j++) {
-        if (i === j || !sys.isAllocated(j)) continue;
-        if (sys.operatorClass[j] !== 0) continue;
+      // Query only the local grid neighbourhood instead of the full manifold.
+      const candidates = grid.candidatesInRadius(
+        sys.posX[i],
+        sys.posY[i],
+        sys.posZ[i],
+        sys.posW[i],
+        orbitRadius
+      );
 
-        // 4D Distance
+      for (const j of candidates) {
+        if (j === i || !sys.isAllocated(j)) continue;
+
+        // Fine-grained 4D distance check.
         const dx = sys.posX[i] - sys.posX[j];
         const dy = sys.posY[i] - sys.posY[j];
         const dz = sys.posZ[i] - sys.posZ[j];
         const dw = sys.posW[i] - sys.posW[j];
-
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (distSq >= ORBIT_RADIUS_SQ) continue;
 
-        // ORBITAL CLUSTERING (Semantic Proximity)
-        const ORBIT_RADIUS_SQ = DOPAT_CONFIG.mapper.ORBIT_RADIUS_SQ; // Threshold for similar meaning
-        if (distSq < ORBIT_RADIUS_SQ) {
-          // Determine Root (heaviest mass)
-          const root = sys.mass[i] > sys.mass[j] ? i : j;
-          const satellite = root === i ? j : i;
+        // Determine Root (heaviest mass)
+        const root = sys.mass[i] > sys.mass[j] ? i : j;
+        const satellite = root === i ? j : i;
 
-          // Gently shift satellite towards root in Matter dimension (Gravity)
-          // Attenuation factor (scaled to seconds to prevent oscillation at high FPS)
-          const pull = 0.1 * (dt / 1000);
-          sys.posX[satellite] += (sys.posX[root] - sys.posX[satellite]) * pull;
+        // Gently shift satellite towards root in Matter dimension (Gravity)
+        // Attenuation factor (scaled to seconds to prevent oscillation at high FPS)
+        const pull = 0.1 * (dt / 1000);
+        sys.posX[satellite] += (sys.posX[root] - sys.posX[satellite]) * pull;
 
-          // Update the satellite to reflect coordinate shifts.
-          sys.update(satellite, "orbital_clustering");
-        }
+        // Update the satellite to reflect coordinate shifts.
+        sys.update(satellite, "orbital_clustering");
       }
     }
   }

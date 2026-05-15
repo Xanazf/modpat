@@ -7,7 +7,7 @@ import logger from "@utils/SpectralLogger";
 import Mapper from "./Mapper";
 import Synthesizer from "./Synthesizer";
 import System, { OperatorClass, SlotType, SystemRef } from "./System";
-import { GridIndex4D } from "./GridIndex4D";
+import { GridIndex4D } from "../structural/GridIndex4D";
 
 export interface ResolverDiagnostics {
   N: number;
@@ -270,7 +270,7 @@ export default class Resolver implements Resolution.Engine {
         if (
           i !== j &&
           Math.abs(this.system.scope[sequenceIds[j]] - scope) <
-            DOPAT_CONFIG.resolver.SCOPE_EPSILON
+          DOPAT_CONFIG.resolver.SCOPE_EPSILON
         ) {
           transferMatrix[i * N + j] = Math.max(
             transferMatrix[i * N + j],
@@ -334,7 +334,7 @@ export default class Resolver implements Resolution.Engine {
         for (let j = 1; j < N - 1; j++) {
           if (
             this.system.operatorClass[sequenceIds[j]] ===
-              OperatorClass.IdentityShift &&
+            OperatorClass.IdentityShift &&
             j + 1 < N - 1
           ) {
             if (
@@ -516,7 +516,7 @@ export default class Resolver implements Resolution.Engine {
       for (let i = 0; i < N - 1; i++) {
         if (
           this.system.operatorClass[sequenceIds[i]] ===
-            OperatorClass.Inversion &&
+          OperatorClass.Inversion &&
           this.system.operatorClass[sequenceIds[i + 1]] === OperatorClass.None
         ) {
           directlyNegatedScopes.add(this.system.scope[sequenceIds[i + 1]]);
@@ -687,19 +687,19 @@ export default class Resolver implements Resolution.Engine {
           t =>
             t &&
             this.system.operatorClass[
-              sequenceIds[
-                Array.from(sequenceIds).indexOf(
-                  sequenceIds.find(
-                    (_, i) =>
-                      this.atomizer
-                        .decodeSequence(
-                          new Uint32Array([sequenceIds[i]]),
-                          this.system
-                        )
-                        .trim() === t
-                  ) ?? 0
-                )
-              ]
+            sequenceIds[
+            Array.from(sequenceIds).indexOf(
+              sequenceIds.find(
+                (_, i) =>
+                  this.atomizer
+                    .decodeSequence(
+                      new Uint32Array([sequenceIds[i]]),
+                      this.system
+                    )
+                    .trim() === t
+              ) ?? 0
+            )
+            ]
             ] === OperatorClass.None
         );
 
@@ -857,7 +857,7 @@ export default class Resolver implements Resolution.Engine {
           cId >= length ||
           !this.system.isAllocated(cId) ||
           Math.abs(this.system.scope[cId] - this.system.scope[subjectIds[j]]) >=
-            DOPAT_CONFIG.resolver.SCOPE_EPSILON
+          DOPAT_CONFIG.resolver.SCOPE_EPSILON
         ) {
           match = false;
           break;
@@ -870,7 +870,7 @@ export default class Resolver implements Resolution.Engine {
       if (
         opId < length &&
         Math.abs(this.system.scope[opId] - operatorScope) <
-          DOPAT_CONFIG.resolver.SCOPE_EPSILON
+        DOPAT_CONFIG.resolver.SCOPE_EPSILON
       ) {
         return this.collectSequence(opId + 1, 1);
       }
@@ -995,7 +995,7 @@ export default class Resolver implements Resolution.Engine {
       if (
         opClass === operatorIdClass &&
         Math.abs(this.system.scope[i] - operatorScope) <
-          DOPAT_CONFIG.resolver.SCOPE_EPSILON
+        DOPAT_CONFIG.resolver.SCOPE_EPSILON
       ) {
         // Try Memory Subject Match
         const memSub = this.getClusterCentroid(this.system.ComplexLayer[i], -1);
