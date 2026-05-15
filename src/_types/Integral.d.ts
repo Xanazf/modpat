@@ -30,39 +30,131 @@ declare namespace Root {
   };
 
   type TargetUnion = "mass" | "time" | "density" | number;
-  interface System {
-    // Main System object
-    // - modeled after Direct Memory Access Buffer
 
-    // Ring Buffer
-    readonly patbuf: string[];
-
-    // Number of contained Precept Proxies
-    length: number;
-
-    // Layer of isolated Parts (words)
-    readonly PartLayer: Uint32Array;
-
-    // Layer of Complex Parts (syllogisms|rules)
-    readonly ComplexLayer: Uint32Array;
+  interface ManifoldView {
+    readonly length: number;
 
     // Clock speed or frame delta
     // speed of information;
     // ~16.67ms;
     readonly c: number;
 
-    // Register a Part/Complex and get its Proxy
+    // Constants
+    readonly epsilon: number;
+    readonly maxilon: number;
+
+    // Updates
+    update(id: number, from?: string): void;
+
+    // Buffers
+    readonly patbuf: string[];
+
+    // Physical properties
+    mass: Float64Array;
+    scope: Float64Array;
+    depth: Float64Array;
+    time: Float64Array;
+
+    // Position buffers (read/write)
+    posX: Float64Array;
+    posY: Float64Array;
+    posZ: Float64Array;
+    posW: Float64Array;
+
+    // Reactive combinations
+    // NOTE: ideally, extended on the fly
+    // via combining the 4 basic physical properties
+    density: Float64Array;
+    entropyRate: Float64Array;
+    potency: Float64Array;
+    intensity: Float64Array;
+    decayRate: Float64Array;
+
+    checksum: Float64Array;
+
+    // Ops pointer byte arrays
+    allocated: Uint8Array;
+    operatorClass: Uint8Array;
+    slotType: Uint8Array;
+
+    // Layer pointers
+    PartLayer: Uint32Array;
+    ComplexLayer: Uint32Array;
+
+    // Scope index: enforced write path
+    getScope(id: number): number;
+    setScope(id: number, scope: number): void; // updates scope index
+    getIdsByScope(scope: number): ReadonlySet<number>;
+
+    // Sequence ring: enforced write path
+    getSequenceStart(id: number): number;
+    setSequenceStart(scope0: number, startId: number): void;
+    getSequenceEntries(): { scope0: number; startId: number }[];
+
+    // Allocation
     createLocation(
       localMass: number,
       localScope: number,
       from?: string
     ): number;
+    freeLocation(id: number, from?: string): void;
 
     // Check if a location is currently allocated
     isAllocated(id: number): boolean;
+  }
 
-    // Subscribe a proxy at index "i" to a proxy at index `j`
-    createSignal(buffer: number, j: number): Signal;
+  interface ReadonlyManifoldView
+    extends Omit<
+      ManifoldView,
+      | "posX"
+      | "posY"
+      | "posZ"
+      | "posW"
+      | "mass"
+      | "scope"
+      | "depth"
+      | "time"
+      | "density"
+      | "entropyRate"
+      | "potency"
+      | "intensity"
+      | "decayRate"
+      | "checksum"
+      | "allocated"
+      | "operatorClass"
+      | "slotType"
+      | "PartLayer"
+      | "ComplexLayer"
+      | "setScope"
+      | "setSequenceStart"
+      | "createLocation"
+      | "freeLocation"
+      | "update"
+    > {
+    readonly mass: Readonly<Float64Array>;
+    readonly scope: Readonly<Float64Array>;
+    readonly depth: Readonly<Float64Array>;
+    readonly time: Readonly<Float64Array>;
+
+    readonly posX: Readonly<Float64Array>;
+    readonly posY: Readonly<Float64Array>;
+    readonly posZ: Readonly<Float64Array>;
+    readonly posW: Readonly<Float64Array>;
+
+    readonly density: Readonly<Float64Array>;
+    readonly entropyRate: Readonly<Float64Array>;
+    readonly potency: Readonly<Float64Array>;
+    readonly intensity: Readonly<Float64Array>;
+    readonly decayRate: Readonly<Float64Array>;
+
+    readonly checksum: Readonly<Float64Array>;
+
+    readonly allocated: Readonly<Uint8Array>;
+    readonly operatorClass: Readonly<Uint8Array>;
+    readonly slotType: Readonly<Uint8Array>;
+
+    readonly PartLayer: Readonly<Uint32Array>;
+    readonly ComplexLayer: Readonly<Uint32Array>;
   }
 }
 

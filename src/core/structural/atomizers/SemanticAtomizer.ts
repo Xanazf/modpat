@@ -64,7 +64,7 @@ export default class SemanticAtomizer
   /**
    * Semantic Ingestion: Maps natural language input to the topological manifold.
    */
-  public ingestSequence(text: string, system: System): Uint32Array {
+  public ingestSequence(text: string, system: Root.ManifoldView): Uint32Array {
     // 1. Manual Atomic Preparation
     // Ensure all structural signifiers are distinct tokens.
     // Ensure |- is NOT split.
@@ -218,10 +218,7 @@ export default class SemanticAtomizer
 
     // Register the start of this sequence so Resolver can use the ring fast-path
     if (sequenceIds.length > 0) {
-      system.registerSequenceStart(
-        system.scope[sequenceIds[0]],
-        sequenceIds[0]
-      );
+      system.setSequenceStart(system.scope[sequenceIds[0]], sequenceIds[0]);
     }
 
     return sequenceIds;
@@ -259,7 +256,7 @@ export default class SemanticAtomizer
   public ingestPattern(
     template: string,
     slotTypes: Map<number, SlotType>,
-    system: System
+    system: Root.ManifoldView
   ): Uint32Array {
     // Tokenize using the same preparation step as ingestSequence.
     const preparedText = template
@@ -312,10 +309,7 @@ export default class SemanticAtomizer
     }
 
     if (sequenceIds.length > 0) {
-      system.registerSequenceStart(
-        system.scope[sequenceIds[0]],
-        sequenceIds[0]
-      );
+      system.setSequenceStart(system.scope[sequenceIds[0]], sequenceIds[0]);
     }
 
     return sequenceIds;
@@ -329,7 +323,10 @@ export default class SemanticAtomizer
    * @param system The logical manifold.
    * @returns The reconstructed natural language string.
    */
-  public decodeSequence(sequenceIds: Uint32Array, system: System): string {
+  public decodeSequence(
+    sequenceIds: Uint32Array,
+    system: Root.ManifoldView
+  ): string {
     const output: string[] = [];
     for (let i = 0; i < sequenceIds.length; i++) {
       output.push(this.resolveSymbolFromScope(system.scope[sequenceIds[i]]));

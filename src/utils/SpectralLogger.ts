@@ -156,7 +156,7 @@ export const logger = {
    */
   logic: (
     label: string,
-    system: System,
+    system: Root.ManifoldView,
     ids: Uint32Array,
     atomizer: Atomic.Engine,
     resultIds?: Uint32Array
@@ -216,7 +216,7 @@ export const logger = {
    */
   wave: (
     label: string,
-    system: System,
+    system: Root.ManifoldView,
     ids: Uint32Array,
     atomizer: Atomic.Engine
   ) => {
@@ -259,7 +259,7 @@ export const logger = {
   /**
    * Renders the current state of the logical manifold's update ring buffer.
    */
-  ring: (system: System) => {
+  ring: (system: Root.ManifoldView) => {
     const buffer = system.patbuf;
     const styledHeader = visualizer.render(
       { type: "formal" },

@@ -26,7 +26,7 @@ export default class SpectralAtomizer
    * Ingests a logical sequence (Compatibility method).
    * SpectralAtomizer primarily deals with raw signal data rather than text.
    */
-  public ingestSequence(text: string, system: System): Uint32Array {
+  public ingestSequence(text: string, system: Root.ManifoldView): Uint32Array {
     throw new Error(
       "SpectralAtomizer requires raw signal or telemetry ingestion."
     );
@@ -36,7 +36,7 @@ export default class SpectralAtomizer
   public ingestPattern(
     _template: string,
     _slotTypes: Map<number, SlotType>,
-    _system: System
+    _system: Root.ManifoldView
   ): Uint32Array {
     throw new Error(
       "SpectralAtomizer does not support code pattern ingestion."
@@ -46,7 +46,10 @@ export default class SpectralAtomizer
   /**
    * Decodes a manifold sequence (Compatibility method).
    */
-  public decodeSequence(sequenceIds: Uint32Array, system: System): string {
+  public decodeSequence(
+    sequenceIds: Uint32Array,
+    system: Root.ManifoldView
+  ): string {
     return "Spectral Data";
   }
 
@@ -62,7 +65,7 @@ export default class SpectralAtomizer
   public ingestRF(
     iqSamples: number[] | Float32Array | Float64Array,
     sampleRate: number,
-    system: System
+    system: Root.ManifoldView
   ): Uint32Array {
     // 1. Convert to ComplexArray to handle real/imaginary components.
     const complex = new ComplexArray(iqSamples);
@@ -136,7 +139,7 @@ export default class SpectralAtomizer
     gps: { lat: number; lon: number },
     imu: { pitch: number; roll: number; yaw: number },
     isDrifting: boolean,
-    system: System
+    system: Root.ManifoldView
   ): Uint32Array {
     const ids: number[] = [];
 

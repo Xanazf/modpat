@@ -1,4 +1,4 @@
-import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
+import { DOPAT_CONFIG, SYNTAX_ATTRACTORS, validateConfig } from "@config";
 import { RingBuffer } from "ring-buffer-ts";
 
 /**
@@ -198,7 +198,7 @@ const LogicOperations = {
    * @returns The resulting attenuated logical mass.
    */
   calculateInverseSquare(
-    system: System,
+    system: Root.ManifoldView,
     source: number,
     target: number
   ): number {
@@ -217,7 +217,7 @@ const LogicOperations = {
    * @param id The index of the precept.
    * @returns True if the precept exceeds the blackbody limit.
    */
-  isSupermassive(system: System, id: number): boolean {
+  isSupermassive(system: Root.ManifoldView, id: number): boolean {
     return (
       system.mass[id] > DOPAT_CONFIG.BLACKBODY_LIMIT && system.scope[id] <= 1
     );
@@ -230,14 +230,17 @@ const LogicOperations = {
    * @param id The index of the precept.
    * @returns True if the precept qualifies as universal.
    */
-  isUniversal(system: System, id: number): boolean {
+  isUniversal(system: Root.ManifoldView, id: number): boolean {
     return (
       system.mass[id] < system.epsilon && system.scope[id] > system.maxilon
     );
   },
 };
 
-/** Shared empty set returned by getIdsByScope() on a miss, avoids per-call allocation. */
+/**
+ * Shared empty set returned by getIdsByScope() on a miss,
+ * avoids per-call allocation.
+ */
 const _EMPTY_SET: ReadonlySet<number> = Object.freeze(new Set<number>());
 
 /**
@@ -248,7 +251,7 @@ const _EMPTY_SET: ReadonlySet<number> = Object.freeze(new Set<number>());
  * It acts as a Direct Memory Access (DMA) buffer for high-performance
  * topological calculations, allowing for efficient geodesic pathfinding.
  */
-class System implements Root.System {
+class System implements Root.ManifoldView {
   /** The contiguous block of memory (Logical Manifold) hosting all physical states. */
   public readonly buffer: ArrayBuffer;
 
@@ -350,6 +353,7 @@ class System implements Root.System {
    * Initializes the logical manifold and allocates the underlying ArrayBuffer.
    */
   constructor() {
+    validateConfig();
     this.length = 0;
     const maxP = DOPAT_CONFIG.MAX_PRECEPTS;
 
@@ -441,11 +445,15 @@ class System implements Root.System {
     return this.scopeIndex.get(scope) ?? _EMPTY_SET;
   }
 
+  public getScope(id: number): number {
+    return this.scope[id];
+  }
+
   /**
    * Updates a precept's scope and keeps the scope index consistent.
    * Must be used instead of direct assignment whenever scope changes after creation.
    */
-  public updateScope(id: number, newScope: number): void {
+  public setScope(id: number, newScope: number): void {
     const oldScope = this.scope[id];
     if (oldScope === newScope) return;
     const oldSet = this.scopeIndex.get(oldScope);
@@ -460,7 +468,7 @@ class System implements Root.System {
       this.scopeIndex.set(newScope, newSet);
     }
     newSet.add(id);
-    this.update(id, "updateScope");
+    this.update(id, "setScope");
   }
 
   /**
@@ -496,8 +504,23 @@ class System implements Root.System {
    * @param scope0 - Scope of the first token in the sequence.
    * @param startId - System ID allocated for the first token.
    */
-  public registerSequenceStart(scope0: number, startId: number): void {
+  public setSequenceStart(scope0: number, startId: number): void {
     this.sequenceRing.add({ scope0, startId });
+  }
+
+  public getSequenceEntries(): { scope0: number; startId: number }[] {
+    return this.sequenceRing.toArray();
+  }
+
+  public getSequenceStart(id: number): number {
+    // Look up the startId if the given id is a startId (or we could just return 0 if unsupported)
+    // The plan requested this method, but its implementation depends on how it's used.
+    // Given the ring buffer only stores startIds, we can check if it exists:
+    const entries = this.sequenceRing.toArray();
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].startId === id) return entries[i].startId;
+    }
+    return -1;
   }
 
   /**
@@ -824,7 +847,7 @@ class System implements Root.System {
    * @param persistence The persistence manager capable of taking a snapshot.
    */
   public async snapshot(persistence: {
-    snapshot(system: System): Promise<void>;
+    snapshot(system: Root.ManifoldView): Promise<void>;
   }): Promise<void> {
     await persistence.snapshot(this);
   }
@@ -835,7 +858,7 @@ class System implements Root.System {
    * @param persistence The persistence manager providing the hydrate capability.
    */
   public async hydrate(persistence: {
-    hydrate(system: System): Promise<void>;
+    hydrate(system: Root.ManifoldView): Promise<void>;
   }): Promise<void> {
     await persistence.hydrate(this);
   }
@@ -848,18 +871,18 @@ class System implements Root.System {
  * single call to `swap()`, no per-component update required.
  */
 class SystemRef {
-  private _current: System;
-
-  constructor(system: System) {
-    this._current = system;
+  private _system: Root.ManifoldView;
+  constructor(system: Root.ManifoldView) {
+    this._system = system;
   }
-
-  get current(): System {
-    return this._current;
+  get current(): Root.ManifoldView {
+    return this._system;
   }
-
-  swap(system: System): void {
-    this._current = system;
+  get readOnly(): Root.ReadonlyManifoldView {
+    return this._system;
+  }
+  swap(system: Root.ManifoldView): void {
+    this._system = system;
   }
 }
 

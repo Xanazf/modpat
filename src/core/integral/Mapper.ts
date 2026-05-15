@@ -19,7 +19,7 @@ import { DOPAT_CONFIG } from "@config";
 class Mapper implements Mapping.Engine {
   /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
-  private get system(): System {
+  private get system(): Root.ManifoldView {
     return this.systemRef.current;
   }
   /** Optional GPU math engine for acceleration. */
@@ -33,7 +33,7 @@ class Mapper implements Mapping.Engine {
    * Initializes the mapper with a reference to the dual-layer manifold.
    */
   constructor(
-    system: System | SystemRef,
+    system: Root.ManifoldView | SystemRef,
     gpu: TensorMath_GPU | null = null,
     unfolder: Unfolder | null = null
   ) {
@@ -215,7 +215,7 @@ class Mapper implements Mapping.Engine {
           y: py[report.trapIndex],
           z: pe[report.trapIndex],
           w: pa[report.trapIndex],
-          strength: 1000.0,
+          strength: DOPAT_CONFIG.mapper.TRAP_PENALTY,
         });
       }
     }
@@ -714,7 +714,9 @@ class Mapper implements Mapping.Engine {
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
         let totalDiff = distSq + dw * dw * 1000000.0; // Massive context snapping penalty
 
-        const layerJ = Math.floor(this.system.posZ[j] / 10.0);
+        const layerJ = Math.floor(
+          this.system.posZ[j] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
+        );
 
         // Monotonic Grammatical Filter:
         // Ensure grammatical continuity per fact layer. We track the furthest we've read
@@ -747,16 +749,20 @@ class Mapper implements Mapping.Engine {
          *  it means the continuous physical path rolled over the intermediate words. We must fill them in
          *  to fully reconstruct the bridging syntax.
          */
-        const layerBest = Math.floor(this.system.posZ[bestId] / 10.0);
+        const layerBest = Math.floor(
+          this.system.posZ[bestId] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
+        );
 
         if (resultIds.length > 0) {
           const lastId = resultIds[resultIds.length - 1];
-          const layerLast = Math.floor(this.system.posZ[lastId] / 10.0);
+          const layerLast = Math.floor(
+            this.system.posZ[lastId] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
+          );
 
           if (layerLast === layerBest && bestId > lastId) {
             // only fill in the gap if it's reasonably small (e.g. < 5 tokens).
             // ff it's a huge jump, it means the path left the trench and returned later.
-            if (bestId - lastId < 5) {
+            if (bestId - lastId < DOPAT_CONFIG.mapper.PATH_GAP_FILL_MAX) {
               for (let fillId = lastId + 1; fillId < bestId; fillId++) {
                 resultIds.push(fillId);
               }

@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { DOPAT_CONFIG } from "@config";
 
 /**
  * The UMAPLoader acts as the spatial architect for the Modulating Attenuation Topology.
@@ -100,6 +101,6 @@ export class UMAPLoader {
       hash = (hash * 33) ^ str.charCodeAt(i);
     }
     // Isolate OOV words far from the main UMAP manifold
-    return (Math.abs(hash) % 1000) * 0.001 + 50000.0;
+    return (Math.abs(hash) % 1000) * 0.001 + DOPAT_CONFIG.structural.VOID_POS_X;
   }
 }

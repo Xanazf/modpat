@@ -68,7 +68,7 @@ export interface SearchResult {
  */
 export default class Unfolder {
   private systemRef: SystemRef;
-  private get system(): System {
+  private get system(): Root.ManifoldView {
     return this.systemRef.current;
   }
   private atomizer: SemanticAtomizer;

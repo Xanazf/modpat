@@ -40,7 +40,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
    * @param system The logical manifold to populate.
    * @returns A sequence of quantum IDs representing the materialized tokens.
    */
-  public ingestSequence(text: string, system: System): Uint32Array {
+  public ingestSequence(text: string, system: Root.ManifoldView): Uint32Array {
     // Split the text into tokens while preserving logical operators and punctuation.
     const tokens = text
       .split(/(for\s+all|=>|\|-|&&|\|\||\s+|\b|\(|\))/i)
@@ -99,7 +99,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
   public ingestPattern(
     template: string,
     _slotTypes: Map<number, SlotType>,
-    system: System
+    system: Root.ManifoldView
   ): Uint32Array {
     return this.ingestSequence(template, system);
   }
@@ -112,7 +112,10 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
    * @param system The logical manifold containing the physical state.
    * @returns The reconstructed string statement.
    */
-  public decodeSequence(sequenceIds: Uint32Array, system: System): string {
+  public decodeSequence(
+    sequenceIds: Uint32Array,
+    system: Root.ManifoldView
+  ): string {
     const output: string[] = [];
     for (let i = 0; i < sequenceIds.length; i++) {
       const id = sequenceIds[i];

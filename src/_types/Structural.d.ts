@@ -12,13 +12,13 @@ declare namespace Atomic {
   }
 
   interface Engine {
-    ingestSequence(text: string, system: System): Uint32Array;
+    ingestSequence(text: string, system: Root.ManifoldView): Uint32Array;
     ingestPattern(
       template: string,
       slotTypes: Map<number, number>,
-      system: System
+      system: Root.ManifoldView
     ): Uint32Array;
-    decodeSequence(sequenceIds: Uint32Array, system: System): string;
+    decodeSequence(sequenceIds: Uint32Array, system: Root.ManifoldView): string;
     getSymbolScope(symbol: string, isOperator: boolean): number;
     resolveScope(scope: number): string | undefined;
     init(): Promise<void>;

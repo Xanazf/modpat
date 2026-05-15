@@ -4,7 +4,7 @@ import { describe, it } from "../utils/harness";
 import System, {
   LogicOperations,
   TargetBuffer,
-  classifyOperator,
+  classifyOperatorToken,
 } from "./subjects/System_iso";
 import type OG_System from "@core_i/System";
 import LogicAtomizer from "@atomics/LogicAtomizer";

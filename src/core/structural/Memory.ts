@@ -1,4 +1,5 @@
 import type System from "@core_i/System";
+import { DOPAT_CONFIG } from "@config";
 import {
   classifyOperatorToken,
   OperatorClass,
@@ -48,7 +49,7 @@ export default class Store implements Memory.Vault {
   private _connection!: DuckDBConnection;
   /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
-  private get system(): System {
+  private get system(): Root.ManifoldView {
     return this.systemRef.current;
   }
   /** The atomic engine for encoding/decoding logic quanta. */
@@ -66,7 +67,7 @@ export default class Store implements Memory.Vault {
    * @param dbPath - The path to the persistent DuckDB file.
    */
   constructor(
-    system: System | SystemRef,
+    system: Root.ManifoldView | SystemRef,
     atomizer: Atomic.Engine,
     dbPath: string = ":memory:"
   ) {
@@ -302,8 +303,8 @@ export default class Store implements Memory.Vault {
     const checkStmt = await this._connection.prepare(`
       SELECT net_energy FROM wave_forms
       WHERE signature = ?
-        AND ABS(anchor_x - ?) < 0.5
-        AND ABS(anchor_y - ?) < 0.5
+        AND ABS(anchor_x - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
+        AND ABS(anchor_y - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
       LIMIT 1
     `);
     let existingEnergy: number | null = null;
@@ -324,8 +325,8 @@ export default class Store implements Memory.Vault {
         const upd = await this._connection.prepare(`
           UPDATE wave_forms SET net_energy = ?
           WHERE signature = ?
-            AND ABS(anchor_x - ?) < 0.5
-            AND ABS(anchor_y - ?) < 0.5
+            AND ABS(anchor_x - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
+            AND ABS(anchor_y - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
         `);
         try {
           upd.bindDouble(1, energy);
@@ -405,9 +406,9 @@ export default class Store implements Memory.Vault {
       if (rows && rows.length > 0) {
         const resonance = Number(rows[0][2]);
         // Tight Resonance Threshold:
-        // A distance < 0.1 indicates the query is physically targeting the same logical entity.
+        // A distance < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD indicates the query is physically targeting the same logical entity.
         // A larger distance suggests a structural coincidence but a different topological identity.
-        if (resonance < 0.1) {
+        if (resonance < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD) {
           targetPattern = rows[0][0]?.toString() || null;
           slotFlags = BigInt(String(rows[0][1] ?? "0"));
         }

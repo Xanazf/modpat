@@ -69,6 +69,7 @@ export async function executeCodeSynthesisSuite() {
         !composed.includes("VAR_2"),
         "Body slot VAR_2 should have been replaced by the inner pattern"
       );
+      logger.log(composed);
     });
 
     // Test 3: Synthesizer.instantiate binds concrete tokens

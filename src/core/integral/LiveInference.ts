@@ -1,5 +1,6 @@
 import nlp from "compromise";
 import { parse, walk, replace, generate } from "abstract-syntax-tree";
+import { DOPAT_CONFIG } from "@config";
 
 import type Resolver from "@core_i/Resolver";
 import type System from "@core_i/System";
@@ -202,7 +203,7 @@ function extractPatternFromNode(node: any): {
 export class LiveInference {
   /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
-  private get system(): System {
+  private get system(): Root.ManifoldView {
     return this.systemRef.current;
   }
   /** Responsible for breaking down text into atomic logical quanta. */
@@ -227,7 +228,7 @@ export class LiveInference {
    * @param store The persistent memory controller.
    */
   constructor(
-    system: System | SystemRef,
+    system: Root.ManifoldView | SystemRef,
     atomizer: SemanticAtomizer,
     resolver: Resolver,
     store: Store,
@@ -586,7 +587,9 @@ export class LiveInference {
         // word, rather than being cut short mid-article during a cross-layer jump.
         const layerBounds = new Map<number, { first: number; last: number }>();
         for (let i = preExpandLength; i < postExpandLength; i++) {
-          const lk = Math.floor(this.system.posZ[i] / 10.0);
+          const lk = Math.floor(
+            this.system.posZ[i] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
+          );
           const b = layerBounds.get(lk);
           if (!b) layerBounds.set(lk, { first: i, last: i });
           else b.last = i;
@@ -612,7 +615,8 @@ export class LiveInference {
             undefined,
             preExpandLength
           );
-          const skipFirst = seg > 0;
+          const skipFirst =
+            DOPAT_CONFIG.structural.INTRA_LAYER_SKIP_FIRST && seg > 0;
           for (let k = skipFirst ? 1 : 0; k < segPath.length; k++) {
             const id = segPath[k];
             if (

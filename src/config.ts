@@ -27,7 +27,72 @@ const DOPAT_CONFIG = {
     /** Additive influence boost for Condition-slot precepts during path relaxation. */
     COND_SLOT_ATTRACTION: 60.0,
   },
+
+  resolver: {
+    /** Scope equality tolerance; increase if floating-point noise causes false negatives. */
+    SCOPE_EPSILON: 1e-6,
+    /** Propagation damping factor. */
+    PROPAGATION_ALPHA: 0.85,
+    /** Number of propagation iterations for stability. */
+    PROPAGATION_ITERS: 10,
+    /** Weight for constructive interference. */
+    W_CONSTRUCTIVE: 1.0,
+    /** Weight for gravitational lensing. */
+    W_LENSING: 0.7,
+    /** Weight for destructive interference. */
+    W_DESTRUCTIVE: -1.0,
+  },
+
+  mapper: {
+    /** The step size for gradient descent updates during path relaxation. */
+    GRADIENT_STEP: 0.01,
+    /** Squared orbit radius for clustering. */
+    ORBIT_RADIUS_SQ: 0.5,
+    /** Mass penalty for detecting logic traps. */
+    TRAP_PENALTY: 1_000,
+    /** Maximum number of gaps to fill during path resolution. */
+    PATH_GAP_FILL_MAX: 5,
+  },
+
+  memory: {
+    /** Vault threshold for deduplication. */
+    VAULT_DEDUP_THRESHOLD: 0.5,
+    /** Vault threshold for queries. */
+    VAULT_QUERY_THRESHOLD: 0.1,
+  },
+
+  structural: {
+    /** The default void X coordinate representing a far position out of influence. */
+    VOID_POS_X: 50_000,
+    /** Layer bucket size for indexing. */
+    LAYER_BUCKET_SIZE: 10,
+    /** Whether to skip the first intra layer checking. */
+    INTRA_LAYER_SKIP_FIRST: true,
+    /** Consolidation iterations per tick [lo, hi]. */
+    CONSOLIDATION_ITERS_PER_TICK: [10, 50] as [number, number],
+  },
 };
+
+export function validateConfig(): void {
+  const { resolver, mapper, memory, structural } = DOPAT_CONFIG;
+
+  if (resolver.SCOPE_EPSILON <= 0) throw new Error("SCOPE_EPSILON must be > 0");
+
+  if (resolver.PROPAGATION_ALPHA <= 0 || resolver.PROPAGATION_ALPHA >= 1)
+    throw new Error("PROPAGATION_ALPHA must be in (0, 1)");
+
+  if (mapper.GRADIENT_STEP <= 0) throw new Error("GRADIENT_STEP must be > 0");
+
+  if (memory.VAULT_DEDUP_THRESHOLD < memory.VAULT_QUERY_THRESHOLD)
+    throw new Error("VAULT_DEDUP_THRESHOLD must be >= VAULT_QUERY_THRESHOLD");
+
+  if (structural.VOID_POS_X <= DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS)
+    throw new Error("VOID_POS_X must be well outside INFLUENCE_RADIUS");
+
+  const [lo, hi] = structural.CONSOLIDATION_ITERS_PER_TICK;
+  if (lo < 1 || hi < lo)
+    throw new Error("CONSOLIDATION_ITERS_PER_TICK must satisfy 1 <= lo <= hi");
+}
 
 // TODO: debug bindings
 const SYSTEM_CONFIG = {

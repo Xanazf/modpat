@@ -343,7 +343,10 @@ export class ManifoldManager {
 
     // Throttle: don't run every tick unless pressure is extremely high
     // (Simulated by running a partial sweep each tick instead of full O(N^2))
-    const sweeps = pressure > 0.8 ? 50 : 10;
+    const sweeps =
+      pressure > 0.8
+        ? DOPAT_CONFIG.structural.CONSOLIDATION_ITERS_PER_TICK[1]
+        : DOPAT_CONFIG.structural.CONSOLIDATION_ITERS_PER_TICK[0];
 
     for (let k = 0; k < sweeps; k++) {
       if (sys.length < 2) break;
@@ -374,7 +377,7 @@ export class ManifoldManager {
         }
 
         // ORBITAL CLUSTERING (Semantic Proximity)
-        const ORBIT_RADIUS_SQ = 0.5; // Threshold for similar meaning
+        const ORBIT_RADIUS_SQ = DOPAT_CONFIG.mapper.ORBIT_RADIUS_SQ; // Threshold for similar meaning
         if (distSq < ORBIT_RADIUS_SQ) {
           // Determine Root (heaviest mass)
           const root = sys.mass[i] > sys.mass[j] ? i : j;
@@ -387,14 +390,14 @@ export class ManifoldManager {
           sys.posZ[satellite] += (sys.posZ[root] - sys.posZ[satellite]) * pull;
           sys.posW[satellite] += (sys.posW[root] - sys.posW[satellite]) * pull;
 
-          // Blend Scope via updateScope to keep the scope index consistent.
-          // updateScope only calls update() when scope actually changes; the
+          // Blend Scope via setScope to keep the scope index consistent.
+          // setScope only calls update() when scope actually changes; the
           // explicit update() below ensures the checksum reflects pos* changes
           // even when the scope value is unchanged (floating-point equality).
           const blendedScope =
             sys.scope[satellite] +
             (sys.scope[root] - sys.scope[satellite]) * pull * 0.5;
-          sys.updateScope(satellite, blendedScope);
+          sys.setScope(satellite, blendedScope);
           sys.update(satellite, "orbital_clustering");
         }
       }

@@ -78,7 +78,11 @@ export class SpectralVisualizer {
   /**
    * Renders a specific atom from the system state with its associated text.
    */
-  public renderAtom(system: System, id: number, text: string): string {
+  public renderAtom(
+    system: Root.ManifoldView,
+    id: number,
+    text: string
+  ): string {
     const mass = system.mass[id];
     const entropy = system.entropyRate[id];
     const density = system.density[id];
@@ -99,7 +103,7 @@ export class SpectralVisualizer {
    * Renders a whole sequence of atoms from the system state.
    */
   public renderSequence(
-    system: System,
+    system: Root.ManifoldView,
     ids: Uint32Array,
     tokens: string[]
   ): string {
@@ -115,7 +119,7 @@ export class SpectralVisualizer {
    * Smoother bars and density indicators included.
    */
   public renderWaveForm(
-    system: System,
+    system: Root.ManifoldView,
     ids: Uint32Array,
     tokens: string[],
     height: number = 2

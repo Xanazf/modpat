@@ -16,7 +16,7 @@ import System, { OperatorClass, SlotType, SystemRef } from "./System";
 export default class Resolver implements Resolution.Engine {
   /** Shared reference cell, swap fires on ManifoldManager failover. */
   private systemRef: SystemRef;
-  private get system(): System {
+  private get system(): Root.ManifoldView {
     return this.systemRef.current;
   }
   /** The engine for transforming between text and quanta. */
@@ -57,7 +57,7 @@ export default class Resolver implements Resolution.Engine {
    * @param store Optional persistent memory store.
    */
   constructor(
-    system: System | SystemRef,
+    system: Root.ManifoldView | SystemRef,
     atomizer: Atomic.Engine,
     store: Store | null = null
   ) {
@@ -218,9 +218,13 @@ export default class Resolver implements Resolution.Engine {
       for (let j = 0; j < N; j++) {
         if (
           i !== j &&
-          Math.abs(this.system.scope[sequenceIds[j]] - scope) < 1e-6
+          Math.abs(this.system.scope[sequenceIds[j]] - scope) <
+            DOPAT_CONFIG.resolver.SCOPE_EPSILON
         ) {
-          transferMatrix[i * N + j] = Math.max(transferMatrix[i * N + j], 0.8);
+          transferMatrix[i * N + j] = Math.max(
+            transferMatrix[i * N + j],
+            DOPAT_CONFIG.resolver.W_CONSTRUCTIVE
+          );
           logger.debug(
             `[DEBUG RESOLVER] Constructive Interference between ${i} and ${j}`
           );
@@ -234,13 +238,14 @@ export default class Resolver implements Resolution.Engine {
           opClass === OperatorClass.Quantifier
         ) {
           // Allow energy to bypass the operator and flow directly between adjacent concepts.
-          transferMatrix[(i - 1) * N + (i + 1)] = 1.0;
+          transferMatrix[(i - 1) * N + (i + 1)] =
+            DOPAT_CONFIG.resolver.W_LENSING;
           logger.debug(
             `[DEBUG RESOLVER] Gravitational Lens at ${i} bypassing to ${i + 1}`
           );
         } else if (opClass === OperatorClass.Inversion) {
           // Phase Inversion: Negation causes destructive interference (-1.0).
-          transferMatrix[i * N + (i + 1)] = -1.0;
+          transferMatrix[i * N + (i + 1)] = DOPAT_CONFIG.resolver.W_DESTRUCTIVE;
         }
       }
     }
@@ -267,11 +272,15 @@ export default class Resolver implements Resolution.Engine {
     accumulatedResonance.set(transferMatrix);
     currentResonance.set(transferMatrix);
 
-    const logicalConductivity = 0.85; // Physical dissipation factor (Alpha)
+    const logicalConductivity = DOPAT_CONFIG.resolver.PROPAGATION_ALPHA; // Physical dissipation factor (Alpha)
 
     if (this.gpu && N > 16) {
       // GPU Acceleration for matrix power series (high-performance propagation).
-      for (let step = 1; step < N; step++) {
+      for (
+        let step = 1;
+        step < DOPAT_CONFIG.resolver.PROPAGATION_ITERS;
+        step++
+      ) {
         const nextResonanceRes = await this.gpu.matMulF64(
           currentResonance,
           transferMatrix,
@@ -293,7 +302,11 @@ export default class Resolver implements Resolution.Engine {
       }
     } else {
       // CPU Fallback for matrix propagation (O(N^3)).
-      for (let step = 1; step < N; step++) {
+      for (
+        let step = 1;
+        step < DOPAT_CONFIG.resolver.PROPAGATION_ITERS;
+        step++
+      ) {
         const nextResonance = this.E_new_buffer.subarray(0, N * N);
         nextResonance.fill(0);
         for (let i = 0; i < N; i++) {
@@ -621,16 +634,20 @@ export default class Resolver implements Resolution.Engine {
     //    the most recently ingested (hottest) facts are checked first.
     //    Falls through to the full scan for facts older than the ring window.
     //
-    //    IMPORTANT: registerSequenceStart is called for every ingestSequence, including
+    //    IMPORTANT: setSequenceStart is called for every ingestSequence, including
     //    query sequences. Without the queryIdSet guard the fast-path would self-match
     //    the query's own ring entry and return collectSequence(past-end) → "".
     const queryIdSet = new Set<number>(subjectIds);
     queryIdSet.add(operatorId);
-    const ringEntries = this.system.sequenceRing.toArray();
+    const ringEntries = this.system.getSequenceEntries();
     for (let r = ringEntries.length - 1; r >= 0; r--) {
       const { scope0, startId } = ringEntries[r];
       if (queryIdSet.has(startId)) continue; // never match the current query's own entry
-      if (Math.abs(scope0 - this.system.scope[subjectIds[0]]) >= 1e-6) continue;
+      if (
+        Math.abs(scope0 - this.system.scope[subjectIds[0]]) >=
+        DOPAT_CONFIG.resolver.SCOPE_EPSILON
+      )
+        continue;
       if (!this.system.isAllocated(startId)) continue;
 
       // Verify every token in the subject sequence at consecutive memory positions
@@ -641,7 +658,7 @@ export default class Resolver implements Resolution.Engine {
           cId >= length ||
           !this.system.isAllocated(cId) ||
           Math.abs(this.system.scope[cId] - this.system.scope[subjectIds[j]]) >=
-            1e-6
+            DOPAT_CONFIG.resolver.SCOPE_EPSILON
         ) {
           match = false;
           break;
@@ -653,7 +670,8 @@ export default class Resolver implements Resolution.Engine {
       const opId = startId + subjectIds.length;
       if (
         opId < length &&
-        Math.abs(this.system.scope[opId] - operatorScope) < 1e-6
+        Math.abs(this.system.scope[opId] - operatorScope) <
+          DOPAT_CONFIG.resolver.SCOPE_EPSILON
       ) {
         return this.collectSequence(opId + 1, 1);
       }
