@@ -56,15 +56,13 @@ export async function runRigorousTests() {
       const pathTokens = env.atomizer.decodeSequence(path, env.system);
 
       logger.log(`Geodesic Path tokens: ${pathTokens}`);
-      if (!pathTokens.toLowerCase().includes("distractor")) {
-        logger.warn(
-          `  ! Distractor did not warp the logical geodesic. Path: "${pathTokens}"`
-        );
-      } else {
-        logger.log(
-          `  ✓ Successfully warped the logical geodesic with mass distractor.`
-        );
-      }
+      assert.ok(
+        pathTokens.toLowerCase().includes("distractor"),
+        `Super-massive distractor (mass=c²×1e6) placed adjacent to source must warp the geodesic through itself. Path was: "${pathTokens}"`
+      );
+      logger.log(
+        `  ✓ Successfully warped the logical geodesic with mass distractor.`
+      );
     });
 
     await it("Case 3: Paradoxical Instability (The Liar Paradox)", async () => {

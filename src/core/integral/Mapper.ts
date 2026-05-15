@@ -3,8 +3,10 @@ import logger from "@utils/SpectralLogger";
 import { TensorMath_GPU } from "@core_s/Math";
 import type System from "./System";
 import { SlotType, SystemRef } from "./System";
+import { GridIndex4D } from "./GridIndex4D";
 import type Unfolder from "@core_s/Unfolder";
 import { DOPAT_CONFIG } from "@config";
+import { metrics } from "@core_s/Metrics";
 
 /**
  * The Mapper is responsible for finding the shortest logical path (Geodesic)
@@ -28,6 +30,8 @@ class Mapper implements Mapping.Engine {
   private unfolder: Unfolder | null = null;
   /** WebGPU pipeline for geodesic calculations. */
   private geodesicPipeline: GPUComputePipeline | null = null;
+  /** 4D spatial index, rebuilt at the start of each route() attempt. */
+  private readonly gridIndex = new GridIndex4D();
 
   /**
    * Initializes the mapper with a reference to the dual-layer manifold.
@@ -111,7 +115,9 @@ class Mapper implements Mapping.Engine {
 
     // 2. Iterative Relaxation using Manifold Potential Field.
     for (let attempt = 0; attempt < 10; attempt++) {
+      this.buildGridIndex();
       if (this.gpu) {
+        metrics.increment("mapper.gpu_dispatches");
         await this.relaxPathGPU(
           px,
           py,
@@ -124,6 +130,7 @@ class Mapper implements Mapping.Engine {
           penalties
         );
       } else {
+        metrics.increment("mapper.cpu_dispatches");
         this.relaxPath(
           px,
           py,
@@ -163,6 +170,7 @@ class Mapper implements Mapping.Engine {
                 }
               }
               if (expanded) {
+                metrics.increment("mapper.void_expansions");
                 voidDetected = true;
                 break;
               }
@@ -199,6 +207,7 @@ class Mapper implements Mapping.Engine {
 
       const report = this.review(px, py, pe, pa, steps);
       if (report.passed) {
+        metrics.record("mapper.iters_to_converge", attempt + 1);
         finalIds = this.extractIds(
           px,
           py,
@@ -413,29 +422,40 @@ class Mapper implements Mapping.Engine {
         const SLOT_BODY: u32      = 2u;  // SlotType.Body      = 1 << 1
         const SLOT_CONDITION: u32 = 4u;  // SlotType.Condition = 1 << 2
 
-        fn potentialAt(p: vec4<f32>) -> f32 {
-            var d = 1.0;
+        struct GradResult { V: f32, gx: f32, gy: f32, gz: f32, gw: f32 };
+
+        fn getGradientAt(p: vec4<f32>) -> GradResult {
+            var V = 1.0; var gx = 0.0; var gy = 0.0; var gz = 0.0; var gw = 0.0;
+            let F = params.iF;
             for (var j = 0u; j < params.sysLength; j = j + 1u) {
                 let diff = p - sysPos[j];
                 let distSq = dot(diff, diff);
-                if (distSq < params.iR) {
-                    var influence = sysInfluence[j];
-                    // Slot-type attractions: Body/Condition slots act as funnels.
-                    let st = sysSlotType[j];
-                    if ((st & SLOT_BODY) != 0u)      { influence = influence + params.bodyAttr; }
-                    if ((st & SLOT_CONDITION) != 0u)  { influence = influence + params.condAttr; }
-                    let dw = diff.w; // Age Context
-                    influence = influence * exp(-(dw * 50.0) * (dw * 50.0)); // Context Anisotropy
-                    if (sysPos[j].w < p.w - 0.01) { influence = influence * 0.01; } // Temporal Anisotropy
-                    d = d - influence * exp(-distSq / params.iF);
-                }
+                if (distSq >= params.iR) { continue; }
+                var infl = sysInfluence[j];
+                let st = sysSlotType[j];
+                if ((st & SLOT_BODY) != 0u)      { infl = infl + params.bodyAttr; }
+                if ((st & SLOT_CONDITION) != 0u)  { infl = infl + params.condAttr; }
+                let dw = diff.w;
+                infl = infl * exp(-(dw * 50.0) * (dw * 50.0));
+                if (sysPos[j].w < p.w - 0.01) { infl = infl * 0.01; }
+                let e = infl * exp(-distSq / F);
+                V = V - e;
+                let f = 2.0 * e / F;
+                gx = gx + f * diff.x; gy = gy + f * diff.y;
+                gz = gz + f * diff.z; gw = gw + f * diff.w;
             }
             for (var k = 0u; k < params.penCount; k = k + 1u) {
                 let diff = p - penalties[k].pos;
                 let distSq = dot(diff, diff);
-                if (distSq < params.pR) { d = d + penalties[k].strength * exp(-distSq / params.pF); }
+                if (distSq >= params.pR) { continue; }
+                let e = penalties[k].strength * exp(-distSq / params.pF);
+                V = V + e;
+                let f = -2.0 * e / params.pF;
+                gx = gx + f * diff.x; gy = gy + f * diff.y;
+                gz = gz + f * diff.z; gw = gw + f * diff.w;
             }
-            return max(0.01, d);
+            V = max(0.01, V);
+            return GradResult(V, gx, gy, gz, gw);
         }
 
         @compute @workgroup_size(64)
@@ -444,17 +464,11 @@ class Mapper implements Mapping.Engine {
             for (var it = 0u; it < params.iter; it = it + 1u) {
                 if (i > 0u && i < params.steps) {
                     let curr = pathData[i];
-                    let h = params.h;
-                    let d0 = potentialAt(curr);
-                    let grad = vec4<f32>(
-                        (potentialAt(vec4<f32>(curr.x+h, curr.y, curr.z, curr.w)) - potentialAt(vec4<f32>(curr.x-h, curr.y, curr.z, curr.w)))/(2.0*h),
-                        (potentialAt(vec4<f32>(curr.x, curr.y+h, curr.z, curr.w)) - potentialAt(vec4<f32>(curr.x, curr.y-h, curr.z, curr.w)))/(2.0*h),
-                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z+h, curr.w)) - potentialAt(vec4<f32>(curr.x, curr.y, curr.z-h, curr.w)))/(2.0*h),
-                        (potentialAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w+h)) - potentialAt(vec4<f32>(curr.x, curr.y, curr.z, curr.w-h)))/(2.0*h)
-                    );
+                    let gr = getGradientAt(curr);
+                    let grad = vec4<f32>(gr.gx, gr.gy, gr.gz, gr.gw);
                     let spring = (pathData[i-1u] + pathData[i+1u])/2.0 - curr;
                     let displacement = params.lr * (spring * 2.0 - grad);
-                    
+
                     var next = curr + displacement;
                     // Semi-implicit integration: apply soft constraints to maintain flow without hard clipping
                     let ageDiff = next.w - pathData[i-1u].w;
@@ -473,7 +487,26 @@ class Mapper implements Mapping.Engine {
   }
 
   /**
-   * Performs gradient descent on the logic density field.
+   * Rebuilds the 4D spatial index from the current system state.
+   * O(N) rebuild is amortised across O(maxIters × steps) gradient queries.
+   */
+  private buildGridIndex(): void {
+    this.gridIndex.clear();
+    const n = this.system.length;
+    for (let j = 0; j < n; j++) {
+      this.gridIndex.insert(
+        j,
+        this.system.posX[j],
+        this.system.posY[j],
+        this.system.posZ[j],
+        this.system.posW[j]
+      );
+    }
+  }
+
+  /**
+   * Performs gradient descent using the analytic gradient of the potential field.
+   * One pass per path point per iteration versus the previous 4-call finite-difference block.
    */
   private relaxPath(
     px: Float64Array,
@@ -486,54 +519,16 @@ class Mapper implements Mapping.Engine {
     boost: Set<number> | undefined,
     penalties: any[]
   ): void {
-    const phys = DOPAT_CONFIG.PHYSICS;
     for (let iter = 0; iter < maxIterations; iter++) {
       for (let i = 1; i < steps; i++) {
-        const h = phys.GRADIENT_STEP;
-        const gx =
-          (this.getPotential(px[i] + h, py[i], pe[i], pa[i], penalties, boost) -
-            this.getPotential(
-              px[i] - h,
-              py[i],
-              pe[i],
-              pa[i],
-              penalties,
-              boost
-            )) /
-          (2.0 * h);
-        const gy =
-          (this.getPotential(px[i], py[i] + h, pe[i], pa[i], penalties, boost) -
-            this.getPotential(
-              px[i],
-              py[i] - h,
-              pe[i],
-              pa[i],
-              penalties,
-              boost
-            )) /
-          (2.0 * h);
-        const ge =
-          (this.getPotential(px[i], py[i], pe[i] + h, pa[i], penalties, boost) -
-            this.getPotential(
-              px[i],
-              py[i],
-              pe[i] - h,
-              pa[i],
-              penalties,
-              boost
-            )) /
-          (2.0 * h);
-        const ga =
-          (this.getPotential(px[i], py[i], pe[i], pa[i] + h, penalties, boost) -
-            this.getPotential(
-              px[i],
-              py[i],
-              pe[i],
-              pa[i] - h,
-              penalties,
-              boost
-            )) /
-          (2.0 * h);
+        const [, gx, gy, gz, gw] = this.getGradient(
+          px[i],
+          py[i],
+          pe[i],
+          pa[i],
+          penalties,
+          boost
+        );
 
         const sx = (px[i - 1] + px[i + 1]) / 2 - px[i];
         const sy = (py[i - 1] + py[i + 1]) / 2 - py[i];
@@ -542,10 +537,10 @@ class Mapper implements Mapping.Engine {
 
         px[i] += lr * (sx * 2.0 - gx);
         py[i] += lr * (sy * 2.0 - gy);
-        pe[i] += lr * (se * 2.0 - ge);
+        pe[i] += lr * (se * 2.0 - gz);
 
         // Soft Asymmetric Monotonic Age Traversal (Semi-implicit constraint)
-        const da_move = lr * (sa * 2.0 - ga);
+        const da_move = lr * (sa * 2.0 - gw);
         pa[i] += da_move;
 
         const ageDiff = pa[i] - pa[i - 1];
@@ -558,6 +553,87 @@ class Mapper implements Mapping.Engine {
     }
   }
 
+  /**
+   * Computes the manifold potential and its analytic gradient at a point in one pass.
+   * Replaces the 4-evaluation finite-difference block; combined with the spatial index
+   * (3a) the per-call cost drops from O(N) × 4 to O(candidates_in_radius) × 1.
+   *
+   * Gradient derivation: V = 1 − Σ infl_j · exp(−d²/F) + Σ pen_k · exp(−d²_k/F_k)
+   *   ∂V/∂px = Σ infl_j · exp(−d²/F) · 2(px−xj)/F  −  Σ pen_k · exp(−d²_k/F_k) · 2(px−xk)/F_k
+   */
+  private getGradient(
+    px: number,
+    py: number,
+    pz: number,
+    pw: number,
+    pens: any[],
+    boost: Set<number> | undefined
+  ): [V: number, gx: number, gy: number, gz: number, gw: number] {
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const F = phys.INFLUENCE_FALLOFF;
+    let V = 1.0,
+      gx = 0.0,
+      gy = 0.0,
+      gz = 0.0,
+      gw = 0.0;
+
+    const actualRadius = Math.sqrt(phys.INFLUENCE_RADIUS);
+    const candidates = this.gridIndex.candidatesInRadius(
+      px,
+      py,
+      pz,
+      pw,
+      actualRadius
+    );
+
+    for (const j of candidates) {
+      const dx = px - this.system.posX[j],
+        dy = py - this.system.posY[j],
+        dz = pz - this.system.posZ[j],
+        dw = pw - this.system.posW[j];
+      const d2 = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (d2 >= phys.INFLUENCE_RADIUS) continue;
+
+      let infl =
+        this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
+      if (boost?.has(this.system.scope[j])) infl += 50.0;
+      const st = this.system.slotType[j];
+      if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
+      if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
+      infl *= Math.exp(-Math.pow(dw * 50.0, 2));
+      if (this.system.posW[j] < pw - 0.01) infl *= 0.01;
+
+      const e = infl * Math.exp(-d2 / F);
+      V -= e;
+      const f = (2.0 * e) / F;
+      gx += f * dx;
+      gy += f * dy;
+      gz += f * dz;
+      gw += f * dw;
+    }
+
+    if (pens) {
+      const Fp = phys.PENALTY_FALLOFF;
+      for (const p of pens) {
+        const dx = px - p.x,
+          dy = py - p.y,
+          dz = pz - p.z,
+          dw = pw - p.w;
+        const d2 = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (d2 >= phys.PENALTY_RADIUS) continue;
+        const e = p.strength * Math.exp(-d2 / Fp);
+        V += e;
+        const f = (-2.0 * e) / Fp;
+        gx += f * dx;
+        gy += f * dy;
+        gz += f * dz;
+        gw += f * dw;
+      }
+    }
+
+    return [Math.max(0.01, V), gx, gy, gz, gw];
+  }
+
   private getPotential(
     x: number,
     y: number,
@@ -566,43 +642,8 @@ class Mapper implements Mapping.Engine {
     pens: any[],
     boost: Set<number> | undefined
   ): number {
-    const phys = DOPAT_CONFIG.PHYSICS;
-    let pot = 1.0;
-    for (let j = 0; j < this.system.length; j++) {
-      const dx = x - this.system.posX[j],
-        dy = y - this.system.posY[j],
-        dz = z - this.system.posZ[j],
-        dw = w - this.system.posW[j];
-      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-      if (distSq < phys.INFLUENCE_RADIUS) {
-        // Syntactic Markov Chain Baseline: Ensure all logical nodes (operands) have enough
-        // topological weight to form localized grammatical trenches, instead of being invisible.
-        let infl =
-          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
-        // Moderate additive boost: 10x baseline, not 556x.
-        if (boost?.has(this.system.scope[j])) infl += 50.0;
-        // Slot-type attractions: Body and Condition slots create topological funnels
-        // that pull the geodesic toward continuation points.
-        const st = this.system.slotType[j];
-        if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
-        if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
-        infl *= Math.exp(-Math.pow(dw * 50.0, 2)); // Contextual Anisotropy
-        if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Temporal Anisotropy
-        pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
-      }
-    }
-    if (pens) {
-      pens.forEach(p => {
-        const dx = x - p.x,
-          dy = y - p.y,
-          dz = z - p.z,
-          dw = w - p.w;
-        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-        if (distSq < phys.PENALTY_RADIUS)
-          pot += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
-      });
-    }
-    return Math.max(0.01, pot);
+    const [V] = this.getGradient(x, y, z, w, pens, boost);
+    return V;
   }
 
   private getPotentialAndNearest(
@@ -614,44 +655,19 @@ class Mapper implements Mapping.Engine {
     boost: Set<number> | undefined
   ): { potential: number; nearestId: number } {
     const phys = DOPAT_CONFIG.PHYSICS;
-    let pot = 1.0,
-      minDistSq = Infinity,
-      nearestId = -1;
-    for (let j = 0; j < this.system.length; j++) {
-      const dx = x - this.system.posX[j],
-        dy = y - this.system.posY[j],
-        dz = z - this.system.posZ[j],
-        dw = w - this.system.posW[j];
-      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-      if (distSq < minDistSq) {
-        minDistSq = distSq;
-        nearestId = j;
-      }
-      if (distSq < phys.INFLUENCE_RADIUS) {
-        // Syntactic Markov Chain Baseline
-        let infl =
-          this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
-        if (boost?.has(this.system.scope[j])) infl += 50.0;
-        const st = this.system.slotType[j];
-        if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
-        if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
-        infl *= Math.exp(-Math.pow(dw * 50.0, 2));
-        if (this.system.posW[j] < w - 0.01) infl *= 0.01;
-        pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
-      }
-    }
-    if (pens) {
-      pens.forEach(p => {
-        const dx = x - p.x,
-          dy = y - p.y,
-          dz = z - p.z,
-          dw = w - p.w;
-        const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-        if (distSq < phys.PENALTY_RADIUS)
-          pot += p.strength * Math.exp(-distSq / phys.PENALTY_FALLOFF);
-      });
-    }
-    return { potential: Math.max(0.01, pot), nearestId };
+    // Use a large radius so the void-expansion unfolder can find a nearby anchor
+    // even when the path is wandering outside the normal influence zone.
+    const nearRadius = Math.sqrt(phys.INFLUENCE_RADIUS) * 4;
+    const nearestId = this.gridIndex.nearest(
+      x,
+      y,
+      z,
+      w,
+      nearRadius,
+      this.system
+    );
+    const [potential] = this.getGradient(x, y, z, w, pens, boost);
+    return { potential, nearestId };
   }
 
   private review(
@@ -662,21 +678,25 @@ class Mapper implements Mapping.Engine {
     steps: number
   ): Mapping.ReviewReport {
     const phys = DOPAT_CONFIG.PHYSICS;
+    // Traps are only relevant within TRAP_DISTANCE_THRESHOLD (squared).
+    // Using sqrt as radius guarantees we find any trap-eligible node.
+    const trapRadius = Math.sqrt(phys.TRAP_DISTANCE_THRESHOLD);
     for (let i = 1; i < steps; i++) {
-      let nearestDistSq = Infinity,
-        nearestId = -1;
-      for (let j = 0; j < this.system.length; j++) {
-        const dSq =
-          Math.pow(px[i] - this.system.posX[j], 2) +
-          Math.pow(py[i] - this.system.posY[j], 2) +
-          Math.pow(pe[i] - this.system.posZ[j], 2) +
-          Math.pow(pa[i] - this.system.posW[j], 2);
-        if (dSq < nearestDistSq) {
-          nearestDistSq = dSq;
-          nearestId = j;
-        }
-      }
-      if (nearestId !== -1 && nearestDistSq < phys.TRAP_DISTANCE_THRESHOLD) {
+      const nearestId = this.gridIndex.nearest(
+        px[i],
+        py[i],
+        pe[i],
+        pa[i],
+        trapRadius,
+        this.system
+      );
+      if (nearestId === -1) continue;
+      const ddx = px[i] - this.system.posX[nearestId];
+      const ddy = py[i] - this.system.posY[nearestId];
+      const ddz = pe[i] - this.system.posZ[nearestId];
+      const ddw = pa[i] - this.system.posW[nearestId];
+      const nearestDistSq = ddx * ddx + ddy * ddy + ddz * ddz + ddw * ddw;
+      if (nearestDistSq < phys.TRAP_DISTANCE_THRESHOLD) {
         if (
           this.system.density[nearestId] > phys.TRAP_MASS_THRESHOLD &&
           this.system.entropyRate[nearestId] < phys.TRAP_ENTROPY_THRESHOLD

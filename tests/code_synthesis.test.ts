@@ -139,6 +139,46 @@ export async function executeCodeSynthesisSuite() {
       await TestHarness.disposeEnvironment(env);
     });
 
+    // Test 5a: double-slot substitution, VAR_0 used more than once
+    await it("Test 5a: instantiate replaces VAR_0 everywhere it appears", async () => {
+      const synth = new Synthesizer();
+      const template = "function f(VAR_0) { return VAR_0 + 1; }";
+      const bindings = new Map<number, string>([[0, "x"]]);
+      const result = synth.instantiate(template, bindings);
+      assert.strictEqual(
+        result,
+        "function f(x) { return x + 1; }",
+        "Every occurrence of VAR_0 must be replaced"
+      );
+      assert.ok(
+        !result.includes("VAR_0"),
+        "No VAR_0 placeholder should remain"
+      );
+    });
+
+    // Test 5b: compose with empty list returns ""
+    await it("Test 5b: compose([]) returns empty string", async () => {
+      const synth = new Synthesizer();
+      assert.strictEqual(
+        synth.compose([]),
+        "",
+        "compose of empty pattern list must be empty string"
+      );
+    });
+
+    // Test 5c: instantiate with unbound VAR produces underscore placeholder
+    await it("Test 5c: instantiate with unbound VAR produces '_'", async () => {
+      const synth = new Synthesizer();
+      const template = "const VAR_0 = VAR_1 + VAR_2;";
+      const bindings = new Map<number, string>([[0, "result"]]);
+      const result = synth.instantiate(template, bindings);
+      assert.strictEqual(
+        result,
+        "const result = _ + _;",
+        "Unbound VARs should become '_'"
+      );
+    });
+
     //  Test 5: pack/unpack slot flags round-trip
     await it("Test 5: packSlotFlags/unpackSlotFlags round-trips correctly", async () => {
       const env =

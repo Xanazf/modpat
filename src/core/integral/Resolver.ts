@@ -7,6 +7,31 @@ import logger from "@utils/SpectralLogger";
 import Mapper from "./Mapper";
 import Synthesizer from "./Synthesizer";
 import System, { OperatorClass, SlotType, SystemRef } from "./System";
+import { GridIndex4D } from "./GridIndex4D";
+
+export interface ResolverDiagnostics {
+  N: number;
+  tokenLabels: string[];
+  operatorClasses: number[];
+  /** N×N transfer matrix (row-major, values post-normalisation). */
+  W: Float64Array;
+  /** N×N accumulated resonance matrix from Phase 3. */
+  accumulated: Float64Array;
+  /** Top-5 non-operator sink candidates, sorted by strength descending. */
+  sinkCandidates: Array<{
+    idx: number;
+    id: number;
+    label: string;
+    strength: number;
+    posX: number;
+    posY: number;
+    posZ: number;
+    posW: number;
+    opClass: number;
+  }>;
+  selectedTargetIdx: number;
+  maxNetEnergy: number;
+}
 
 /**
  * The Resolver is the primary logical engine, modeled as a physical simulation
@@ -48,6 +73,14 @@ export default class Resolver implements Resolution.Engine {
   private directScopesBuffer: Float64Array;
   /** Result buffer for the final inferred quantum sequence. */
   private resultIdsBuffer: Uint32Array;
+  /** 4D spatial index reused across fuzzy-centroid lookups; rebuilt when system length changes. */
+  private readonly spatialIndex = new GridIndex4D();
+  private lastIndexedLength = -1;
+
+  /** Sink strength of the winning target node from the most recent resolveSequence call. */
+  public lastSinkStrength = 0;
+  /** Full diagnostic snapshot from the most recent resolveSequence physics run. */
+  public lastDiagnostics: ResolverDiagnostics | null = null;
 
   /**
    * Initializes the Resolver and pre-allocates scratchpad memory for DOD performance.
@@ -144,6 +177,8 @@ export default class Resolver implements Resolution.Engine {
   public async resolveSequence(sequenceIds: Uint32Array): Promise<Uint32Array> {
     const N = sequenceIds.length;
     if (N === 0) return new Uint32Array(0);
+    this.lastSinkStrength = 0;
+    this.lastDiagnostics = null;
 
     // Ensure sequence fits within our pre-allocated DOD scratchpad.
     if (N > Resolver.MAX_SEQUENCE_LENGTH) {
@@ -337,6 +372,7 @@ export default class Resolver implements Resolution.Engine {
     // Phase 4: Identify the Target Node (Sink point with highest net energy).
     let targetNodeIdx = -1;
     let maxNetEnergy = -Infinity;
+    const allSinkCandidates: ResolverDiagnostics["sinkCandidates"] = [];
 
     for (let j = 0; j < N; j++) {
       // Look for a non-operator node that absorbed the most incoming logical energy.
@@ -356,8 +392,41 @@ export default class Resolver implements Resolution.Engine {
           maxNetEnergy = sinkStrength;
           targetNodeIdx = j;
         }
+        const id = sequenceIds[j];
+        allSinkCandidates.push({
+          idx: j,
+          id,
+          strength: sinkStrength,
+          label: this.atomizer
+            .decodeSequence(new Uint32Array([id]), this.system)
+            .trim(),
+          posX: this.system.posX[id],
+          posY: this.system.posY[id],
+          posZ: this.system.posZ[id],
+          posW: this.system.posW[id],
+          opClass: this.system.operatorClass[id],
+        });
       }
     }
+
+    // Capture diagnostics for grounding tests and verbose mode.
+    this.lastSinkStrength = Math.max(0, maxNetEnergy);
+    this.lastDiagnostics = {
+      N,
+      tokenLabels: Array.from(sequenceIds).map(id =>
+        this.atomizer.decodeSequence(new Uint32Array([id]), this.system).trim()
+      ),
+      operatorClasses: Array.from(sequenceIds).map(
+        id => this.system.operatorClass[id]
+      ),
+      W: new Float64Array(transferMatrix),
+      accumulated: new Float64Array(accumulatedResonance),
+      sinkCandidates: allSinkCandidates
+        .sort((a, b) => b.strength - a.strength)
+        .slice(0, 5),
+      selectedTargetIdx: targetNodeIdx,
+      maxNetEnergy,
+    };
 
     logger.debug(
       `[DEBUG RESOLVER] Max Net Energy: ${maxNetEnergy}, Target Node Index: ${targetNodeIdx}`
@@ -612,6 +681,26 @@ export default class Resolver implements Resolution.Engine {
   }
 
   /**
+   * Rebuilds the spatial index from current system state when the manifold has grown.
+   * O(N) rebuild is amortised across O(1) lookups in the fuzzy centroid scan.
+   */
+  private ensureSpatialIndex(): void {
+    const n = this.system.length;
+    if (n === this.lastIndexedLength) return;
+    this.spatialIndex.clear();
+    for (let j = 0; j < n; j++) {
+      this.spatialIndex.insert(
+        j,
+        this.system.posX[j],
+        this.system.posY[j],
+        this.system.posZ[j],
+        this.system.posW[j]
+      );
+    }
+    this.lastIndexedLength = n;
+  }
+
+  /**
    * Performs semantic lookup for a multi-token subject (e.g. 'the red planet').
    * Uses 4D distance (posX, posY, entropy, time) for fuzzy matching in the manifold.
    *
@@ -769,8 +858,20 @@ export default class Resolver implements Resolution.Engine {
     }
     const dynamicThreshold = Math.max(50.0, variance * 2.0);
 
+    // Spatial index: limit candidates to nodes within sqrt(dynamicThreshold) of the
+    // subject centroid instead of scanning all N manifold nodes.
+    this.ensureSpatialIndex();
+    const searchRadius = Math.sqrt(dynamicThreshold);
+    const candidates = this.spatialIndex.candidatesInRadius(
+      subX,
+      subY,
+      subZ,
+      subW,
+      searchRadius
+    );
+
     const results: { ids: Uint32Array; score: number }[] = [];
-    for (let i = 0; i < length; i++) {
+    for (const i of candidates) {
       const opClass = this.system.operatorClass[i];
 
       if (opClass === operatorIdClass) {

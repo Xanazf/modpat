@@ -74,7 +74,19 @@ export async function executeStressSuite() {
 
       const ids = env.atomizer.ingestSequence("a |-", env.system);
       const resolvedIds = await env.resolver.resolveSequence(ids);
-      assert.ok(resolvedIds.length > 0);
+      // Must not crash, must return a non-empty result (even if "unknown").
+      assert.ok(
+        resolvedIds.length > 0,
+        "Circular logic must not crash the resolver"
+      );
+
+      // All returned IDs must be within the allocated manifold.
+      for (const id of resolvedIds) {
+        assert.ok(
+          id < env.system.length,
+          `Circular resolve returned out-of-range id ${id} (length=${env.system.length})`
+        );
+      }
     });
 
     await TestHarness.disposeEnvironment(env);

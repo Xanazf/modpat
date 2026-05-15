@@ -1,6 +1,6 @@
 const DOPAT_CONFIG = {
   STRIDE_COMPLEX: 2,
-  MAX_PRECEPTS: 100_000,
+  MAX_PRECEPTS: 1_000_000,
   INFLUENCE_ZONES: 16,
   DELTA: 16.667,
   EPSILON: Number.MIN_VALUE * 10,
@@ -55,10 +55,17 @@ const DOPAT_CONFIG = {
   },
 
   memory: {
-    /** Vault threshold for deduplication. */
+    /**
+     * Dedup threshold: patterns whose anchor distance exceeds this are stored as separate
+     * entries (high recall). Query threshold: a candidate is a hit only if its squared
+     * 4D distance is below this (tight recall to avoid false-positive cache hits).
+     * Asymmetry is intentional: prefer storing duplicates over losing proofs.
+     */
     VAULT_DEDUP_THRESHOLD: 0.5,
-    /** Vault threshold for queries. */
     VAULT_QUERY_THRESHOLD: 0.1,
+    /** Grid cell size for the DuckDB covering index on (grid_x, grid_y, grid_z, grid_w).
+     *  R = ceil(VAULT_QUERY_THRESHOLD / GRID_CELL) cells are searched per axis. */
+    GRID_CELL: 0.05,
   },
 
   structural: {
@@ -70,6 +77,13 @@ const DOPAT_CONFIG = {
     INTRA_LAYER_SKIP_FIRST: true,
     /** Consolidation iterations per tick [lo, hi]. */
     CONSOLIDATION_ITERS_PER_TICK: [10, 50] as [number, number],
+  },
+
+  observability: {
+    /** Emit a JSONL metrics snapshot every N ManifoldManager ticks. */
+    METRICS_EMIT_INTERVAL_TICKS: 100,
+    /** Path for the append-only JSONL metrics log. */
+    METRICS_LOG_PATH: "./logs/modpat_metrics.jsonl",
   },
 };
 

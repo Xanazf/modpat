@@ -1,5 +1,20 @@
 import type System from "@core_i/System";
 import type { DuckDBConnection } from "@duckdb/node-api";
+import { DOPAT_CONFIG } from "@config";
+
+/**
+ * Increment SCHEMA_VERSION when:
+ * - a column is added, removed, or renamed in any snapshot table
+ * - the serialisation format of any value changes
+ *
+ * Do NOT increment for:
+ * - adding a new index
+ * - adding a new metadata key
+ *
+ * When incrementing, add a migration function `migrate_N_to_M(db)` and
+ * call it from `hydrate` when version === N.
+ */
+export const SCHEMA_VERSION = "1";
 
 /**
  * SystemPersistence is responsible for freezing and thawing the state of the
@@ -83,15 +98,20 @@ export class SystemPersistence {
       appender.closeSync();
 
       // Store universal metadata required for restoration
-      const stmt = await this.connection.prepare(
-        "INSERT OR REPLACE INTO system_metadata (key, value) VALUES (?, ?)"
-      );
-      try {
-        stmt.bindVarchar(1, "length");
-        stmt.bindVarchar(2, system.length.toString());
-        await stmt.run();
-      } finally {
-        stmt.destroySync();
+      for (const [key, value] of [
+        ["length", system.length.toString()],
+        ["schema_version", SCHEMA_VERSION],
+      ] as [string, string][]) {
+        const stmt = await this.connection.prepare(
+          "INSERT OR REPLACE INTO system_metadata (key, value) VALUES (?, ?)"
+        );
+        try {
+          stmt.bindVarchar(1, key);
+          stmt.bindVarchar(2, value);
+          await stmt.run();
+        } finally {
+          stmt.destroySync();
+        }
       }
 
       await this.connection.run("COMMIT");
@@ -110,13 +130,24 @@ export class SystemPersistence {
    * @param system - The integral logic system to hydrate.
    */
   async hydrate(system: System): Promise<void> {
-    const res = await this.connection.run(
-      "SELECT value FROM system_metadata WHERE key = 'length'"
+    const metaRes = await this.connection.run(
+      "SELECT key, value FROM system_metadata"
     );
-    const rows = await res.getRows();
-    if (!rows || rows.length === 0) return;
+    const metaRows = await metaRes.getRows();
+    if (!metaRows || metaRows.length === 0) return;
 
-    const length = parseInt(rows[0][0]?.toString() || "0", 10);
+    const meta = new Map(metaRows.map(r => [String(r[0]), String(r[1])]));
+
+    const snapshotVersion = meta.get("schema_version") ?? "0";
+    runMigrations(this.connection, snapshotVersion);
+    if (snapshotVersion !== "0" && snapshotVersion !== SCHEMA_VERSION) {
+      throw new Error(
+        `Snapshot schema version mismatch: expected ${SCHEMA_VERSION}, got ${snapshotVersion}. ` +
+          `Run the migration script or delete the snapshot to start fresh.`
+      );
+    }
+
+    const length = parseInt(meta.get("length") ?? "0", 10);
     system.reset();
 
     const dataRes = await this.connection.run(
@@ -128,6 +159,12 @@ export class SystemPersistence {
 
     for (const row of dataRows) {
       const id = Number(row[0]);
+      if (id < 0 || id >= DOPAT_CONFIG.MAX_PRECEPTS) {
+        throw new RangeError(
+          `hydrate: snapshot id ${id} is out of bounds (MAX_PRECEPTS=${DOPAT_CONFIG.MAX_PRECEPTS}). ` +
+            `Increase MAX_PRECEPTS or reduce the snapshot.`
+        );
+      }
       system.mass[id] = Number(row[1]);
       system.scope[id] = Number(row[2]);
       system.depth[id] = Number(row[3]);
@@ -240,4 +277,22 @@ export class SystemPersistence {
       stmt.destroySync();
     }
   }
+}
+
+/**
+ * Applies any pending schema migrations before the version check.
+ * Skeleton only, add concrete migrations as `migrate_N_to_M(db)` functions
+ * and dispatch them here when `fromVersion === 'N'`.
+ */
+function runMigrations(
+  connection: DuckDBConnection,
+  fromVersion: string
+): void {
+  // Example future migration:
+  // if (fromVersion === '1') {
+  //   connection.run('ALTER TABLE precepts ADD COLUMN usage_count INTEGER DEFAULT 0');
+  //   connection.run("UPDATE system_metadata SET value = '2' WHERE key = 'schema_version'");
+  // }
+  void connection;
+  void fromVersion; // suppress unused-variable warnings
 }

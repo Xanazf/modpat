@@ -1,6 +1,7 @@
 import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import { OperatorClass, SystemRef } from "@core_i/System";
+import { metrics } from "@core_s/Metrics";
 import type { TargetBuffer } from "@core_i/System";
 import type { SystemPersistence } from "./Persistence";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
@@ -13,52 +14,181 @@ function arraysEqual(a: number[], b: number[]): boolean {
 }
 
 /**
- * Triple Modular Redundancy free-list allocator.
- * Satisfies Root.FreeList and is injected into System via setAllocator(),
- * so System's own allocation paths are TMR-protected.
+ * Hardened Triple Modular Redundancy free-list allocator (Option 5a).
+ *
+ * Each buffer carries a CRC32 checksum updated on every push/pop.
+ * On vote:
+ *  - CRC mismatch on one buffer → two-out-of-three majority silently corrects it.
+ *  - CRC mismatch on two or three buffers, or value disagreement with all CRCs valid
+ *    → quarantine: allocation halted, interruptHandler fired, tmr.total_disagree incremented.
+ *
+ * Normal (no-corruption) pop increments tmr.agree.
+ * Majority-corrected pop increments tmr.corrected.
  */
-class TMRFreeList implements Root.FreeList {
+export class TMRFreeList implements Root.FreeList {
   private bufA: number[] = [];
   private bufB: number[] = [];
   private bufC: number[] = [];
+  /** CRC32 checksum for each buffer, updated on every mutation. */
+  private crcA = 0;
+  private crcB = 0;
+  private crcC = 0;
+  /** Cached length; updated by push/pop so callers don't pay CRC cost on every read. */
+  private _length = 0;
+  private _halted = false;
+  private _interruptHandler:
+    | ((reason: string, values: number[]) => void)
+    | null = null;
+
+  /** Register a callback invoked on quarantine (three-way disagreement). */
+  setInterruptHandler(h: (reason: string, values: number[]) => void): void {
+    this._interruptHandler = h;
+  }
 
   push(id: number): void {
     this.bufA.push(id);
+    this.crcA = this.crc32(this.bufA);
     this.bufB.push(id);
+    this.crcB = this.crc32(this.bufB);
     this.bufC.push(id);
+    this.crcC = this.crc32(this.bufC);
+    this._length++;
   }
 
   pop(): number | undefined {
-    const voted = this.vote();
-    if (voted === null || voted.length === 0) return undefined;
-    const id = voted[voted.length - 1];
-    const next = voted.slice(0, -1);
+    if (this._halted) return undefined;
+    const { winner, corrected, failed } = this.computeVote();
+
+    if (failed) {
+      const top = [
+        this.bufA.at(-1) ?? -1,
+        this.bufB.at(-1) ?? -1,
+        this.bufC.at(-1) ?? -1,
+      ];
+      this.quarantine("pop: three-way disagreement", top);
+      return undefined;
+    }
+    if (winner!.length === 0) return undefined;
+
+    metrics.increment(corrected ? "tmr.corrected" : "tmr.agree");
+
+    const id = winner![winner!.length - 1];
+    const next = winner!.slice(0, -1);
+    // Normalise all three buffers to the agreed state (implicit resync of any outlier).
     this.bufA = [...next];
+    this.crcA = this.crc32(this.bufA);
     this.bufB = [...next];
+    this.crcB = this.crc32(this.bufB);
     this.bufC = [...next];
+    this.crcC = this.crc32(this.bufC);
+    this._length = next.length;
     return id;
   }
 
   get length(): number {
-    return this.vote()?.length ?? 0;
+    return this._length;
   }
 
   /** Returns the consensus list, or null on total disagreement. */
   getVoted(): number[] | null {
-    const v = this.vote();
-    return v !== null ? [...v] : null;
+    if (this._halted) return null;
+    const { winner, failed } = this.computeVote();
+    return failed ? null : [...winner!];
   }
 
-  /** Injects a rogue value into bufA only, for corruption-simulation tests. */
+  /** Test-only: push a value into bufA only, simulating silent buffer corruption. */
   injectCorruptionToBufferA(value: number): void {
     this.bufA.push(value);
+    // Does NOT update crcA, CRC mismatch triggers correction on next vote.
   }
 
-  private vote(): number[] | null {
-    if (arraysEqual(this.bufA, this.bufB)) return this.bufA;
-    if (arraysEqual(this.bufB, this.bufC)) return this.bufB;
-    if (arraysEqual(this.bufA, this.bufC)) return this.bufA;
-    return null;
+  /**
+   * Test-only: overwrite a specific slot in one buffer without refreshing its CRC.
+   * Simulates a single-bit flip; detected by the CRC check in computeVote().
+   */
+  corruptBuffer(
+    bufferIndex: 0 | 1 | 2,
+    offset: number,
+    newValue: number
+  ): void {
+    const buf =
+      bufferIndex === 0 ? this.bufA : bufferIndex === 1 ? this.bufB : this.bufC;
+    if (offset >= 0 && offset < buf.length) buf[offset] = newValue;
+    // Intentionally stale CRC after this call.
+  }
+
+  /** Returns true iff all three buffers currently hold identical contents. */
+  allBuffersIdentical(): boolean {
+    return (
+      arraysEqual(this.bufA, this.bufB) && arraysEqual(this.bufB, this.bufC)
+    );
+  }
+
+  isHalted(): boolean {
+    return this._halted;
+  }
+
+  /** Returns true iff all three CRCs match their buffers (no undetected corruption). */
+  verify(): boolean {
+    return (
+      this.crc32(this.bufA) === this.crcA &&
+      this.crc32(this.bufB) === this.crcB &&
+      this.crc32(this.bufC) === this.crcC
+    );
+  }
+
+  private computeVote(): {
+    winner: number[] | null;
+    corrected: boolean;
+    failed: boolean;
+  } {
+    const aOk = this.crc32(this.bufA) === this.crcA;
+    const bOk = this.crc32(this.bufB) === this.crcB;
+    const cOk = this.crc32(this.bufC) === this.crcC;
+    const nFail = (aOk ? 0 : 1) + (bOk ? 0 : 1) + (cOk ? 0 : 1);
+
+    if (nFail >= 2) return { winner: null, corrected: false, failed: true };
+
+    // Exactly one CRC failure, the other two are the winners.
+    if (!aOk) return { winner: this.bufB, corrected: true, failed: false };
+    if (!bOk) return { winner: this.bufA, corrected: true, failed: false };
+    if (!cOk) return { winner: this.bufA, corrected: true, failed: false };
+
+    // All CRCs valid, value comparison for silent disagreements.
+    if (arraysEqual(this.bufA, this.bufB) && arraysEqual(this.bufB, this.bufC))
+      return { winner: this.bufA, corrected: false, failed: false };
+    if (arraysEqual(this.bufA, this.bufB))
+      return { winner: this.bufA, corrected: true, failed: false };
+    if (arraysEqual(this.bufA, this.bufC))
+      return { winner: this.bufA, corrected: true, failed: false };
+    if (arraysEqual(this.bufB, this.bufC))
+      return { winner: this.bufB, corrected: true, failed: false };
+
+    return { winner: null, corrected: false, failed: true };
+  }
+
+  private quarantine(reason: string, values: number[]): void {
+    this._halted = true;
+    metrics.increment("tmr.total_disagree");
+    this._interruptHandler?.(reason, values);
+  }
+
+  /** CRC-32 (IEEE 802.3 polynomial) over an array of 32-bit integers. */
+  private crc32(arr: number[]): number {
+    let crc = 0xffffffff;
+    for (const v of arr) {
+      let x = v >>> 0;
+      for (let i = 0; i < 4; i++) {
+        let byte = x & 0xff;
+        for (let j = 0; j < 8; j++) {
+          const bit = (crc ^ byte) & 1;
+          crc = (crc >>> 1) ^ (bit ? 0xedb88320 : 0);
+          byte >>>= 1;
+        }
+        x >>>= 8;
+      }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
   }
 }
 
@@ -125,6 +255,20 @@ export class ManifoldManager {
     // Wire TMR allocators into each system's allocation path.
     primary.setAllocator(this.primaryAllocator);
     emergency.setAllocator(this.emergencyAllocator);
+
+    // Route TMR quarantine events to the manifold interrupt handler.
+    const makeQuarantineHandler =
+      (label: string) => (reason: string, _values: number[]) => {
+        this.triggerInterrupt(`TMR quarantine [${label}]: ${reason}`).catch(
+          err => {
+            console.error(`[ManifoldManager] TMR interrupt error:`, err);
+          }
+        );
+      };
+    this.primaryAllocator.setInterruptHandler(makeQuarantineHandler("primary"));
+    this.emergencyAllocator.setInterruptHandler(
+      makeQuarantineHandler("emergency")
+    );
   }
 
   /**
@@ -280,7 +424,11 @@ export class ManifoldManager {
 
     const sys = this.activeSystem;
     const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
-    if (pressure > 0.5) return;
+    if (pressure > 0.5) {
+      metrics.increment("dream.rejected_pressure");
+      return;
+    }
+    metrics.increment("dream.started");
 
     this.isDreaming = true;
     try {
@@ -325,7 +473,10 @@ export class ManifoldManager {
         if (!token || token.length <= 2) continue;
 
         const content = await this.unfolder.fetchContent(token);
-        if (content) this.pendingDreams.push(content);
+        if (content) {
+          this.pendingDreams.push(content);
+          metrics.increment("dream.ingested");
+        }
         return; // One tension zone per cycle
       }
     } finally {
@@ -415,6 +566,11 @@ export class ManifoldManager {
   public tick(dt: number): void {
     // Skip calculations if manifold is currently hydrating to prevent race conditions
     if (this.isHydrating) return;
+
+    metrics.onTick();
+    metrics.gauge("system.length", this.activeSystem.length);
+    metrics.gauge("system.free_list_size", this.activeAllocator.length);
+    metrics.gauge("delta_queue.length", this.pendingDreams.length);
 
     // Apply temporal decay across the manifold
     this.activeSystem.decay(dt);

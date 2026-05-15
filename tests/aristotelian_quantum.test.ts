@@ -43,7 +43,28 @@ export async function runLogicTest() {
       logger.log(`Default Wave Path Length:     ${path1.length}`);
       logger.log(`Default Particle Path Length: ${path2.length}`);
 
-      assert.ok(path1.length > 0 && path2.length > 0);
+      assert.ok(path1.length > 0, "Wave geodesic must be non-empty");
+      assert.ok(path2.length > 0, "Particle geodesic must be non-empty");
+
+      // All nodes in the path must be allocated in the manifold.
+      for (const id of path1) {
+        assert.ok(
+          env.system.isAllocated(id),
+          `Wave path contains unallocated id ${id}`
+        );
+      }
+      for (const id of path2) {
+        assert.ok(
+          env.system.isAllocated(id),
+          `Particle path contains unallocated id ${id}`
+        );
+      }
+
+      // Paths are connecting different concepts, they should differ.
+      assert.ok(
+        path1[path1.length - 1] !== path2[path2.length - 1],
+        "Wave and particle paths must end at different nodes"
+      );
     });
 
     await it("Case 3: Wave Collapse (Path Bias via Mass)", async () => {

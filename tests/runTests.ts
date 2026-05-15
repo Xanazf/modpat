@@ -1,6 +1,8 @@
 import logger from "@src/utils/SpectralLogger";
 import { program } from "commander";
+import { runGroundingTests } from "./grounding/propositional.test";
 import { runLogicTest as executeAristotelianSuite } from "./aristotelian_quantum.test";
+import { executeAtomizerRoundTripSuite } from "./atomizer_roundtrip.test";
 import { executeLogicSuite } from "./dod_resolution_matrix.test";
 import { executeSuite as executeSystemSuite } from "./dod_system.test";
 import { executeGPUOffloadTest } from "./gpu_offload.test";
@@ -22,6 +24,11 @@ import { executeCodeSynthesisSuite } from "./code_synthesis.test";
 async function run() {
   program
     .option("-s, --shared", "Use shared system environment across tests", false)
+    .option(
+      "--verbose",
+      "Emit W-matrix, resonance and sink-candidate dumps for grounding failures",
+      false
+    )
     .parse(process.argv);
 
   const options = program.opts();
@@ -41,7 +48,7 @@ async function run() {
     await executeSemanticSuite();
     await executeSignalManagerSuite();
     await runMapperReviewTest();
-    //await executeE2ETest();
+    await executeE2ETest();
     await executeComplexSemanticSuite();
     await executeStressSuite();
     await executeGPUOffloadTest();
@@ -52,6 +59,8 @@ async function run() {
     await executeRigorousLogicSuite();
     await executeLogicTrapsSuite();
     await executeCodeSynthesisSuite();
+    await runGroundingTests();
+    await executeAtomizerRoundTripSuite();
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

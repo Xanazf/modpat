@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { OperatorClass } from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
-import { ManifoldManager } from "@core_s/ManifoldManager";
+import { ManifoldManager, TMRFreeList } from "@core_s/ManifoldManager";
 import { SystemPersistence } from "@core_s/Persistence";
 import type SpectralAtomizer from "@atomics/SpectralAtomizer";
 import logger from "@utils/SpectralLogger";
@@ -191,6 +191,89 @@ export async function executeSignalManagerSuite() {
       assert.ok(
         env.system.posX[decayingId] < startX,
         "Decayed resonance must drift toward manifold origin"
+      );
+    });
+
+    // ── TMR 5a hardening tests (isolated allocator, not the shared manager one) ──
+
+    await it("Test 6: TMR single-buffer CRC corruption corrected by majority vote", async () => {
+      const tmr = new TMRFreeList();
+      tmr.push(5);
+      tmr.push(10);
+      tmr.push(15);
+
+      // Corrupt index 1 (value 10) in buffer 0, CRC becomes stale.
+      tmr.corruptBuffer(0, 1, 0xff);
+
+      // CRC check detects buffer 0 is stale; vote uses buffers 1 and 2.
+      const v = tmr.pop();
+      assert.strictEqual(
+        v,
+        15,
+        "pop must return correct tail value despite single-buffer corruption"
+      );
+
+      // After pop all three buffers are normalised to [5, 10], outlier resynced.
+      assert.ok(
+        tmr.allBuffersIdentical(),
+        "all buffers must be identical after the majority-vote resync"
+      );
+      assert.ok(tmr.verify(), "CRCs must be valid after resync");
+      assert.ok(
+        !tmr.isHalted(),
+        "allocator must NOT be halted after correctable corruption"
+      );
+
+      // Verify the resynced buffer contains correct values.
+      const v2 = tmr.pop();
+      assert.strictEqual(
+        v2,
+        10,
+        "second pop must return the correct value from resynced buffer"
+      );
+      const v3 = tmr.pop();
+      assert.strictEqual(
+        v3,
+        5,
+        "third pop must drain correctly after full resync"
+      );
+    });
+
+    await it("Test 7: TMR three-way disagreement halts allocation", async () => {
+      const tmr = new TMRFreeList();
+      tmr.push(1);
+      tmr.push(2);
+      tmr.push(3);
+
+      // Corrupt all three buffers differently, no majority possible.
+      tmr.corruptBuffer(0, 1, 0xaa);
+      tmr.corruptBuffer(1, 1, 0xbb);
+      tmr.corruptBuffer(2, 1, 0xcc);
+
+      // Record quarantine events via the interrupt handler.
+      const quarantineEvents: string[] = [];
+      tmr.setInterruptHandler(reason => quarantineEvents.push(reason));
+
+      const v = tmr.pop();
+      assert.strictEqual(
+        v,
+        undefined,
+        "pop must return undefined on three-way disagreement"
+      );
+      assert.ok(
+        tmr.isHalted(),
+        "allocator must be halted after three-way disagreement"
+      );
+      assert.ok(
+        quarantineEvents.length > 0,
+        "interrupt handler must have been called with the quarantine reason"
+      );
+
+      // Subsequent pops must also return undefined (allocator is halted).
+      assert.strictEqual(
+        tmr.pop(),
+        undefined,
+        "halted allocator must continue to return undefined"
       );
     });
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import logger from "@utils/SpectralLogger";
+import { TensorMath_GPU } from "@core_s/Math";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeGPUOffloadTest() {
@@ -14,27 +15,38 @@ export async function executeGPUOffloadTest() {
       const ids = env.atomizer.ingestSequence(query, env.system);
 
       env.resolver.setGPUEnabled(false);
-      const cpuStartTime = performance.now();
+      const cpuStart = performance.now();
       const cpuResult = await env.resolver.resolveSequence(ids);
-      const cpuTime = performance.now() - cpuStartTime;
+      const cpuTime = performance.now() - cpuStart;
       const cpuDecoded = env.atomizer.decodeSequence(cpuResult, env.system);
-
       logger.log(`CPU Resolve (${cpuTime.toFixed(2)}ms): "${cpuDecoded}"`);
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Semantic check: "Ocean is blue", the answer should be "blue" or a
+      // closely related token, not "unknown".
+      assert.ok(
+        cpuDecoded.toLowerCase() !== "unknown",
+        `CPU resolve should not return "unknown" for a known fact; got "${cpuDecoded}"`
+      );
+      assert.ok(
+        cpuDecoded.toLowerCase().includes("blue"),
+        `CPU should resolve "Ocean is" to something about blue; got "${cpuDecoded}"`
+      );
+
+      // GPU fence: await the device instead of an arbitrary timeout.
+      // setGPUEnabled fires an async device-init that completes before getDevice resolves.
       env.resolver.setGPUEnabled(true);
+      await TensorMath_GPU.getDevice(); // f32 GPU; accept up to 1e-4 relative error vs f64 CPU
 
-      const gpuStartTime = performance.now();
+      const gpuStart = performance.now();
       const gpuResult = await env.resolver.resolveSequence(ids);
-      const gpuTime = performance.now() - gpuStartTime;
+      const gpuTime = performance.now() - gpuStart;
       const gpuDecoded = env.atomizer.decodeSequence(gpuResult, env.system);
-
       logger.log(`GPU Resolve (${gpuTime.toFixed(2)}ms): "${gpuDecoded}"`);
 
       assert.strictEqual(
         gpuDecoded,
         cpuDecoded,
-        "GPU and CPU resolution must be identical"
+        `GPU and CPU resolution must agree; CPU="${cpuDecoded}" GPU="${gpuDecoded}"`
       );
     });
 
@@ -43,20 +55,34 @@ export async function executeGPUOffloadTest() {
       const waterId = env.atomizer.ingestSequence("water", env.system)[0];
 
       env.resolver.setGPUEnabled(false);
-      const cpuGeoPath = await env.resolver.calculateGeodesic(
-        skyId,
-        waterId,
-        64
+      const cpuPath = await env.resolver.calculateGeodesic(skyId, waterId, 64);
+      assert.ok(
+        cpuPath.length > 0,
+        "CPU geodesic must return at least one node"
       );
-      assert.ok(cpuGeoPath.length > 0, "CPU geodesic failed");
+
+      // Path should be internally consistent: all IDs must be allocated.
+      for (const id of cpuPath) {
+        assert.ok(
+          env.system.isAllocated(id),
+          `CPU geodesic returned unallocated node id=${id}`
+        );
+      }
 
       env.resolver.setGPUEnabled(true);
-      const gpuGeoPath = await env.resolver.calculateGeodesic(
-        skyId,
-        waterId,
-        64
+      await TensorMath_GPU.getDevice();
+      const gpuPath = await env.resolver.calculateGeodesic(skyId, waterId, 64);
+      assert.ok(
+        gpuPath.length > 0,
+        "GPU geodesic must return at least one node"
       );
-      assert.ok(gpuGeoPath.length > 0, "GPU geodesic failed");
+
+      // Both paths should start near the source and end near the target.
+      assert.strictEqual(
+        gpuPath[0],
+        cpuPath[0],
+        "CPU and GPU geodesics must share the same start node"
+      );
     });
 
     await TestHarness.disposeEnvironment(env);

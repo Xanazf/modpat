@@ -1,7 +1,8 @@
 import { DatabaseContext } from "@core_s/DatabaseContext";
-import { SystemPersistence } from "@core_s/Persistence";
+import { SystemPersistence, SCHEMA_VERSION } from "@core_s/Persistence";
 import logger from "@utils/SpectralLogger";
 import * as assert from "assert";
+import { DOPAT_CONFIG } from "@config";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executePersistenceSuite() {
@@ -55,6 +56,56 @@ export async function executePersistenceSuite() {
         5
       );
       assert.strictEqual(highMassIds.length, 1);
+    });
+
+    await it("hydrate: schema version mismatch throws", async () => {
+      const ctx2 = new DatabaseContext(":memory:");
+      const conn2 = await ctx2.connect();
+      const pers2 = new SystemPersistence(conn2);
+
+      // Snapshot a minimal valid state, then corrupt the version.
+      const id = env.system.createLocation(1.0, 1.0);
+      await env.system.snapshot(pers2);
+      await conn2.run(
+        `UPDATE system_metadata SET value = '99' WHERE key = 'schema_version'`
+      );
+
+      const freshEnv = await TestHarness.getEnvironment("base");
+      await assert.rejects(
+        () => freshEnv.system.hydrate(pers2),
+        (err: Error) => /schema version mismatch/i.test(err.message)
+      );
+      env.system.freeLocation(id);
+      await TestHarness.disposeEnvironment(freshEnv);
+      await ctx2.close();
+    });
+
+    await it("hydrate: out-of-bounds id throws", async () => {
+      const ctx3 = new DatabaseContext(":memory:");
+      const conn3 = await ctx3.connect();
+      const pers3 = new SystemPersistence(conn3);
+
+      // Manually populate a snapshot with an OOB id.
+      const oobId = DOPAT_CONFIG.MAX_PRECEPTS; // exactly at the boundary
+      await conn3.run(`
+        INSERT INTO system_metadata (key, value) VALUES
+          ('length', '${oobId + 1}'),
+          ('schema_version', '${SCHEMA_VERSION}')
+      `);
+      await conn3.run(`
+        INSERT INTO precepts (id, mass, scope, depth, time, posX, posY, posZ, posW,
+          density, entropyRate, potency, intensity, decayRate, checksum,
+          part_layer, complex_layer, operator_class)
+        VALUES (${oobId}, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.01, 0, 0, 0, 0)
+      `);
+
+      const freshEnv2 = await TestHarness.getEnvironment("base");
+      await assert.rejects(
+        () => freshEnv2.system.hydrate(pers3),
+        (err: Error) => /out of bounds/i.test(err.message)
+      );
+      await TestHarness.disposeEnvironment(freshEnv2);
+      await ctx3.close();
     });
 
     await dbContext.close();

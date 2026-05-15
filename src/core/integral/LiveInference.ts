@@ -1,6 +1,7 @@
 import nlp from "compromise";
 import { parse, walk, replace, generate } from "abstract-syntax-tree";
 import { DOPAT_CONFIG } from "@config";
+import { metrics } from "@core_s/Metrics";
 
 import type Resolver from "@core_i/Resolver";
 import type System from "@core_i/System";
@@ -391,6 +392,7 @@ export class LiveInference {
       inferredMeaning !== "unknown" &&
       (!isExplanatory || !isTooBrief)
     ) {
+      metrics.increment("resolution.phase1.hit");
       this.respond(inferredMeaning);
       return inferredMeaning;
     }
@@ -433,6 +435,7 @@ export class LiveInference {
             .match(/(because|due to|from|result of|cancer|died at|death of)/);
 
           if (bestFact && (!isComplexQuery || hasExplanatoryDensity)) {
+            metrics.increment("resolution.phase2.hit");
             const isExpl = Boolean(
               query.toLowerCase().match(/^(how|why|who|what)/)
             );
@@ -450,6 +453,7 @@ export class LiveInference {
 
     // Phase 3: Intentional Unfolder Triggering
     if (!attractionCenter) {
+      metrics.increment("resolution.miss");
       const fallback = "unknown";
       this.respond(fallback);
       return fallback;
@@ -508,6 +512,7 @@ export class LiveInference {
       normalizedReInferred !== normalizedTopQuery &&
       reInferredMeaning !== "unknown"
     ) {
+      metrics.increment("resolution.phase4.hit");
       this.respond(reInferredMeaning);
       return reInferredMeaning;
     }
@@ -517,6 +522,7 @@ export class LiveInference {
     // We strictly limit the search to newly ingested knowledge (i >= preExpandLength)
     // to avoid hallucinating connections from unrelated previous tasks in shared memory.
     if (postExpandLength <= preExpandLength) {
+      metrics.increment("resolution.miss");
       const fallback = "unknown";
       this.respond(fallback);
       return fallback;
@@ -635,6 +641,7 @@ export class LiveInference {
             .trim();
 
           if (answerString && answerString !== "unknown") {
+            metrics.increment("resolution.phase5.hit");
             this.respond(`[Geodesic Generative]: ${answerString}`);
             return answerString;
           }
@@ -642,6 +649,7 @@ export class LiveInference {
       }
     }
 
+    metrics.increment("resolution.miss");
     const fallback = "unknown";
     this.respond(fallback);
     return fallback;

@@ -1,5 +1,6 @@
 import type System from "@core_i/System";
 import { DOPAT_CONFIG } from "@config";
+import { metrics } from "@core_s/Metrics";
 import {
   classifyOperatorToken,
   OperatorClass,
@@ -94,7 +95,11 @@ export default class Store implements Memory.Vault {
         anchor_y DOUBLE,
         anchor_z DOUBLE,
         anchor_w DOUBLE,
-        slot_flags BIGINT DEFAULT 0
+        slot_flags BIGINT DEFAULT 0,
+        grid_x INTEGER,
+        grid_y INTEGER,
+        grid_z INTEGER,
+        grid_w INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_wave_sig ON wave_forms (signature);
 
@@ -108,14 +113,39 @@ export default class Store implements Memory.Vault {
       CREATE INDEX IF NOT EXISTS idx_raw_facts_sig ON raw_facts (signature);
     `);
 
-    // Migrate existing wave_forms tables that pre-date the slot_flags column.
-    try {
-      await this._connection.run(
-        `ALTER TABLE wave_forms ADD COLUMN IF NOT EXISTS slot_flags BIGINT DEFAULT 0`
-      );
-    } catch {
-      // Column already exists in this DuckDB build, safe to ignore
+    // Idempotent migrations for columns added in later schema versions.
+    for (const col of [
+      "slot_flags BIGINT DEFAULT 0",
+      "grid_x INTEGER",
+      "grid_y INTEGER",
+      "grid_z INTEGER",
+      "grid_w INTEGER",
+    ]) {
+      try {
+        await this._connection.run(
+          `ALTER TABLE wave_forms ADD COLUMN IF NOT EXISTS ${col}`
+        );
+      } catch {
+        // Column already exists in this DuckDB build, safe to ignore
+      }
     }
+
+    // Backfill grid keys for any rows that pre-date this migration.
+    const gc = DOPAT_CONFIG.memory.GRID_CELL;
+    await this._connection.run(`
+      UPDATE wave_forms
+      SET grid_x = CAST(FLOOR(anchor_x / ${gc}) AS INTEGER),
+          grid_y = CAST(FLOOR(anchor_y / ${gc}) AS INTEGER),
+          grid_z = CAST(FLOOR(anchor_z / ${gc}) AS INTEGER),
+          grid_w = CAST(FLOOR(anchor_w / ${gc}) AS INTEGER)
+      WHERE grid_x IS NULL
+    `);
+
+    // Covering B-tree index, enables bounded grid-window scans in checkInterferencePattern.
+    await this._connection.run(`
+      CREATE INDEX IF NOT EXISTS idx_wave_forms_grid
+        ON wave_forms (grid_x, grid_y, grid_z, grid_w)
+    `);
 
     // Migrate existing raw_facts tables that may lack the newer columns
     for (const col of [
@@ -132,6 +162,11 @@ export default class Store implements Memory.Vault {
         // Column already exists in this DuckDB build, safe to ignore
       }
     }
+  }
+
+  /** Maps a coordinate to its grid cell integer. */
+  private gridKey(v: number): number {
+    return Math.floor(v / DOPAT_CONFIG.memory.GRID_CELL) | 0;
   }
 
   /**
@@ -338,12 +373,15 @@ export default class Store implements Memory.Vault {
           upd.destroySync();
         }
       }
+      metrics.increment("vault.dedup_skip");
       return;
     }
 
     const stmt = await this._connection.prepare(`
-      INSERT INTO wave_forms (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w, slot_flags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO wave_forms
+        (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w, slot_flags,
+         grid_x, grid_y, grid_z, grid_w)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
@@ -355,10 +393,15 @@ export default class Store implements Memory.Vault {
       stmt.bindDouble(6, az);
       stmt.bindDouble(7, aw);
       stmt.bindBigInt(8, slotFlags);
+      stmt.bindInteger(9, this.gridKey(ax));
+      stmt.bindInteger(10, this.gridKey(ay));
+      stmt.bindInteger(11, this.gridKey(az));
+      stmt.bindInteger(12, this.gridKey(aw));
       await stmt.run();
     } finally {
       stmt.destroySync();
     }
+    metrics.increment("vault.crystallize");
   }
 
   /**
@@ -385,12 +428,25 @@ export default class Store implements Memory.Vault {
     let targetPattern: string | null = null;
     let slotFlags = 0n;
 
-    // Spatial Resonance Query: Find the structurally identical signature that is physically closest to our query
+    // Grid-window spatial resonance query: coarse bucket filter reduces candidates from
+    // O(rows_per_signature) to O(1) before the exact squared-distance fine filter.
+    const R = Math.ceil(
+      DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD / DOPAT_CONFIG.memory.GRID_CELL
+    );
+    const gx = this.gridKey(qx),
+      gy = this.gridKey(qy),
+      gz = this.gridKey(qz),
+      gw = this.gridKey(qw);
+
     const stmt = await this._connection.prepare(`
       SELECT target_pattern, slot_flags,
              (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2) + pow(anchor_w - ?, 2)) as resonance
       FROM wave_forms
       WHERE signature = ?
+        AND (grid_x IS NULL OR grid_x BETWEEN ? AND ?)
+        AND (grid_y IS NULL OR grid_y BETWEEN ? AND ?)
+        AND (grid_z IS NULL OR grid_z BETWEEN ? AND ?)
+        AND (grid_w IS NULL OR grid_w BETWEEN ? AND ?)
       ORDER BY resonance ASC
       LIMIT 1
     `);
@@ -400,6 +456,14 @@ export default class Store implements Memory.Vault {
       stmt.bindDouble(3, qz);
       stmt.bindDouble(4, qw);
       stmt.bindVarchar(5, signature);
+      stmt.bindInteger(6, gx - R);
+      stmt.bindInteger(7, gx + R);
+      stmt.bindInteger(8, gy - R);
+      stmt.bindInteger(9, gy + R);
+      stmt.bindInteger(10, gz - R);
+      stmt.bindInteger(11, gz + R);
+      stmt.bindInteger(12, gw - R);
+      stmt.bindInteger(13, gw + R);
 
       const res = await stmt.runAndReadAll();
       const rows = res.getRows();
@@ -419,7 +483,11 @@ export default class Store implements Memory.Vault {
       stmt.destroySync();
     }
 
-    if (!targetPattern) return null;
+    if (!targetPattern) {
+      metrics.increment("vault.miss");
+      return null;
+    }
+    metrics.increment("vault.hit");
 
     const targetTokens = targetPattern.split(",");
     const resultIds: number[] = [];
