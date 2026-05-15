@@ -220,8 +220,8 @@ export async function executeEnduranceSuite() {
 
     // ── Phase 2: Tick endurance ───────────────────────────────────────────
 
-    await it("Phase 2: 1000 ticks — delta queue, consolidation, dream cycles", async () => {
-      const TICKS = 1000;
+    await it("Phase 2: 50000 ticks — delta queue, consolidation, dream cycles", async () => {
+      const TICKS = 50000;
       const lengthBefore = env.system.length;
       const t0 = performance.now();
 
