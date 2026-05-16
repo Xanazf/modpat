@@ -31,11 +31,11 @@ export interface CoherentResult {
   learned: string[];
   /**
    * Why the loop stopped:
-   *  - "coherent"  — score crossed COHERENCE_THRESHOLD (answer found)
-   *  - "void"      — manifold lacks relevant topology; expansion attempted if available
-   *  - "conflict"  — two competing answers with similar strength; ambiguous
-   *  - "weak"      — one answer but weakly supported; reinforced and accepted
-   *  - "exhausted" — max iterations reached without crossing threshold
+   *  - "coherent"  - score crossed COHERENCE_THRESHOLD (answer found)
+   *  - "void"      - manifold lacks relevant topology; expansion attempted if available
+   *  - "conflict"  - two competing answers with similar strength; ambiguous
+   *  - "weak"      - one answer but weakly supported; reinforced and accepted
+   *  - "exhausted" - max iterations reached without crossing threshold
    */
   diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
 }
@@ -103,7 +103,7 @@ export interface ResolverDiagnostics {
   /**
    * Bridge candidates from the bidirectional resonance pass, sorted by
    * bridgeScore descending.  Entries with isMissingLink=true are the tokens
-   * that the goal needs but the current premises don't yet supply — they are
+   * that the goal needs but the current premises don't yet supply - they are
    * the natural targets for targeted inquiry.
    */
   bridgeCandidates: BridgeCandidate[];
@@ -145,7 +145,7 @@ export default class Resolver implements Resolution.Engine {
   private E_new_buffer: Float64Array;
   /** Buffer for temporal vibration updates. */
   private T_next_buffer: Float64Array;
-  /** Backward resonance energy vector — energy propagating from goal toward premises. */
+  /** Backward resonance energy vector - energy propagating from goal toward premises. */
   private T_back_buffer: Float64Array;
   /** Scratch buffer for the backward propagation step. */
   private T_back_next_buffer: Float64Array;
@@ -286,7 +286,7 @@ export default class Resolver implements Resolution.Engine {
       this.system.mass[id] = Math.min(m * BOOST, CAP);
       this.system.update(id);
       // Refresh temporal freshness: this concept just participated in a proven
-      // inference — it should stay warm in the forward-energy seeding.
+      // inference - it should stay warm in the forward-energy seeding.
       this.system.refreshConceptAge(this.system.scope[id]);
     }
   }
@@ -325,7 +325,7 @@ export default class Resolver implements Resolution.Engine {
    * @returns The resolved sequence representing the conclusion.
    */
   /**
-   * Optional set of scopes from working memory — any token in the current sequence
+   * Optional set of scopes from working memory - any token in the current sequence
    * whose scope appears here gets a warm-start energy bonus in the forward pass,
    * making recently-established concepts naturally "louder" in the resonance.
    */
@@ -369,7 +369,7 @@ export default class Resolver implements Resolution.Engine {
       // Resolver stays a pure physics engine.  Listener calls reinforceVaultHit()
       // on a hit and returns early before reaching here.
 
-      // Phase 0b: Manifold semantic lookup — always runs, even in probe mode.
+      // Phase 0b: Manifold semantic lookup - always runs, even in probe mode.
       // This scans the live ingested token graph (scope index, ring buffer, fuzzy
       // centroid) and is precisely what "reproducing on my own" means: using
       // topology I built from facts I ingested, not a cached answer.
@@ -383,7 +383,7 @@ export default class Resolver implements Resolution.Engine {
       );
 
       if (result.length > 0) {
-        // Crystallize only in normal mode — probe mode is read-only.
+        // Crystallize only in normal mode - probe mode is read-only.
         if (!this.probeMode && this.store) {
           await this.store.crystallizeProof(sequenceIds, result, 1.0);
           // Boost masses: a freshly derived and crystallized inference also
@@ -397,7 +397,7 @@ export default class Resolver implements Resolution.Engine {
       // gets a chance to derive the answer from the manifold topology.
     }
 
-    // Phase 1: Semantic Derivation — vault check first, NLP rules as fallback.
+    // Phase 1: Semantic Derivation - vault check first, NLP rules as fallback.
     const derivation = this.probeMode
       ? null
       : await this.resolveSemanticDerivation(sequenceIds);
@@ -422,7 +422,7 @@ export default class Resolver implements Resolution.Engine {
 
     // Age-freshness bonus: concepts that were recently accessed (high posW) get
     // a head start in the forward wave.  This is the manifold-level equivalent of
-    // working memory — concepts don't just stay warm for a few session turns, they
+    // working memory - concepts don't just stay warm for a few session turns, they
     // retain a decaying advantage until the Runtime tick fades them out.
     const ageWeight = DOPAT_CONFIG.resolver.AGE_ENERGY_WEIGHT;
     for (let i = 0; i < N; i++) {
@@ -472,7 +472,7 @@ export default class Resolver implements Resolution.Engine {
 
       // Gravitational Lenses: Identity shifts and quantifiers bend the logic path.
       // Lens strength is proportional to operator mass / c², so higher-mass operators
-      // (e.g. future arithmetic '*' vs '+') naturally create stronger lenses — this is
+      // (e.g. future arithmetic '*' vs '+') naturally create stronger lenses - this is
       // the "wave direction / meta-heat-map": the wave bends harder at massive operators.
       if (i > 0 && i < N - 1) {
         if (
@@ -627,7 +627,7 @@ export default class Resolver implements Resolution.Engine {
       accumulatedResonance
     );
 
-    // Phase 3.6: Backward Resonance Pass — goal-directed propagation.
+    // Phase 3.6: Backward Resonance Pass - goal-directed propagation.
     //
     // Propagates energy backward from the Sink node through W^T (the transposed
     // transfer matrix).  W[i→j] in the forward direction becomes W^T[j→i] in the
@@ -640,7 +640,7 @@ export default class Resolver implements Resolution.Engine {
     //  missing_link       = high backward, low forward → needed but not yet supplied
     //
     // Missing links are the system's natural question targets: "to reach this
-    // conclusion I need to understand X — can you help?"
+    // conclusion I need to understand X - can you help?"
     const T_back = this.T_back_buffer.subarray(0, N);
     const T_back_nx = this.T_back_next_buffer.subarray(0, N);
     const backwardEnergy = this.backwardEnergyBuffer.subarray(0, N);
@@ -780,7 +780,7 @@ export default class Resolver implements Resolution.Engine {
     // negative.  That operand is the inferred ¬A from A→B, ¬B ⊢ ¬A.
     //
     // Condition: the directly-negated operands (scope appears right after an Inversion) are
-    // excluded — they are the *given* negation, not the *inferred* one.  The most-negatively-
+    // excluded - they are the *given* negation, not the *inferred* one.  The most-negatively-
     // affected remaining operand is the new inference.  We return [not_token, that_operand].
     {
       const directlyNegatedScopes = new Set<number>();
@@ -1062,7 +1062,7 @@ export default class Resolver implements Resolution.Engine {
 
       const ratio = outbound / (totalFlow + eps);
 
-      // The lensing rule writes W[(lens-1)*N + (lens+1)] — a direct outbound edge
+      // The lensing rule writes W[(lens-1)*N + (lens+1)] - a direct outbound edge
       // FROM the token to the LEFT of an IdentityShift/Quantifier.  That injects
       // outbound flow that has nothing to do with the token's own logical role, so
       // its outbound ratio is artificially inflated.  Skip it.
@@ -1082,11 +1082,11 @@ export default class Resolver implements Resolution.Engine {
       let inferredClass = OperatorClass.None;
       if (i > 0 && i < N - 1) {
         if (ratio >= cfg.OPERATOR_DISCOVERY_OUTBOUND_THRESHOLD) {
-          // Strongly routing — bridges two semantic clusters like "is", "causes",
+          // Strongly routing - bridges two semantic clusters like "is", "causes",
           // "implies".  Classify as IdentityShift (the canonical bridge operator).
           inferredClass = OperatorClass.IdentityShift;
         } else if (ratio >= cfg.OPERATOR_DISCOVERY_CONJUNCTION_THRESHOLD) {
-          // Balanced relay — connects concepts without strongly redirecting,
+          // Balanced relay - connects concepts without strongly redirecting,
           // like "along with", "plus", "while".
           inferredClass = OperatorClass.Conjunction;
         }
@@ -1122,7 +1122,7 @@ export default class Resolver implements Resolution.Engine {
       } else {
         ev.count++;
         if (ev.count >= CONFIRM_THRESHOLD) {
-          // Confirmed across multiple queries — promote permanently.
+          // Confirmed across multiple queries - promote permanently.
           this.system.operatorClass[d.id] = d.inferredClass;
           this.system.mass[d.id] = this.system.c ** 2;
           this.system.update(d.id, "operator_discovery");
@@ -1247,7 +1247,7 @@ export default class Resolver implements Resolution.Engine {
         );
         break; // Cannot auto-resolve without user context.
       } else {
-        // "weak" — one answer, under-energised.
+        // "weak" - one answer, under-energised.
         finalDiagnosis = "weak";
         if (!inProbe && this.store) {
           const { signature } = this.store.abstractSequence(sequenceIds);

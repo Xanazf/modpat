@@ -3,7 +3,7 @@ import { metrics } from "@core_s/Metrics";
 /**
  * Bounded, typed queue for manifold mutations.
  * All async paths (dreamCycle, GPU readbacks, Unfolder) post Delta records here.
- * tick() is the sole consumer — drain() is called once per tick and applies the batch.
+ * tick() is the sole consumer - drain() is called once per tick and applies the batch.
  */
 export class DeltaQueue {
   private queue: Delta.Any[] = [];

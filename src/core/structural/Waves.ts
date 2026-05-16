@@ -1,5 +1,5 @@
 /**
- * Waves.ts — Unified wave mathematics for ModPAT's spectral logic layer.
+ * Waves.ts - Unified wave mathematics for ModPAT's spectral logic layer.
  *
  * Consolidates complex-number storage (ComplexArray) and Fast Fourier Transform
  * (FFT) implementations into a single module. All wave-based logic operators,
@@ -154,7 +154,7 @@ class BaseComplexArray {
  * ComplexArray extends the base complex storage with Fast Fourier
  * Transform capabilities tailored for logical signals.
  *
- * This is the primary public class — consumers should use this rather than
+ * This is the primary public class - consumers should use this rather than
  * BaseComplexArray directly.
  */
 class ComplexArray extends BaseComplexArray {

@@ -66,7 +66,7 @@ export async function runSignatureConsistencyTests() {
       assert.strictEqual(
         divergences,
         0,
-        `${divergences} signature divergence(s) detected — see warnings above`
+        `${divergences} signature divergence(s) detected - see warnings above`
       );
     });
 

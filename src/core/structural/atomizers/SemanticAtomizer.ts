@@ -167,7 +167,7 @@ export default class SemanticAtomizer
 
       let opClass = classifyOperatorToken(text);
       if (opClass === OperatorClass.None && isVerb) {
-        // Issue A — gerund disambiguation: if a -ing verb directly follows a determiner
+        // Issue A - gerund disambiguation: if a -ing verb directly follows a determiner
         // (e.g. "the running dog"), treat it as a Modifier rather than an Action.
         // Without this, "running" in "the running dog" and "she was running" get the
         // same operator class despite playing different grammatical roles.
@@ -210,7 +210,7 @@ export default class SemanticAtomizer
       }
 
       // Triplet Inheritance: if preceded by "the", this particle becomes a specific landmark.
-      // Issue B — cap the multiplier so deeply nested "the the the X" structures don't
+      // Issue B - cap the multiplier so deeply nested "the the the X" structures don't
       // produce runaway mass (64×, 256×…) that distorts the potential field for unrelated queries.
       if (i > 0) {
         const prevNorm = tokens[i - 1].text.toLowerCase().trim();

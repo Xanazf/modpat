@@ -86,7 +86,7 @@ export class Learner {
 
   /**
    * Attempts to reproduce the answer for a single candidate using probe mode.
-   * Does NOT update the vault — the caller decides what to do with the result.
+   * Does NOT update the vault - the caller decides what to do with the result.
    */
   public async challenge(
     candidate: Memory.ChallengeCandidate
@@ -223,7 +223,7 @@ export class Learner {
       // Env 3: unrelated noise expansion for Generalized promotion.
       //
       // A fact is Generalized when it holds in a context that has NOTHING to do
-      // with the fact itself — the system isn't leaning on related topology to
+      // with the fact itself - the system isn't leaning on related topology to
       // reproduce it, it has truly internalized the connection.
       // We pick a noise topic that avoids all words in the fact text, expand it
       // into the manifold (adding unrelated noise), and re-challenge.
@@ -272,7 +272,7 @@ export class Learner {
       if (newState > prevState) {
         report.promoted++;
         if (newState >= 2) {
-          // Crystallize at 1.5× for Learned, 2.0× for Generalized — the more
+          // Crystallize at 1.5× for Learned, 2.0× for Generalized - the more
           // robust the reproduction, the higher the vault confidence.
           await this.crystallizeLearnedPath(
             candidate,
@@ -357,7 +357,7 @@ export interface InquiryItem {
 }
 
 /**
- * InquiryQueue — the system's backlog of things it does not understand.
+ * InquiryQueue - the system's backlog of things it does not understand.
  *
  * Tracks topics that returned "unknown" so the system can reason about them
  * proactively: pending → tried_dict → tried_wiki → ask_user → resolved.
@@ -365,7 +365,7 @@ export interface InquiryItem {
 export class InquiryQueue {
   private items: Map<string, InquiryItem> = new Map();
   private store?: Store;
-  /** Optional hook called on each new enqueue — used by CognitiveLoop to spawn Intent precepts. */
+  /** Optional hook called on each new enqueue - used by CognitiveLoop to spawn Intent precepts. */
   public onEnqueue?: (topic: string) => void;
 
   constructor(store?: Store) {
@@ -529,7 +529,7 @@ export class InquiryQueue {
     const decoded = atomizer.decodeSequence(result.ids, system).trim();
     if (result.diagnosis === "coherent" && decoded && decoded !== "unknown") {
       logger.debug(`[INQUIRY] retry resolved "${item.topic}" → "${decoded}"`);
-      // Crystallize: the gap was filled and the inference now holds — persist it.
+      // Crystallize: the gap was filled and the inference now holds - persist it.
       if (store) {
         await store.crystallizeProof(ids, result.ids, 1.1);
       }

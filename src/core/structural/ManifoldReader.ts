@@ -1,5 +1,5 @@
 /**
- * ManifoldReader — zero-copy read-only view over a System SharedArrayBuffer.
+ * ManifoldReader - zero-copy read-only view over a System SharedArrayBuffer.
  *
  * Workers receive the buffer + layout via workerData and reconstruct typed-array
  * views here without importing the System class (which pulls in DuckDB, WordNet,
@@ -7,7 +7,7 @@
  *
  * Only the subset of Root.ManifoldView needed by ManifoldMetrics / GridIndex4D
  * is implemented.  Write-path methods (update, createLocation, etc.) are no-ops
- * or throw — workers are read-only consumers.
+ * or throw - workers are read-only consumers.
  */
 
 import type { ManifoldLayout } from "@core_i/System";

@@ -1,5 +1,5 @@
 /**
- * Endurance Suite — full-pipeline knowledge digestion under sustained load.
+ * Endurance Suite - full-pipeline knowledge digestion under sustained load.
  *
  * Drives the complete stack: SemanticAtomizer → Manifold → ManifoldLifecycle
  * ticks (DeltaQueue drain, consolidation, dream cycle) → Resolver → Vault.
@@ -7,13 +7,13 @@
  * fires without network calls.
  *
  * Phases:
- *   1. Corpus ingestion throughput  — raw ingest of 60 sentences, timing
- *   2. Tick endurance               — N ticks driving the full manager loop
- *   3. Reasoning quality probe      — battery of queries, % non-unknown
- *   4. Structural integrity         — zero corrupted precepts
- *   5. Vault coverage               — crystallised entries exist
- *   6. Concurrent delta load        — 1000 typed deltas queued then drained
- *   7. Metrics snapshot             — key counters show real activity
+ *   1. Corpus ingestion throughput  - raw ingest of 60 sentences, timing
+ *   2. Tick endurance               - N ticks driving the full manager loop
+ *   3. Reasoning quality probe      - battery of queries, % non-unknown
+ *   4. Structural integrity         - zero corrupted precepts
+ *   5. Vault coverage               - crystallised entries exist
+ *   6. Concurrent delta load        - 1000 typed deltas queued then drained
+ *   7. Metrics snapshot             - key counters show real activity
  */
 
 import assert from "node:assert/strict";
@@ -32,11 +32,11 @@ import { describe, it, TestHarness } from "./utils/harness";
 // All sentences use the operator vocabulary the resolver understands:
 // "implies" (IdentityShift), "is/are" (IdentityShift), "and" (Conjunction).
 // Prose verbs become Action operators in the manifold but don't propagate
-// through the W matrix — so we restrict causal knowledge to "implies" chains
+// through the W matrix - so we restrict causal knowledge to "implies" chains
 // and identity claims to "is/are".
 
 const CORPUS: string[] = [
-  // Direct implications — causal chains
+  // Direct implications - causal chains
   "fire implies smoke",
   "smoke implies combustion",
   "combustion implies oxygen",
@@ -150,7 +150,7 @@ async function runTicks(
 // Suite
 
 export async function executeEnduranceSuite() {
-  await describe("ENDURANCE — Knowledge Digestion Under Load", async () => {
+  await describe("ENDURANCE - Knowledge Digestion Under Load", async () => {
     metrics.reset();
 
     const env = await TestHarness.getEnvironment<SemanticAtomizer>("semantic");
@@ -220,7 +220,7 @@ export async function executeEnduranceSuite() {
 
     // Phase 2: Tick endurance
 
-    await it("Phase 2: 5000 ticks — delta queue, consolidation, dream cycles", async () => {
+    await it("Phase 2: 5000 ticks - delta queue, consolidation, dream cycles", async () => {
       const TICKS = 5000;
       const lengthBefore = env.system.length;
       const t0 = performance.now();
@@ -259,7 +259,7 @@ export async function executeEnduranceSuite() {
 
     // Phase 3: Reasoning quality probe
 
-    await it("Phase 3: resolution quality — battery of knowledge queries", async () => {
+    await it("Phase 3: resolution quality - battery of knowledge queries", async () => {
       interface QueryCase {
         query: string;
         hint: string;
@@ -314,13 +314,13 @@ export async function executeEnduranceSuite() {
 
       assert.ok(
         resolved >= Math.ceil(QUERIES.length * 0.25),
-        `at least 25% of queries must resolve — got ${successRate.toFixed(0)}%`
+        `at least 25% of queries must resolve - got ${successRate.toFixed(0)}%`
       );
     });
 
     // Phase 4: Structural integrity
 
-    await it("Phase 4: structural integrity — zero corrupted precepts", async () => {
+    await it("Phase 4: structural integrity - zero corrupted precepts", async () => {
       const corrupted = env.system.checkIntegrity();
 
       logger.log(
@@ -358,7 +358,7 @@ export async function executeEnduranceSuite() {
 
     // Phase 5: Vault coverage
 
-    await it("Phase 5: vault coverage — crystallised proofs exist", async () => {
+    await it("Phase 5: vault coverage - crystallised proofs exist", async () => {
       const res = await env.store.connection.runAndReadAll(
         `SELECT COUNT(*) as n, AVG(net_energy) as avg_e, MAX(COALESCE(usage_count, 0)) as max_u FROM wave_forms`
       );
@@ -394,7 +394,7 @@ export async function executeEnduranceSuite() {
         testIds.push(env.system.createLocation(env.system.c ** 2, 0));
       }
 
-      // Queue the deltas — none should be applied yet.
+      // Queue the deltas - none should be applied yet.
       const massesBefore = testIds.map(id => env.system.mass[id]);
       const targetMass = env.system.c ** 2 * 2;
 
@@ -455,7 +455,7 @@ export async function executeEnduranceSuite() {
 
     // Phase 7: Metrics snapshot
 
-    await it("Phase 7: metrics — counters reflect real pipeline activity", async () => {
+    await it("Phase 7: metrics - counters reflect real pipeline activity", async () => {
       const snap = metrics.getSnapshot();
       const v = (key: string) => snap[key]?.value ?? 0;
 

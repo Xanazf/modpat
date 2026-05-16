@@ -149,7 +149,7 @@ export async function executeContinuousLearningSuite() {
       );
       assert.ok(
         posWCorrected,
-        "Satellite posW (Age axis) should converge toward root — fixed missing 4th dimension"
+        "Satellite posW (Age axis) should converge toward root - fixed missing 4th dimension"
       );
       assert.ok(
         sys.isAllocated(rootId) && sys.isAllocated(satId),
@@ -313,7 +313,7 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: processQuestion sets last_signature so feedback applies after Q&A", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      // Fresh inference — last_signature starts null
+      // Fresh inference - last_signature starts null
       const localInference = new LiveInference(
         primary,
         atomizer,
@@ -384,7 +384,7 @@ export async function executeContinuousLearningSuite() {
       );
     });
 
-    await it("Phase 4: dreamCycle — dreamt nodes carry elevated decayRate; manifold integrity preserved", async () => {
+    await it("Phase 4: dreamCycle - dreamt nodes carry elevated decayRate; manifold integrity preserved", async () => {
       const sys = manager.getActiveSystem();
       const unfolder = new Unfolder(sys, atomizer);
       manager.setUnfolder(unfolder);
@@ -441,7 +441,7 @@ export async function executeContinuousLearningSuite() {
         );
       } else {
         console.log(
-          "  ✓ Dream cycle armed but tension zone token not in dictionary — stability verified."
+          "  ✓ Dream cycle armed but tension zone token not in dictionary - stability verified."
         );
       }
     });

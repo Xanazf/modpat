@@ -1,5 +1,5 @@
 /**
- * Identity — how the system understands and expresses itself.
+ * Identity - how the system understands and expresses itself.
  *
  * Two concerns live here because they describe the same thing from different
  * angles: SelfConcept is the system's physical self-model in the manifold
@@ -15,7 +15,7 @@ import logger from "@utils/SpectralLogger";
 // SelfConcept
 
 /**
- * SelfConcept — the ego-centre of the logical manifold.
+ * SelfConcept - the ego-centre of the logical manifold.
  *
  * Creates and maintains a permanent, super-massive precept fixed at the manifold
  * origin (posX=0, posY=0, posZ=0, posW=0).  All first-person pronouns ("I", "me",
@@ -27,7 +27,7 @@ import logger from "@utils/SpectralLogger";
  *    extreme influence in the Mapper's potential field.  All geodesics curve toward
  *    (0,0,0,0), making the manifold ego-centric: self-related reasoning has a literal
  *    gravitational centre.
- *  - decayRate = 0 — the self never fades.  It is the only precept that persists
+ *  - decayRate = 0 - the self never fades.  It is the only precept that persists
  *    forever without reinforcement.
  *  - The two startup axioms ("i am the system", "the system is online") are
  *    crystallised at energy 2.0 so they survive all cull cycles.
@@ -42,7 +42,7 @@ export class SelfConcept {
 
   /**
    * Creates the origin precept and ingests the two foundational axioms.
-   * Safe to call multiple times — subsequent calls are no-ops if selfId is valid.
+   * Safe to call multiple times - subsequent calls are no-ops if selfId is valid.
    */
   public async initialize(
     system: Root.ManifoldView,

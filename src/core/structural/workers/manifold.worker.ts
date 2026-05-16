@@ -1,5 +1,5 @@
 /**
- * manifold.worker — Constellation / gap / orbital computation in an isolated thread.
+ * manifold.worker - Constellation / gap / orbital computation in an isolated thread.
  *
  * Receives the System's SharedArrayBuffer (zero-copy) and a ManifoldLayout so it
  * can reconstruct typed-array views without importing the System class.
@@ -35,10 +35,10 @@ interface WorkerInit {
 
 const { buffer, layout } = workerData as WorkerInit;
 
-// Cached reader — reused for every task; length is patched per-message.
+// Cached reader - reused for every task; length is patched per-message.
 const reader = new ManifoldReader(buffer, layout, 0);
 
-// Cached spatial index — rebuilt when length changes significantly (≥5% growth).
+// Cached spatial index - rebuilt when length changes significantly (≥5% growth).
 let cachedIndex: GridIndex4D | null = null;
 let cachedIndexLength = 0;
 

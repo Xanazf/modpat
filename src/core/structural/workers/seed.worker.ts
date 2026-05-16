@@ -1,5 +1,5 @@
 /**
- * seed.worker — WordNet dictionary lookup in an isolated thread.
+ * seed.worker - WordNet dictionary lookup in an isolated thread.
  *
  * Performs only the lookup portion of DictionaryExpander.expand().
  * Returns raw definitions and synonyms; the main thread handles DuckDB writes.

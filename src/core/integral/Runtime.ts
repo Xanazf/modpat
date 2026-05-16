@@ -1,5 +1,5 @@
 /**
- * Runtime — the single wiring point for the full ModPAT stack.
+ * Runtime - the single wiring point for the full ModPAT stack.
  *
  * Contains both the LiveInference orchestrator (intent routing, feedback,
  * inquiry backlog) and the Runtime factory (boot / dispose).
@@ -60,8 +60,8 @@ const CODE_NODE_TYPES = new Set([
  * Returns true when the input looks like executable code rather than natural language.
  *
  * Two-stage check:
- *  1. Fast heuristic — must contain at least one structural code indicator.
- *  2. AST parse attempt — if the heuristic passes, try to parse; the input is
+ *  1. Fast heuristic - must contain at least one structural code indicator.
+ *  2. AST parse attempt - if the heuristic passes, try to parse; the input is
  *     treated as code only if parsing succeeds AND produces at least one
  *     recognised Coder node type.
  */
@@ -97,7 +97,7 @@ export class LiveInference {
   private coder: Coder;
   private learner: Learner;
   private inquiryQueue: InquiryQueue;
-  /** Called when a query resolves to "unknown" — used by CognitiveLoop to spawn Intent. */
+  /** Called when a query resolves to "unknown" - used by CognitiveLoop to spawn Intent. */
   public onUnknown?: (topic: string) => void;
   private workingMemory: WorkingMemory;
 
@@ -254,7 +254,7 @@ export class LiveInference {
       });
     }
 
-    // Clear context scopes — next turn will rebuild from updated working memory.
+    // Clear context scopes - next turn will rebuild from updated working memory.
     this.resolver.contextScopes = new Set();
 
     return result;
@@ -304,7 +304,7 @@ export interface RuntimeOptions {
   atomizer?: AtomizerMode;
   /** DuckDB path (default: ":memory:"). */
   db?: string;
-  /** Skip SelfConcept initialisation — useful in test environments that don't need identity axioms. */
+  /** Skip SelfConcept initialisation - useful in test environments that don't need identity axioms. */
   skipIdentity?: boolean;
   /** Called if the requested atomizer fails to load and the runtime falls back to "base". */
   onFallback?: (reason: string) => void;
@@ -367,7 +367,7 @@ export class Runtime {
    */
   public readonly workers: WorkerPool | null;
 
-  /** CognitiveLoop — the autonomous motivation daemon. Active when lifecycle is on. */
+  /** CognitiveLoop - the autonomous motivation daemon. Active when lifecycle is on. */
   public cognitiveLoop: CognitiveLoop | null = null;
 
   private _tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -548,7 +548,7 @@ export class Runtime {
    * freshness (posW) on every interval.  Called automatically by boot() unless
    * RuntimeOptions.noTick is set.
    *
-   * The tick intentionally does not run consolidation, dream cycle, or TMR —
+   * The tick intentionally does not run consolidation, dream cycle, or TMR -
    * those live in ManifoldLifecycle for advanced deployments.  This tick provides
    * the minimum needed for temporal ordering to mean anything: decay and age.
    */
@@ -571,7 +571,7 @@ export class Runtime {
       }
     }, intervalMs);
 
-    // Autonomous learner cycle — runs independently of user input.
+    // Autonomous learner cycle - runs independently of user input.
     const learnerMs = opts.learnerIntervalMs ?? 10_000;
     this._learnerTimer = setInterval(() => {
       this.inference
@@ -592,7 +592,7 @@ export class Runtime {
         scanMs
       );
 
-      // Autonomous InquiryQueue draining — works through pending topics at 5 s cadence.
+      // Autonomous InquiryQueue draining - works through pending topics at 5 s cadence.
       this._inquiryDrainTimer = setInterval(() => {
         this.inference
           .getInquiryQueue()

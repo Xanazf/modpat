@@ -58,7 +58,7 @@ async function testPhysicsDeterminism(system: System) {
     "Density calculation failed"
   );
 
-  // Zero-scope atoms are now treated the same as any other atom —
+  // Zero-scope atoms are now treated the same as any other atom -
   // scope no longer affects the denominator.
   const idAnyScope = system.createLocation(50, 0);
   assert.strictEqual(

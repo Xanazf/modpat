@@ -903,7 +903,7 @@ class System implements Root.ManifoldView {
    * Refreshes the temporal freshness (posW) of every precept that carries the
    * given scope, setting it to AGE_FRESHNESS (1.0).
    *
-   * Call this whenever a concept participates in a successful inference — vault
+   * Call this whenever a concept participates in a successful inference - vault
    * hit, bridge resolution, or explicit user reference.  The freshness decays
    * back toward zero between ticks, giving recently-used concepts a head start
    * in the Resolver's forward-energy seeding.

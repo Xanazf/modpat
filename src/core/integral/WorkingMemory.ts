@@ -1,5 +1,5 @@
 /**
- * WorkingMemory — short-term conversational context across turns.
+ * WorkingMemory - short-term conversational context across turns.
  *
  * Records each resolved conclusion so subsequent turns can:
  *   1. Resolve pronouns ("it", "this" → last conclusion)
@@ -57,7 +57,7 @@ export class WorkingMemory {
   }
 
   /**
-   * Returns the scopes of recent conclusions — used for scope-based matching
+   * Returns the scopes of recent conclusions - used for scope-based matching
    * when the exact precept ID may differ between turns.
    */
   contextScopes(): number[] {

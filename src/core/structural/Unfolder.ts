@@ -241,7 +241,7 @@ export default class Unfolder {
   public lastFetchedContent: string = "";
   /**
    * Optional delta sink. When set (by ManifoldLifecycle.setUnfolder()), expand()
-   * posts a Delta.Ingest instead of writing to the manifold directly — ensuring
+   * posts a Delta.Ingest instead of writing to the manifold directly - ensuring
    * all mutations go through the single-writer tick-drain path.
    */
   private onDelta: ((delta: Delta.Any) => void) | null = null;
@@ -395,7 +395,7 @@ export default class Unfolder {
 
     const allIds: number[] = [];
     for (let s = 0; s < sentences.length; s++) {
-      // Try triple extraction first — SVO structure produces better manifold topology
+      // Try triple extraction first - SVO structure produces better manifold topology
       // than raw prose.  Fall back to the raw sentence if no triples are found.
       const triples = extractTriples(sentences[s]);
       const seqs =

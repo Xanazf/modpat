@@ -1,14 +1,14 @@
 /**
- * ManifoldMetrics — distance toolkit and orbital observatory for the 4D manifold.
+ * ManifoldMetrics - distance toolkit and orbital observatory for the 4D manifold.
  *
  * Now that scope is a pure identity tag (no band arithmetic), semantic proximity
  * lives entirely in 4D position space (posX/Y/Z/W).  This module provides:
  *
- *   distance4D     — Euclidean distance between two atoms in 4D space
- *   orbitRadius    — gravitational zone of influence for an atom
- *   orbitalParent  — the dominant attractor this atom is drawn toward
- *   satellites     — atoms currently within this atom's zone of influence
- *   constellations — connected orbital clusters across the manifold
+ *   distance4D     - Euclidean distance between two atoms in 4D space
+ *   orbitRadius    - gravitational zone of influence for an atom
+ *   orbitalParent  - the dominant attractor this atom is drawn toward
+ *   satellites     - atoms currently within this atom's zone of influence
+ *   constellations - connected orbital clusters across the manifold
  *
  * The two emergent observables per atom:
  *   • "I'm in another atom's orbit"  → orbitalParent(id) !== null
@@ -61,7 +61,7 @@ export function orbitRadius(id: number, system: Root.ManifoldView): number {
  *   1. Has strictly greater mass than self (it is the attractor, not the satellite)
  *   2. Has self within its orbitRadius
  *
- * When multiple attractors qualify, the one with the largest mass wins — the
+ * When multiple attractors qualify, the one with the largest mass wins - the
  * deepest gravitational well dominates.
  */
 export function orbitalParent(
@@ -146,7 +146,7 @@ export function satellites(
 export interface Constellation {
   /** Sequential identifier within the current snapshot. */
   id: number;
-  /** ID of the most massive member — the gravitational centre ("star"). */
+  /** ID of the most massive member - the gravitational centre ("star"). */
   star: number;
   /** All member atom IDs, including the star. */
   members: number[];
@@ -265,7 +265,7 @@ export interface ConstellationGap {
   distance: number;
   /**
    * Gap score = distance / combinedOrbitRadius × combinedMass.
-   * High score = heavy atoms that are barely inside each other's orbit —
+   * High score = heavy atoms that are barely inside each other's orbit -
    * the most "strained" connection in the constellation, most likely to
    * represent a missing inferential bridge.
    */
@@ -273,7 +273,7 @@ export interface ConstellationGap {
 }
 
 /**
- * Identifies the most strained atom pairs within each constellation — pairs
+ * Identifies the most strained atom pairs within each constellation - pairs
  * that are orbitally bound but barely overlapping, suggesting their gravitational
  * link has no direct inferential support.  These are the natural investigation
  * targets for curiosity-driven inquiry.

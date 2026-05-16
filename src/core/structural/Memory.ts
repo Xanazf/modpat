@@ -622,7 +622,7 @@ export default class Store implements Memory.Vault {
   /**
    * Adjusts the usage_count of all wave forms matching the given signature.
    * Pass a positive delta for positive feedback (FEEDBACK_BOOST), or 0 to zero out
-   * (negative feedback — let decay remove it, don't delete immediately).
+   * (negative feedback - let decay remove it, don't delete immediately).
    */
   public async adjustUsageCount(
     signature: string,
@@ -670,7 +670,7 @@ export default class Store implements Memory.Vault {
     limit: number
   ): Promise<Memory.ChallengeCandidate[]> {
     // Use a CTE that picks the highest-energy wave_form per signature so the
-    // join with raw_facts is always 1:1 (S2 — JOIN ambiguity fix).
+    // join with raw_facts is always 1:1 (S2 - JOIN ambiguity fix).
     const stmt = await this._connection.prepare(`
       WITH best_wave AS (
         SELECT signature,

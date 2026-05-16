@@ -26,7 +26,7 @@ export function extractTriples(text: string): Triple[] {
       out.push({ subject, predicate: verb.toLowerCase(), object });
     }
   } else if (nouns.length === 1 && verb) {
-    // Single noun with copula — treat as "X is Y" from the adjective
+    // Single noun with copula - treat as "X is Y" from the adjective
     const adj = doc.adjectives().out("text").trim();
     if (adj) {
       out.push({

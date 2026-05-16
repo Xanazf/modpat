@@ -16,7 +16,7 @@ class Talker {
   private atomizer: Atomic.Engine;
   private store: Store;
 
-  /** Signature of the last ingested command — read by LiveInference for feedback. */
+  /** Signature of the last ingested command - read by LiveInference for feedback. */
   public lastSignature: string | null = null;
   private _respond: (msg: string) => void;
 

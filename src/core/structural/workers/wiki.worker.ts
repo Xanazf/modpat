@@ -1,5 +1,5 @@
 /**
- * wiki.worker — Wikipedia / Context7 fetch in an isolated thread.
+ * wiki.worker - Wikipedia / Context7 fetch in an isolated thread.
  *
  * Completely network-only; no SharedArrayBuffer, no DuckDB.
  * Isolates the HTTP client heap (axios, wikipedia) from the main GC.

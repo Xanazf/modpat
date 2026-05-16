@@ -38,7 +38,7 @@ export async function executeUnfolderSuite() {
       const result = await unfolder.fetchContent(
         "__nonexistent_topic_xyzzy_42__"
       );
-      // Either empty (Wikipedia 404) or empty (Context7 null) — never fabricated content
+      // Either empty (Wikipedia 404) or empty (Context7 null) - never fabricated content
       assert.ok(
         typeof result === "string",
         "fetchContent must always return a string"

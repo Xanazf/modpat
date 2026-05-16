@@ -56,7 +56,7 @@ class Listener {
   private unfolder: Unfolder;
   private _respond: (msg: string) => void;
 
-  /** Signature of the last resolved question — read by LiveInference for feedback. */
+  /** Signature of the last resolved question - read by LiveInference for feedback. */
   public lastSignature: string | null = null;
 
   constructor(
@@ -174,7 +174,7 @@ class Listener {
       this.store.abstractSequence(queryQuanta);
     this.lastSignature = questionSignature;
 
-    // Phase 0: Vault cache lookup — moved here from Resolver so the Resolver is
+    // Phase 0: Vault cache lookup - moved here from Resolver so the Resolver is
     // a pure physics engine.  Uses queryQuanta (the topological query WITHOUT the
     // Sink "|-") because crystallization also uses that same sequence as the key.
     {
@@ -356,8 +356,26 @@ class Listener {
     // (sentence 0 → factZ+0, sentence 1 → factZ+1, ...).  The Mapper's
     // geodesic therefore traverses sentences in causal/logical order.
     // Decoding the path layer-by-layer produces a coherent step-by-step
-    // answer — the plan emerges directly from the physics.
+    // answer - the plan emerges directly from the physics.
+    //
+    // G2 fix: before falling back to the full geodesic plan, try to find
+    // an SVO triple in the expanded atoms whose subject matches the query
+    // topic.  If one is found, return its predicate+object as a direct
+    // inference answer - this is reasoning from structure, not retrieval.
     if (postExpandLength > preExpandLength) {
+      if (attractionCenter) {
+        const tripleAnswer = this._findDirectTripleAnswer(
+          attractionCenter,
+          preExpandLength,
+          postExpandLength
+        );
+        if (tripleAnswer) {
+          metrics.increment("resolution.phase5.triple_hit");
+          this.respond(tripleAnswer);
+          return tripleAnswer;
+        }
+      }
+
       let entryId = preExpandLength;
       let exitId = postExpandLength - 1;
       let bestMatchScore = -1;
@@ -413,6 +431,91 @@ class Listener {
   }
 
   /**
+   * G2 fix: scans the expanded manifold atoms for an SVO triple whose subject
+   * matches the query's attraction centre, and returns the predicate+object as
+   * a direct inference answer.
+   *
+   * ingestContent() now tags each ingested sequence with an incremental posZ
+   * layer index (sentence 0 → posZ+0, sentence 1 → posZ+1, …).  When
+   * extractTriples() succeeded, each layer is a subject–predicate–object triple.
+   * This method finds the layer whose decoded first token best matches the query
+   * topic and returns the rest of that layer as the inferred answer.
+   *
+   * Returns null when no matching triple is found - caller falls through to
+   * the geodesic plan.
+   */
+  private _findDirectTripleAnswer(
+    attractionCenter: string,
+    preExpandLength: number,
+    postExpandLength: number
+  ): string | null {
+    const targetScope = this.atomizer.getSymbolScope(
+      attractionCenter.toLowerCase().trim(),
+      false
+    );
+
+    // Group expanded atoms by posZ layer (each layer = one ingested sequence).
+    const layers = new Map<number, number[]>();
+    for (let i = preExpandLength; i < postExpandLength; i++) {
+      if (!this.system.isAllocated(i)) continue;
+      const layer = Math.floor(this.system.posZ[i]);
+      let group = layers.get(layer);
+      if (!group) {
+        group = [];
+        layers.set(layer, group);
+      }
+      group.push(i);
+    }
+
+    let bestAnswer = "";
+    let bestScore = 0;
+
+    for (const [, atoms] of layers) {
+      if (atoms.length < 2) continue;
+
+      // Score the layer by how well its atoms' scopes overlap with the target scope.
+      let subjectScore = 0;
+      for (const id of atoms.slice(0, Math.min(3, atoms.length))) {
+        if (this.system.scope[id] === targetScope) subjectScore += 2;
+        // Partial match: scope is close (same ontology region)
+        const decoded = this.atomizer.resolveScope(this.system.scope[id]) ?? "";
+        if (
+          decoded &&
+          attractionCenter.toLowerCase().includes(decoded.toLowerCase())
+        )
+          subjectScore++;
+      }
+
+      if (subjectScore === 0) continue;
+
+      // Decode the full layer; the "answer" is everything after the first token.
+      const fullText = this.atomizer
+        .decodeSequence(new Uint32Array(atoms), this.system)
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const words = fullText.split(" ");
+      if (words.length < 2) continue;
+
+      // Strip the subject token(s) to get predicate + object.
+      const subjWords = attractionCenter.toLowerCase().split(/\s+/);
+      const bodyStart = Math.min(subjWords.length, words.length - 1);
+      const answer = words.slice(bodyStart).join(" ");
+
+      if (
+        answer.length > 2 &&
+        answer !== "unknown" &&
+        subjectScore > bestScore
+      ) {
+        bestScore = subjectScore;
+        bestAnswer = answer;
+      }
+    }
+
+    return bestAnswer || null;
+  }
+
+  /**
    * Decodes a geodesic path as a step-by-step plan by grouping atoms into
    * their sentence layers (posZ floor) and decoding each layer in order.
    *
@@ -444,6 +547,8 @@ class Listener {
 
     if (layers.size === 0) return null;
 
+    // I8 fix: deduplicate by decoded content, not just by atom.
+    const seen = new Set<string>();
     const steps = [...layers.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([, atoms]) =>
@@ -452,7 +557,12 @@ class Listener {
           .replace(/\s+/g, " ")
           .trim()
       )
-      .filter(s => s.length > 3 && s !== "unknown");
+      .filter(s => {
+        if (s.length <= 3 || s === "unknown") return false;
+        if (seen.has(s)) return false;
+        seen.add(s);
+        return true;
+      });
 
     if (steps.length === 0) return null;
     if (steps.length === 1) return steps[0];

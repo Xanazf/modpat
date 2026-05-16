@@ -1,5 +1,5 @@
 /**
- * VocabSeedWorker — background semantic substrate builder.
+ * VocabSeedWorker - background semantic substrate builder.
  *
  * Iterates the GloVe/UMAP vocabulary (data/dictionary.txt), queries WordNet
  * for each word, and for any word that yields ≥ 3 synonyms:
@@ -9,7 +9,7 @@
  *
  * Three synonyms = three distinct "environments" in which the synonym
  * relationship can be reproduced, matching the epistemological threshold
- * used by the Learner.  This pre-seeds the constellations — synonym webs
+ * used by the Learner.  This pre-seeds the constellations - synonym webs
  * that share the "is" IdentityShift operator become constructive-interference
  * clusters.  Once enough of a word's neighbourhood is seeded, the resolver
  * can traverse the topology transitively without any explicit instruction.
@@ -94,7 +94,7 @@ export class VocabSeedWorker {
     this._running = true;
     // Conservative defaults: 5 words per 1 s keeps DB pressure low enough
     // for the GC to reclaim prepared-statement and result objects between ticks.
-    // At this rate the full 400k-word vocabulary takes ~22 hours — intentional,
+    // At this rate the full 400k-word vocabulary takes ~22 hours - intentional,
     // the seeder is a background enrichment task, not a one-shot loader.
     const { batchSize = 5, intervalMs = 1000, onProgress, pool } = opts;
 

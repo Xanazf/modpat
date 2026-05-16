@@ -128,7 +128,7 @@ export async function executeSemanticSuite() {
       assert.ok(ids.length >= 3);
     });
 
-    // Track 12 — Atomizer Hardening tests
+    // Track 12 - Atomizer Hardening tests
     await it("Track 12 Fix A: gerund after determiner is Modifier, not Action", async () => {
       const { OperatorClass } = await import("@core_i/System");
       const adjIds = env.atomizer.ingestSequence("the running dog", env.system);
@@ -137,7 +137,7 @@ export async function executeSemanticSuite() {
       assert.strictEqual(
         env.system.operatorClass[runningAdj],
         OperatorClass.Modifier,
-        `"the running dog" — "running" should be Modifier (gerund-adjective), got ${env.system.operatorClass[runningAdj]}`
+        `"the running dog" - "running" should be Modifier (gerund-adjective), got ${env.system.operatorClass[runningAdj]}`
       );
 
       const verbIds = env.atomizer.ingestSequence(
@@ -149,7 +149,7 @@ export async function executeSemanticSuite() {
       assert.strictEqual(
         env.system.operatorClass[runningVerb],
         OperatorClass.Action,
-        `"she was running fast" — "running" should be Action (verb), got ${env.system.operatorClass[runningVerb]}`
+        `"she was running fast" - "running" should be Action (verb), got ${env.system.operatorClass[runningVerb]}`
       );
     });
 

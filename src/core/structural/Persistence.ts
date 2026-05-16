@@ -20,7 +20,7 @@ export const SCHEMA_VERSION = "1";
  * SystemPersistence is responsible for freezing and thawing the state of the
  * logical universe (the "System").
  *
- * It manages the persistence of "precepts"—the fundamental physical properties
+ * It manages the persistence of "precepts"-the fundamental physical properties
  * of logic atoms like mass, entropy, and spatial coordinates. By snapshotting
  * the system, it allows the Modulating Attenuation Topology to be preserved
  * across execution cycles.

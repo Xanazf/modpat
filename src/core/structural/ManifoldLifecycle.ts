@@ -227,7 +227,7 @@ export class ManifoldLifecycle {
   /** Promise tracking the current hydration process. */
   private stabilityPromise: Promise<void> | null = null;
 
-  /** Typed delta queue — the only path through which async code mutates the manifold. */
+  /** Typed delta queue - the only path through which async code mutates the manifold. */
   private readonly deltaQueue = new DeltaQueue(
     DOPAT_CONFIG.structural.DELTA_QUEUE_MAX
   );
@@ -429,7 +429,7 @@ export class ManifoldLifecycle {
   private async dreamCycle(): Promise<void> {
     if (this.isDreaming || !this.unfolder) return;
 
-    // Shed load when the delta queue is filling up — prevents fetch bursts.
+    // Shed load when the delta queue is filling up - prevents fetch bursts.
     if (this.deltaQueue.length >= DOPAT_CONFIG.structural.PENDING_DREAMS_MAX) {
       metrics.increment("dream.queue_full");
       return;
@@ -663,7 +663,7 @@ export class ManifoldLifecycle {
     metrics.gauge("system.free_list_size", this.activeAllocator.length);
     metrics.gauge("delta_queue.length", this.deltaQueue.length);
 
-    // Drain the typed delta queue — the sole write path from all async producers.
+    // Drain the typed delta queue - the sole write path from all async producers.
     for (const delta of this.deltaQueue.drain()) {
       this.applyDelta(delta);
     }

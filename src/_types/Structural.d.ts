@@ -97,7 +97,7 @@ declare namespace Memory {
     learned: string[];
     /**
      * True when the coherent result used a bridge candidate whose label is
-     * NOT in the fact text — indicating the system reached the answer via a
+     * NOT in the fact text - indicating the system reached the answer via a
      * stepping stone from a different domain (generalization signal).
      */
     hasGeneralizationSignal: boolean;

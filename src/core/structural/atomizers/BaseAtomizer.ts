@@ -4,14 +4,14 @@ import { SYSTEM_CONFIG } from "@src/config";
 /**
  * All first-person pronouns are normalised to their canonical form before scope
  * computation.  This gives every "I", "me", "my", "we", "us" etc. the same scope
- * value — they constructively interfere in the resonance matrix and share the
+ * value - they constructively interfere in the resonance matrix and share the
  * same self-concept attractor in the manifold topology.
  *
  * The canonical form is "i" so that decoding a self-scope precept always returns
  * a recognisable, human-readable token.
  */
 const PRONOUN_CANONICAL = new Map<string, string>([
-  // First person — canonical self
+  // First person - canonical self
   ["i", "i"],
   ["me", "i"],
   ["my", "i"],
@@ -22,7 +22,7 @@ const PRONOUN_CANONICAL = new Map<string, string>([
   ["our", "i"],
   ["ours", "i"],
   ["ourselves", "i"],
-  // Second person — in this system "you" is always the system itself, so it
+  // Second person - in this system "you" is always the system itself, so it
   // shares the same scope as "i".  Any fact about "you" constructively interferes
   // with self-facts in the resonance matrix.
   ["you", "i"],
@@ -75,7 +75,7 @@ export abstract class BaseAtomizer {
   /**
    * Returns the stable scope (identity tag) for a symbol.
    *
-   * Scope is now a plain sequential integer — the symbol's registration index.
+   * Scope is now a plain sequential integer - the symbol's registration index.
    * It carries no type information; atom type lives exclusively in
    * system.operatorClass[id].  The isOperator parameter is accepted for call-site
    * compatibility but has no effect on the returned value.

@@ -7,7 +7,7 @@
  *   tsx scripts/repl.ts --db=path  # use a specific DuckDB file
  *
  * Input is passed directly to processIntent.
- * Prefix with : for shell commands — type :help to list them.
+ * Prefix with : for shell commands - type :help to list them.
  */
 
 import fs from "node:fs";
@@ -135,7 +135,7 @@ async function init(): Promise<void> {
     db: dbPath,
     onFallback: reason => {
       warn(
-        `SemanticAtomizer unavailable (${reason}) — falling back to LogicAtomizer`
+        `SemanticAtomizer unavailable (${reason}) - falling back to LogicAtomizer`
       );
     },
   });
@@ -152,10 +152,10 @@ async function init(): Promise<void> {
   );
 
   // WordNet dictionary initialises in the background (~2s), then the
-  // vocabulary seeder starts — no need to await it.
+  // vocabulary seeder starts - no need to await it.
   unfolder.dictionary.waitForInit().then(() => {
     if (!unfolder.dictionary.isReady) return;
-    tick(`WordNet 3.1 ready ${gray("— void route: dictionary → wikipedia")}`);
+    tick(`WordNet 3.1 ready ${gray("- void route: dictionary → wikipedia")}`);
 
     seeder = new VocabSeedWorker(SYSTEM_CONFIG.DOD_EMBEDDING.UMAP_DICT_PATH);
     if (seeder.total > 0) {
@@ -170,7 +170,7 @@ async function init(): Promise<void> {
           if (p.processed % 1000 === 0) {
             const pct = ((p.processed / p.total) * 100).toFixed(1);
             tick(
-              `Vocab seed: ${pct}% — ${p.matured.toLocaleString()} constellations formed`
+              `Vocab seed: ${pct}% - ${p.matured.toLocaleString()} constellations formed`
             );
           }
         },
@@ -181,7 +181,7 @@ async function init(): Promise<void> {
   if (self) {
     tick(
       `Self-concept online ${gray(`(id=${self.selfId} scope=${self.selfScope})`)}  ` +
-        `— ${cyan('"the system is online"')}`
+        `- ${cyan('"the system is online"')}`
     );
   }
 
@@ -399,7 +399,7 @@ async function handleCommand(raw: string): Promise<void> {
           `  ${cyan(":seed")} ${gray("[pause|resume]")}  vocab seeder status / control\n` +
           `  ${cyan(":orbit")} ${gray("<word>")}        orbital info for a specific atom\n` +
           `  ${cyan(":constellations")} ${gray("[n]")}  show top n constellations (default 10)\n` +
-          `  ${cyan(":memory")}            working memory — what has been established\n` +
+          `  ${cyan(":memory")}            working memory - what has been established\n` +
           `  ${cyan(":gaps")} ${gray("[n]")}           top n constellation gaps (curiosity targets)\n` +
           `  ${cyan(":reset")}             clear the manifold (not the store)\n` +
           `  ${cyan(":exit")} / Ctrl-C     quit\n\n`
@@ -531,10 +531,10 @@ async function handleCommand(raw: string): Promise<void> {
         summary.generalized;
       process.stdout.write(
         `\n  ${bold("Knowledge states")} ${gray(`(${total} total proofs)`)}\n` +
-          `    ${gray("Heard")}      ${summary.heard}  — ingested, not yet tested\n` +
-          `    ${dim("Remembered")} ${summary.remembered}  — recalled at least once\n` +
-          `    ${green("Learned")}    ${summary.learned}  — independently reproduced in 2+ contexts\n` +
-          `    ${cyan("Generalized")} ${summary.generalized}  — applied to novel inputs\n\n`
+          `    ${gray("Heard")}      ${summary.heard}  - ingested, not yet tested\n` +
+          `    ${dim("Remembered")} ${summary.remembered}  - recalled at least once\n` +
+          `    ${green("Learned")}    ${summary.learned}  - independently reproduced in 2+ contexts\n` +
+          `    ${cyan("Generalized")} ${summary.generalized}  - applied to novel inputs\n\n`
       );
       break;
     }
@@ -582,7 +582,7 @@ async function handleCommand(raw: string): Promise<void> {
 
     case "seed": {
       if (!seeder) {
-        warn("Seeder not yet initialised — WordNet may still be loading.");
+        warn("Seeder not yet initialised - WordNet may still be loading.");
         break;
       }
       const sub = args[0]?.toLowerCase();
@@ -597,7 +597,7 @@ async function handleCommand(raw: string): Promise<void> {
             if (p.processed % 1000 === 0) {
               const pct = ((p.processed / p.total) * 100).toFixed(1);
               tick(
-                `Vocab seed: ${pct}% — ${p.matured.toLocaleString()} constellations formed`
+                `Vocab seed: ${pct}% - ${p.matured.toLocaleString()} constellations formed`
               );
             }
           },

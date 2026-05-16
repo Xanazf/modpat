@@ -279,9 +279,9 @@ export async function executeSignalManagerSuite() {
       );
     });
 
-    // Track 6 — DeltaQueue concurrency model
+    // Track 6 - DeltaQueue concurrency model
 
-    await it("Test 8: DeltaQueue unit — drain returns all posted records and resets length", async () => {
+    await it("Test 8: DeltaQueue unit - drain returns all posted records and resets length", async () => {
       const dq = new DeltaQueue(100);
       assert.strictEqual(dq.length, 0);
 
@@ -302,7 +302,7 @@ export async function executeSignalManagerSuite() {
       );
     });
 
-    await it("Test 9: ManifoldLifecycle — FreeDelta is buffered until tick()", async () => {
+    await it("Test 9: ManifoldLifecycle - FreeDelta is buffered until tick()", async () => {
       const base2 = await TestHarness.getEnvironment("base");
       const emergency2 = (await TestHarness.getEnvironment("base")).system;
       const dbCtx2 = new DatabaseContext(":memory:");

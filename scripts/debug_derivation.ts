@@ -1,6 +1,6 @@
+import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import Resolver from "@core_i/Resolver";
 import System from "@core_i/System";
-import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import logger from "@utils/SpectralLogger";
 
 async function debugDerivation() {

@@ -243,7 +243,7 @@ class Mapper implements Mapping.Engine {
 
     // Constellation refactoring: reinforce atoms on the discovered path.
     // Each traversal increases the mass of intermediate semantic atoms slightly,
-    // making them stronger gravitational attractors — tightening their orbital
+    // making them stronger gravitational attractors - tightening their orbital
     // bonds with nearby atoms and naturally merging constellations that share
     // frequently-used inference bridges.
     this.reinforcePath(result);

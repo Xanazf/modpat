@@ -1,11 +1,11 @@
 /**
- * CognitiveLoop — the manifold-native autonomous motivation driver.
+ * CognitiveLoop - the manifold-native autonomous motivation driver.
  *
  * Every COGNITIVE_TICK_MS (default 5 s) it:
- *   1. SENSES — scans its tracked Intent precept set.
- *   2. SELECTS — picks the one with the highest urgency (mass × temporal freshness posW).
- *   3. ACTS — dispatches the appropriate subsystem based on the intent tag.
- *   4. REINFORCES or DECAYS — updates the precept mass depending on success.
+ *   1. SENSES - scans its tracked Intent precept set.
+ *   2. SELECTS - picks the one with the highest urgency (mass × temporal freshness posW).
+ *   3. ACTS - dispatches the appropriate subsystem based on the intent tag.
+ *   4. REINFORCES or DECAYS - updates the precept mass depending on success.
  *
  * Intent precepts are created by external motivation sources (InquiryQueue,
  * gap scanner, Resolver bridge-miss callback, unknown-topic detection) and
@@ -84,7 +84,7 @@ export class CognitiveLoop {
     const { system, inference, unfolder, resolver } = this.runtime;
     this._tickCount++;
 
-    // 1. SENSE — prune freed/decayed IDs
+    // 1. SENSE - prune freed/decayed IDs
     for (const id of this._intentIds) {
       if (!system.isAllocated(id) || system.mass[id] <= 0) {
         this._intentIds.delete(id);
@@ -99,7 +99,7 @@ export class CognitiveLoop {
 
     if (this._intentIds.size === 0) return;
 
-    // 2. SELECT — highest urgency: mass × posW (temporal freshness)
+    // 2. SELECT - highest urgency: mass × posW (temporal freshness)
     let bestId = -1;
     let bestScore = -Infinity;
     for (const id of this._intentIds) {

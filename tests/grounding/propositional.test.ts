@@ -68,7 +68,7 @@ const CASES: GroundingCase[] = [
     minSinkStrength: TAU,
     // Passes through wave physics: two sequential Inversion operators produce a
     // double sign-flip in the matrix power series (W³[door→open] > 0), which
-    // is constructive interference by algebraic cancellation — the same mechanism
+    // is constructive interference by algebraic cancellation - the same mechanism
     // as destructive interference of a destructive wave. Reproducible and correct.
     mustPass: true,
   },

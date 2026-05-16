@@ -1,10 +1,10 @@
 /**
- * WorkerPool — manages the three long-lived worker threads.
+ * WorkerPool - manages the three long-lived worker threads.
  *
  * Each worker handles a distinct concern:
- *   manifold.worker  — constellation / gap / orbital computation (SharedArrayBuffer, read-only)
- *   wiki.worker      — Wikipedia HTTP fetch (network-only, no shared memory)
- *   seed.worker      — WordNet dictionary lookup (no DB, main thread crystallizes)
+ *   manifold.worker  - constellation / gap / orbital computation (SharedArrayBuffer, read-only)
+ *   wiki.worker      - Wikipedia HTTP fetch (network-only, no shared memory)
+ *   seed.worker      - WordNet dictionary lookup (no DB, main thread crystallizes)
  *
  * All calls return Promises resolved by a request-ID map so multiple in-flight
  * tasks are correctly correlated without serializing callers.
