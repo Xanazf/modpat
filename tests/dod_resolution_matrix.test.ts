@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import logger from "@utils/SpectralLogger";
-import { describe, it, TestHarness } from "./utils/harness";
 import nlp from "compromise";
+import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeLogicSuite() {
   await describe("DOD Resolution Matrix Suite", async () => {

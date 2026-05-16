@@ -10,29 +10,29 @@
  * Prefix with : for shell commands — type :help to list them.
  */
 
-import { createInterface } from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
 import fs from "node:fs";
 import path from "node:path";
-import System, { OperatorClass } from "@core_i/System";
-import Resolver from "@core_i/Resolver";
-import Store from "@core_s/Memory";
-import { LiveInference } from "@core_i/Runtime";
-import Unfolder from "@core_s/Unfolder";
-import { SelfConcept } from "@core_s/Identity";
-import { SpectralVisualizer } from "@utils/SpectralVisualizer";
-import Runtime from "@core_i/Runtime";
-import { VocabSeedWorker } from "@core_s/VocabSeed";
+import { stdin as input, stdout as output } from "node:process";
+import { createInterface } from "node:readline/promises";
+import { DOPAT_CONFIG, SYSTEM_CONFIG } from "@config";
+import type Resolver from "@core_i/Resolver";
+import Runtime, { type LiveInference } from "@core_i/Runtime";
+import type System from "@core_i/System";
+import { OperatorClass } from "@core_i/System";
+import type { SelfConcept } from "@core_s/Identity";
 import {
-  distance4D,
-  orbitRadius,
-  orbitalParent,
-  satellites,
-  constellations,
-  constellationGaps,
   buildManifoldIndex,
+  constellationGaps,
+  constellations,
+  distance4D,
+  orbitalParent,
+  orbitRadius,
+  satellites,
 } from "@core_s/ManifoldMetrics";
-import { SYSTEM_CONFIG, DOPAT_CONFIG } from "@config";
+import type Store from "@core_s/Memory";
+import type Unfolder from "@core_s/Unfolder";
+import { VocabSeedWorker } from "@core_s/VocabSeed";
+import { SpectralVisualizer } from "@utils/SpectralVisualizer";
 
 // ANSI helpers
 
@@ -190,49 +190,7 @@ async function init(): Promise<void> {
       `  Type ${cyan(":help")} for commands.\n\n`
   );
 
-  // Background constellation gap scanner — runs every 30s, quietly enqueues
-  // the most strained atom pair in each top constellation as an inquiry topic.
-  // The gap represents a gravitational bond with no known inferential basis;
-  // investigating it may either confirm the connection or split the constellation.
-  const GAP_SCAN_INTERVAL_MS = 30_000;
-  const runGapScan = async () => {
-    try {
-      type ScanRow = { labelA: string; labelB: string };
-      let rows: ScanRow[] = [];
-
-      if (runtime.workers) {
-        const cs = await runtime.workers.computeConstellations(system.length);
-        const filtered = cs.filter(g => g.members.length >= 3).slice(0, 15);
-        if (filtered.length === 0) return;
-        const rawGaps = await runtime.workers.computeGaps(filtered, system.length);
-        rows = rawGaps.slice(0, 2).map(g => ({
-          labelA: atomizer.resolveScope(system.scope[g.atomA]) ?? "?",
-          labelB: atomizer.resolveScope(system.scope[g.atomB]) ?? "?",
-        }));
-      } else {
-        const idx = buildManifoldIndex(system);
-        const cs = constellations(system, { minSize: 3, index: idx });
-        if (cs.length === 0) return;
-        const gaps = constellationGaps(system, cs.slice(0, 15), atomizer, {
-          maxPerConstellation: 1,
-          minMassRatio: 0.05,
-        });
-        rows = gaps.slice(0, 2).map(g => ({ labelA: g.labelA, labelB: g.labelB }));
-      }
-
-      const queue = inference.getInquiryQueue();
-      for (const r of rows) {
-        const query = `What is the relationship between ${r.labelA} and ${r.labelB}?`;
-        queue.enqueue(r.labelA, query);
-      }
-    } catch {}
-  };
-  const scheduleGapScan = () => {
-    setTimeout(() => {
-      runGapScan().finally(scheduleGapScan);
-    }, GAP_SCAN_INTERVAL_MS);
-  };
-  scheduleGapScan();
+  // Gap scanning is now handled autonomously by Runtime (proactivity enabled by default).
 }
 
 function tick(msg: string) {
@@ -461,7 +419,7 @@ async function handleCommand(raw: string): Promise<void> {
 
     case "stats": {
       const allocated = countAllocated();
-      let opCounts = new Array(OP_NAME.length).fill(0);
+      const opCounts = new Array(OP_NAME.length).fill(0);
       for (let i = 0; i < system.length; i++) {
         if (system.isAllocated(i)) opCounts[system.operatorClass[i]]++;
       }
@@ -787,18 +745,28 @@ async function handleCommand(raw: string): Promise<void> {
       const count = Number.isFinite(n) && n > 0 ? n : 8;
       process.stdout.write(gray(`  Scanning constellation gaps…\n`));
 
-      type GapRow = { labelA: string; labelB: string; distance: number; starLabel: string };
+      type GapRow = {
+        labelA: string;
+        labelB: string;
+        distance: number;
+        starLabel: string;
+      };
       let gapRows: GapRow[] = [];
 
       if (runtime.workers) {
         const cs = await runtime.workers.computeConstellations(system.length);
         const filtered = cs.filter(g => g.members.length >= 3).slice(0, 20);
-        const rawGaps = await runtime.workers.computeGaps(filtered, system.length);
+        const rawGaps = await runtime.workers.computeGaps(
+          filtered,
+          system.length
+        );
         gapRows = rawGaps.map(g => {
           const c = filtered[g.constellationIdx];
           const labelA = atomizer.resolveScope(system.scope[g.atomA]) ?? "?";
           const labelB = atomizer.resolveScope(system.scope[g.atomB]) ?? "?";
-          const starLabel = c ? (atomizer.resolveScope(system.scope[c.star]) ?? "?") : "?";
+          const starLabel = c
+            ? (atomizer.resolveScope(system.scope[c.star]) ?? "?")
+            : "?";
           return { labelA, labelB, distance: g.distance, starLabel };
         });
       } else {
@@ -812,7 +780,8 @@ async function handleCommand(raw: string): Promise<void> {
           labelA: g.labelA,
           labelB: g.labelB,
           distance: g.distance,
-          starLabel: atomizer.resolveScope(system.scope[g.constellation.star]) ?? "?",
+          starLabel:
+            atomizer.resolveScope(system.scope[g.constellation.star]) ?? "?",
         }));
       }
 

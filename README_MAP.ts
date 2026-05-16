@@ -231,7 +231,7 @@ const exampleLogicPotential = (p: Vector) => {
     if (distSq < 2.0) {
       let influence = a.mass * 1.5;
       if (a.pos[3] < p[3] - 0.01) influence *= 0.01; // Temporal Anisotropy
-      influence *= Math.exp(-Math.pow(dw * 10.0, 2));
+      influence *= Math.exp(-((dw * 10.0) ** 2));
       potential -= influence * Math.exp(-distSq / 0.5);
     }
   }

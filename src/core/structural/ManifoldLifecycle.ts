@@ -1,13 +1,13 @@
+import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
-import { OperatorClass, SystemRef } from "@core_i/System";
-import { metrics } from "@core_s/Metrics";
-import { DeltaQueue } from "@core_s/DeltaQueue";
 import type { TargetBuffer } from "@core_i/System";
-import type { SystemPersistence } from "./Persistence";
-import SpectralAtomizer from "@atomics/SpectralAtomizer";
+import { OperatorClass, SystemRef } from "@core_i/System";
+import { DeltaQueue } from "@core_s/DeltaQueue";
+import { metrics } from "@core_s/Metrics";
 import type Unfolder from "@core_s/Unfolder";
 import { GridIndex4D } from "@src/core/structural/GridIndex4D";
+import type { SystemPersistence } from "./Persistence";
 
 function arraysEqual(a: number[], b: number[]): boolean {
   if (a.length !== b.length) return false;
@@ -446,6 +446,8 @@ export class ManifoldLifecycle {
     this.isDreaming = true;
     try {
       const VACUUM_THRESHOLD = sys.c * 0.01;
+      const MAX_ZONES = DOPAT_CONFIG.structural.DREAM_ZONES_PER_CYCLE;
+      let zonesThisCycle = 0;
 
       // Collect high-mass action anchors (conceptually active operators)
       const actionAnchors: number[] = [];
@@ -495,8 +497,8 @@ export class ManifoldLifecycle {
             factDisplacementZ: 0,
           });
           metrics.increment("dream.ingested");
+          if (++zonesThisCycle >= MAX_ZONES) break;
         }
-        return; // One tension zone per cycle
       }
     } finally {
       this.isDreaming = false;

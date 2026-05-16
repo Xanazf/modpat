@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
+import LogicAtomizer from "@atomics/LogicAtomizer";
+import type OG_System from "@core_i/System";
 import logger from "@utils/SpectralLogger";
 import { describe, it } from "../utils/harness";
 import System, {
+  classifyOperatorToken,
   LogicOperations,
   TargetBuffer,
-  classifyOperatorToken,
 } from "./subjects/System_iso";
-import type OG_System from "@core_i/System";
-import LogicAtomizer from "@atomics/LogicAtomizer";
 
 export async function runIsolatedSystemTest() {
   const sys = new System() as unknown as OG_System;

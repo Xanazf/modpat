@@ -1,6 +1,6 @@
+import { DOPAT_CONFIG } from "@config";
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
-import { DOPAT_CONFIG } from "@config";
 
 type MetricType = "counter" | "histogram" | "gauge";
 
@@ -19,8 +19,8 @@ class Metrics {
   private tickCount = 0;
 
   static get(): Metrics {
-    if (!this._instance) this._instance = new Metrics();
-    return this._instance;
+    if (!Metrics._instance) Metrics._instance = new Metrics();
+    return Metrics._instance;
   }
 
   /** Increment a counter metric. */

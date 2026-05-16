@@ -1,9 +1,9 @@
-import logger from "@utils/SpectralLogger";
-import { TensorMath_GPU } from "@core_s/Math";
-// @ts-ignore
-import type System from "./System";
-import type Unfolder from "@core_s/Unfolder";
 import { DOPAT_CONFIG } from "@config";
+import { TensorMath_GPU } from "@core_s/Math";
+import type Unfolder from "@core_s/Unfolder";
+import logger from "@utils/SpectralLogger";
+// @ts-expect-error
+import type System from "./System";
 
 /**
  * The Mapper is responsible for finding the shortest logical path (Geodesic)
@@ -488,7 +488,7 @@ class Mapper implements Mapping.Engine {
         let infl =
           this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
         if (boost?.has(this.system.scope[j])) infl *= 100.0;
-        infl *= Math.exp(-Math.pow(dw * 50.0, 2)); // Contextual Anisotropy
+        infl *= Math.exp(-((dw * 50.0) ** 2)); // Contextual Anisotropy
         if (this.system.posW[j] < w - 0.01) infl *= 0.01; // Temporal Anisotropy
         pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
       }
@@ -534,7 +534,7 @@ class Mapper implements Mapping.Engine {
         let infl =
           this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5;
         if (boost?.has(this.system.scope[j])) infl *= 100.0;
-        infl *= Math.exp(-Math.pow(dw * 50.0, 2));
+        infl *= Math.exp(-((dw * 50.0) ** 2));
         if (this.system.posW[j] < w - 0.01) infl *= 0.01;
         pot -= infl * Math.exp(-distSq / phys.INFLUENCE_FALLOFF);
       }
@@ -566,10 +566,10 @@ class Mapper implements Mapping.Engine {
         nearestId = -1;
       for (let j = 0; j < this.system.length; j++) {
         const dSq =
-          Math.pow(px[i] - this.system.posX[j], 2) +
-          Math.pow(py[i] - this.system.posY[j], 2) +
-          Math.pow(pe[i] - this.system.posZ[j], 2) +
-          Math.pow(pa[i] - this.system.posW[j], 2);
+          (px[i] - this.system.posX[j]) ** 2 +
+          (py[i] - this.system.posY[j]) ** 2 +
+          (pe[i] - this.system.posZ[j]) ** 2 +
+          (pa[i] - this.system.posW[j]) ** 2;
         if (dSq < nearestDistSq) {
           nearestDistSq = dSq;
           nearestId = j;

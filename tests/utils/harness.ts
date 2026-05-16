@@ -1,9 +1,9 @@
-import Resolver from "@core_i/Resolver";
-import System from "@core_i/System";
 import Atomizer from "@atomics/LogicAtomizer";
-import Store from "@core_s/Memory";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
+import Resolver from "@core_i/Resolver";
+import System from "@core_i/System";
+import Store from "@core_s/Memory";
 import logger from "@src/utils/SpectralLogger";
 
 export type AtomizerType = "base" | "semantic" | "spectral";

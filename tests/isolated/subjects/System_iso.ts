@@ -892,5 +892,5 @@ class SystemRef {
   }
 }
 
-export { LogicOperations, TargetBuffer, classifyOperatorToken, SystemRef };
+export { classifyOperatorToken, LogicOperations, SystemRef, TargetBuffer };
 export default System;

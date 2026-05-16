@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { DOPAT_CONFIG } from "@config";
-import { OperatorClass, SystemRef } from "@core_i/System";
 import type Resolver from "@core_i/Resolver";
+import { OperatorClass, type SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
+import { extractTopic } from "@utils/topicExtraction";
 
 // Deliberately unrelated topics used to create Env 3 for Generalized promotion.
 // An unrelated expansion creates a maximally different context fingerprint, so
@@ -67,6 +68,7 @@ export class Learner {
   private resolver: Resolver;
   private store: Store;
   private unfolder: Unfolder;
+  private _lastProbeIds: Uint32Array | null = null;
 
   constructor(
     systemRef: SystemRef,
@@ -105,6 +107,7 @@ export class Learner {
     }
 
     const probeIds = this.atomizer.ingestSequence(probeText, this.system);
+    this._lastProbeIds = probeIds;
 
     const coherentResult = await this.resolver.resolveCoherent(probeIds, {
       probeMode: true,
@@ -193,14 +196,14 @@ export class Learner {
       // Generalization fast-track: if coherentResult shows a cross-domain bridge
       // in Env 1, the system proved it can generalize from first principles.
       // One successful cross-domain reproduction counts as two distinct contexts.
-      let generalizationFastTrack =
+      const generalizationFastTrack =
         result1.hasGeneralizationSignal && result1.success;
 
       let expandedTopic = "";
 
       // Env 2: related topic expansion (existing behavior for Learned promotion).
       if (repCount < 2) {
-        const topic = this.extractTopic(candidate.factText);
+        const topic = extractTopic(candidate.factText);
         if (topic) {
           const voidScope = this.atomizer.getSymbolScope("void", false);
           const voidId = this.system.createLocation(-this.system.c, voidScope);
@@ -300,7 +303,9 @@ export class Learner {
     const probeText = buildProbeText(candidate.factText);
     if (!probeText) return;
 
-    const inputIds = this.atomizer.ingestSequence(probeText, this.system);
+    const inputIds =
+      this._lastProbeIds ??
+      this.atomizer.ingestSequence(probeText, this.system);
     const best = diag.sinkCandidates[0];
     const outputIds = new Uint32Array([best.id]);
 
@@ -324,57 +329,6 @@ export class Learner {
     if (r === e) return true;
     if (e.length > 0 && (r.includes(e) || e.includes(r))) return true;
     return false;
-  }
-
-  private extractTopic(factText: string): string {
-    const stop = new Set([
-      "is",
-      "are",
-      "was",
-      "were",
-      "can",
-      "and",
-      "but",
-      "or",
-      "not",
-      "all",
-      "for",
-      "the",
-      "a",
-      "an",
-      "in",
-      "of",
-      "to",
-      "it",
-      "its",
-      "has",
-      "had",
-      "have",
-      "be",
-      "been",
-      "being",
-      "do",
-      "did",
-      "does",
-      "will",
-      "would",
-      "could",
-      "should",
-      "may",
-      "might",
-      "shall",
-      "that",
-      "this",
-      "then",
-      "than",
-      "with",
-      "from",
-    ]);
-    const tokens = factText
-      .trim()
-      .split(/\s+/)
-      .filter(t => t.length > 2 && !stop.has(t.toLowerCase()));
-    return tokens.sort((a, b) => b.length - a.length)[0] ?? "";
   }
 
   private stateName(s: Memory.KnowledgeState): string {
@@ -410,6 +364,26 @@ export interface InquiryItem {
  */
 export class InquiryQueue {
   private items: Map<string, InquiryItem> = new Map();
+  private store?: Store;
+  /** Optional hook called on each new enqueue — used by CognitiveLoop to spawn Intent precepts. */
+  public onEnqueue?: (topic: string) => void;
+
+  constructor(store?: Store) {
+    this.store = store;
+  }
+
+  /** Bulk-load items from a previous session (called once at boot). */
+  public populate(items: InquiryItem[]): void {
+    for (const item of items) {
+      if (!this.items.has(item.id)) this.items.set(item.id, item);
+    }
+  }
+
+  private _persist(): void {
+    this.store
+      ?.saveInquiryQueue([...this.items.values()])
+      .catch(e => logger.warn("[INQUIRY PERSIST]", e));
+  }
 
   public enqueue(topic: string, originalQuery: string): void {
     const id = topic.toLowerCase().trim();
@@ -423,6 +397,8 @@ export class InquiryQueue {
       attempts: 0,
     });
     logger.debug(`[INQUIRY] enqueued "${id}"`);
+    this._persist();
+    this.onEnqueue?.(id);
   }
 
   public resolve(topic: string): void {
@@ -430,6 +406,7 @@ export class InquiryQueue {
     if (item) {
       item.status = "resolved";
       logger.debug(`[INQUIRY] resolved "${topic}"`);
+      this._persist();
     }
   }
 

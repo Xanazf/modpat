@@ -1,13 +1,13 @@
-import nlp from "compromise";
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
-import Mapper from "./Mapper";
-import { Synthesizer, type CodePattern } from "./Coder";
-import System, { OperatorClass, SlotType, SystemRef } from "./System";
+import nlp from "compromise";
 import { GridIndex4D } from "../structural/GridIndex4D";
+import { type CodePattern, Synthesizer } from "./Coder";
+import Mapper from "./Mapper";
+import System, { OperatorClass, SlotType, SystemRef } from "./System";
 
 /**
  * Result returned by resolveCoherent: the best answer found, a coherence score,
@@ -397,10 +397,10 @@ export default class Resolver implements Resolution.Engine {
       // gets a chance to derive the answer from the manifold topology.
     }
 
-    // Phase 1: Semantic Derivation (NLP-based logic rules).
+    // Phase 1: Semantic Derivation — vault check first, NLP rules as fallback.
     const derivation = this.probeMode
       ? null
-      : this.resolveSemanticDerivation(sequenceIds);
+      : await this.resolveSemanticDerivation(sequenceIds);
     if (derivation) return derivation;
 
     // Phase 2: Physics Simulation (Resolution Matrix).
@@ -491,46 +491,26 @@ export default class Resolver implements Resolution.Engine {
         }
       }
     }
-
-    // Anti-particle back-propagation through implications.
-    //
-    // When ¬B is present (Inversion at i, negated scope S at i+1), and there
-    // is an implication A→B (IdentityShift at j with consequent scope S at j+1),
-    // the destructive wave propagates BACKWARD through the lens:
-    //   W[B_pos][A_pos] = −W_LENSING
-    //
-    // This models the anti-particle: ¬B flows through the A→B lens in reverse,
-    // making A accumulate negative incoming energy.  The most-negatively-affected
-    // non-directly-negated operand is the modus-tollens conclusion (¬A).
-    //
-    // ¬¬A does not match here because the second ¬ negates an operator token, not a
-    // semantic one, so no IdentityShift consequent is found and no edge is written.
-    {
-      for (let i = 0; i < N - 1; i++) {
+    for (let i = 0; i < N - 1; i++) {
+      if (this.system.operatorClass[sequenceIds[i]] !== OperatorClass.Inversion)
+        continue;
+      // Only consider semantic (non-operator) negated tokens: operators are part of
+      // structural patterns (like ¬¬A) and must not trigger modus-tollens back-prop.
+      if (this.system.operatorClass[sequenceIds[i + 1]] !== OperatorClass.None)
+        continue;
+      const negatedScope = this.system.scope[sequenceIds[i + 1]];
+      for (let j = 1; j < N - 1; j++) {
         if (
-          this.system.operatorClass[sequenceIds[i]] !== OperatorClass.Inversion
-        )
-          continue;
-        // Only consider semantic (non-operator) negated tokens: operators are part of
-        // structural patterns (like ¬¬A) and must not trigger modus-tollens back-prop.
-        if (
-          this.system.operatorClass[sequenceIds[i + 1]] !== OperatorClass.None
-        )
-          continue;
-        const negatedScope = this.system.scope[sequenceIds[i + 1]];
-        for (let j = 1; j < N - 1; j++) {
-          if (
-            this.system.operatorClass[sequenceIds[j]] ===
-              OperatorClass.IdentityShift &&
-            j + 1 < N - 1
-          ) {
-            if (this.system.scope[sequenceIds[j + 1]] === negatedScope) {
-              const bPos = j + 1;
-              const aPos = j - 1;
-              const backVal = -DOPAT_CONFIG.resolver.W_LENSING;
-              if (transferMatrix[bPos * N + aPos] > backVal) {
-                transferMatrix[bPos * N + aPos] = backVal;
-              }
+          this.system.operatorClass[sequenceIds[j]] ===
+            OperatorClass.IdentityShift &&
+          j + 1 < N - 1
+        ) {
+          if (this.system.scope[sequenceIds[j + 1]] === negatedScope) {
+            const bPos = j + 1;
+            const aPos = j - 1;
+            const backVal = -DOPAT_CONFIG.resolver.W_LENSING;
+            if (transferMatrix[bPos * N + aPos] > backVal) {
+              transferMatrix[bPos * N + aPos] = backVal;
             }
           }
         }
@@ -1795,9 +1775,15 @@ export default class Resolver implements Resolution.Engine {
    * @param sequenceIds The input quantum sequence.
    * @returns A derived sequence or null.
    */
-  private resolveSemanticDerivation(
+  private async resolveSemanticDerivation(
     sequenceIds: Uint32Array
-  ): Uint32Array | null {
+  ): Promise<Uint32Array | null> {
+    // Vault-first: check if a crystallized template already covers this pattern.
+    if (this.store) {
+      const vaultHit = await this.store.checkInterferencePattern(sequenceIds);
+      if (vaultHit && vaultHit.ids.length > 0) return vaultHit.ids;
+    }
+
     const text = this.atomizer.decodeSequence(sequenceIds, this.system);
     const doc = nlp(text);
 

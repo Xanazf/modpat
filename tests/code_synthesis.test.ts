@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import SemanticAtomizer from "@atomics/SemanticAtomizer";
-import { SlotType } from "@core_i/System";
+import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { Synthesizer } from "@core_i/Coder";
-import { LiveInference } from "@core_i/Runtime";
 import Resolver from "@core_i/Resolver";
-import { TestHarness, describe, it } from "./utils/harness";
+import { LiveInference } from "@core_i/Runtime";
+import { SlotType } from "@core_i/System";
 import { logger } from "@src/utils/SpectralLogger";
+import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeCodeSynthesisSuite() {
   await describe("CODE SYNTHESIS SUITE", async () => {

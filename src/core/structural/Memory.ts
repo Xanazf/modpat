@@ -1,13 +1,13 @@
-import type System from "@core_i/System";
+import Atomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import { metrics } from "@core_s/Metrics";
+import type System from "@core_i/System";
 import {
   classifyOperatorToken,
   OperatorClass,
   SlotType,
   SystemRef,
 } from "@core_i/System";
-import Atomizer from "@atomics/LogicAtomizer";
+import { metrics } from "@core_s/Metrics";
 import {
   type DuckDBConnection,
   DuckDBInstance,
@@ -112,6 +112,16 @@ export default class Store implements Memory.Vault {
         signature VARCHAR
       );
       CREATE INDEX IF NOT EXISTS idx_raw_facts_sig ON raw_facts (signature);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_facts_fact ON raw_facts (fact);
+
+      CREATE TABLE IF NOT EXISTS inquiries (
+        id TEXT PRIMARY KEY,
+        topic TEXT,
+        original_query TEXT,
+        status TEXT,
+        added_at BIGINT,
+        attempts INTEGER DEFAULT 0
+      );
     `);
 
     // Idempotent migrations for columns added in later schema versions.
@@ -659,17 +669,29 @@ export default class Store implements Memory.Vault {
   public async sampleForChallenge(
     limit: number
   ): Promise<Memory.ChallengeCandidate[]> {
+    // Use a CTE that picks the highest-energy wave_form per signature so the
+    // join with raw_facts is always 1:1 (S2 — JOIN ambiguity fix).
     const stmt = await this._connection.prepare(`
-      SELECT r.fact, w.signature, w.target_pattern,
-             COALESCE(w.reproduction_count, 0) AS reproduction_count,
-             COALESCE(w.knowledge_state, 0)    AS knowledge_state,
-             COALESCE(w.context_hash, '')       AS context_hash
+      WITH best_wave AS (
+        SELECT signature,
+               target_pattern,
+               MAX(net_energy)          AS net_energy,
+               MAX(knowledge_state)     AS knowledge_state,
+               MAX(reproduction_count)  AS reproduction_count,
+               MAX(context_hash)        AS context_hash
+        FROM wave_forms
+        WHERE COALESCE(knowledge_state, 0) < 3
+          AND net_energy > 0
+        GROUP BY signature, target_pattern
+      )
+      SELECT r.fact, bw.signature, bw.target_pattern,
+             COALESCE(bw.reproduction_count, 0) AS reproduction_count,
+             COALESCE(bw.knowledge_state, 0)    AS knowledge_state,
+             COALESCE(bw.context_hash, '')       AS context_hash
       FROM raw_facts r
-      JOIN wave_forms w ON r.signature = w.signature
-      WHERE COALESCE(w.knowledge_state, 0) < 3
-        AND w.net_energy > 0
-        AND r.fact IS NOT NULL AND LENGTH(r.fact) > 0
-      ORDER BY COALESCE(w.reproduction_count, 0) ASC, w.net_energy DESC
+      JOIN best_wave bw ON r.signature = bw.signature
+      WHERE r.fact IS NOT NULL AND LENGTH(r.fact) > 0
+      ORDER BY COALESCE(bw.reproduction_count, 0) ASC, bw.net_energy DESC
       LIMIT ?
     `);
     try {
@@ -765,10 +787,10 @@ export default class Store implements Memory.Vault {
     confidence: number,
     signature: string
   ): Promise<void> {
-    const exists = await this.rawFactExists(fact);
-    if (exists) return;
     const stmt = await this._connection.prepare(
-      `INSERT INTO raw_facts (fact, source, confidence, ingested_at, signature) VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO raw_facts (fact, source, confidence, ingested_at, signature)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT DO NOTHING`
     );
     try {
       stmt.bindVarchar(1, fact);
@@ -782,6 +804,7 @@ export default class Store implements Memory.Vault {
     }
   }
 
+  /** Checks whether a raw fact string already exists in the vault. Used for contradiction detection. */
   public async rawFactExists(fact: string): Promise<boolean> {
     const stmt = await this._connection.prepare(
       `SELECT 1 FROM raw_facts WHERE fact = ? LIMIT 1`
@@ -790,6 +813,50 @@ export default class Store implements Memory.Vault {
       stmt.bindVarchar(1, fact);
       const res = await stmt.runAndReadAll();
       return res.getRows().length > 0;
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /** Persists the full InquiryQueue state, replacing any prior rows. */
+  public async saveInquiryQueue(items: Memory.InquiryItem[]): Promise<void> {
+    await this._connection.run("DELETE FROM inquiries");
+    for (const item of items) {
+      const stmt = await this._connection.prepare(
+        `INSERT INTO inquiries (id, topic, original_query, status, added_at, attempts)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT DO NOTHING`
+      );
+      try {
+        stmt.bindVarchar(1, item.id);
+        stmt.bindVarchar(2, item.topic);
+        stmt.bindVarchar(3, item.originalQuery);
+        stmt.bindVarchar(4, item.status);
+        stmt.bindBigInt(5, BigInt(item.addedAt));
+        stmt.bindInteger(6, item.attempts);
+        await stmt.run();
+      } finally {
+        stmt.destroySync();
+      }
+    }
+  }
+
+  /** Loads unresolved InquiryQueue items from the vault. */
+  public async loadInquiryQueue(): Promise<Memory.InquiryItem[]> {
+    const stmt = await this._connection.prepare(
+      `SELECT id, topic, original_query, status, added_at, attempts
+       FROM inquiries WHERE status != 'resolved'`
+    );
+    try {
+      const res = await stmt.runAndReadAll();
+      return res.getRows().map(row => ({
+        id: String(row[0] ?? ""),
+        topic: String(row[1] ?? ""),
+        originalQuery: String(row[2] ?? ""),
+        status: String(row[3] ?? "pending") as Memory.InquiryStatus,
+        addedAt: Number(row[4] ?? 0),
+        attempts: Number(row[5] ?? 0),
+      }));
     } finally {
       stmt.destroySync();
     }
@@ -806,7 +873,7 @@ export default class Store implements Memory.Vault {
   public signatureForText(text: string): string {
     const tokens = text
       .replace(/\|-/g, " SINK_MARKER ")
-      .replace(/([(){}\[\]:;.,+\-*/=<>])/g, " $1 ")
+      .replace(/([(){}[\]:;.,+\-*/=<>])/g, " $1 ")
       .replace(/SINK_MARKER/g, "|-")
       .split(/\s+/)
       .filter(t => t.length > 0);

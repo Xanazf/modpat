@@ -9,27 +9,35 @@
  *   const rt = await Runtime.boot({ atomizer: "base" });   // tests, no embeddings
  */
 
-import nlp from "compromise";
-import { parse } from "abstract-syntax-tree";
-import { DOPAT_CONFIG } from "@config";
-import System, { SystemRef } from "@core_i/System";
-import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
-import { DatabaseContext } from "@core_s/DatabaseContext";
-import { SystemPersistence } from "@core_s/Persistence";
-import Resolver from "@core_i/Resolver";
-import { SelfConcept } from "@core_s/Identity";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
+import { DOPAT_CONFIG } from "@config";
+import { CognitiveLoop } from "@core_i/CognitiveLoop";
+import Resolver from "@core_i/Resolver";
+import System, { SystemRef } from "@core_i/System";
+import { DatabaseContext } from "@core_s/DatabaseContext";
+import { SelfConcept } from "@core_s/Identity";
+import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
+import {
+  buildManifoldIndex,
+  constellationGaps,
+  constellations,
+} from "@core_s/ManifoldMetrics";
 import Store from "@core_s/Memory";
+import { SystemPersistence } from "@core_s/Persistence";
 import Unfolder from "@core_s/Unfolder";
 import { WorkerPool } from "@core_s/WorkerPool";
+import { IntentTag, spawnIntent } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
+import { extractTopic } from "@utils/topicExtraction";
+import { parse } from "abstract-syntax-tree";
+import nlp from "compromise";
+import Coder from "./Coder";
+import { InquiryQueue, Learner } from "./Learner";
 import Listener, { isCodeIntent } from "./Listener";
 import Talker from "./Talker";
-import Coder from "./Coder";
-import { Learner, InquiryQueue } from "./Learner";
-import { WorkingMemory, buildExplanation } from "./WorkingMemory";
+import { buildExplanation, WorkingMemory } from "./WorkingMemory";
 
 // LiveInference
 
@@ -89,6 +97,8 @@ export class LiveInference {
   private coder: Coder;
   private learner: Learner;
   private inquiryQueue: InquiryQueue;
+  /** Called when a query resolves to "unknown" — used by CognitiveLoop to spawn Intent. */
+  public onUnknown?: (topic: string) => void;
   private workingMemory: WorkingMemory;
 
   private last_signature: string | null = null;
@@ -131,7 +141,7 @@ export class LiveInference {
       store,
       this.unfolder
     );
-    this.inquiryQueue = new InquiryQueue();
+    this.inquiryQueue = new InquiryQueue(store);
     this.workingMemory = new WorkingMemory();
   }
 
@@ -148,9 +158,6 @@ export class LiveInference {
   public async processIntent(query: string): Promise<string> {
     if (++this.intentCount % 50 === 0) {
       await this.store.cullWeakWaveForms();
-    }
-    if (this.intentCount % 20 === 0) {
-      this.learner.runCycle(5).catch(() => {});
     }
     const doc = nlp(query);
     const isQuestion = doc.questions().length > 0 || query.trim().endsWith("?");
@@ -216,10 +223,14 @@ export class LiveInference {
       if (missingLinks.length > 0) {
         for (const link of missingLinks.slice(0, 2)) {
           this.inquiryQueue.enqueue(link.label, resolvedQuery);
+          this.onUnknown?.(link.label);
         }
       } else {
-        const topic = this.extractTopic(resolvedQuery);
-        if (topic) this.inquiryQueue.enqueue(topic, resolvedQuery);
+        const topic = extractTopic(resolvedQuery);
+        if (topic) {
+          this.inquiryQueue.enqueue(topic, resolvedQuery);
+          this.onUnknown?.(topic);
+        }
       }
     } else {
       this.inquiryQueue.checkForAnswers(resolvedQuery);
@@ -256,7 +267,7 @@ export class LiveInference {
 
     // Established facts are conclusions too: push the topic to working memory so
     // follow-up questions ("what color is it?") can resolve "it" to the subject.
-    const topic = this.extractTopic(statement);
+    const topic = extractTopic(statement);
     if (topic) {
       const sys = this.systemRef.current;
       const topicScope =
@@ -282,51 +293,6 @@ export class LiveInference {
   public respond(response: string): void {
     logger.log(`[LiveInference]: ${response}`);
   }
-
-  private extractTopic(query: string): string {
-    const stop = new Set([
-      "what",
-      "who",
-      "where",
-      "when",
-      "why",
-      "how",
-      "is",
-      "am",
-      "are",
-      "was",
-      "were",
-      "a",
-      "an",
-      "the",
-      "it",
-      "its",
-      "this",
-      "that",
-      "do",
-      "does",
-      "did",
-      "can",
-      "will",
-      "would",
-      "could",
-      "should",
-      "i",
-      "me",
-      "my",
-      "you",
-      "your",
-      "we",
-      "our",
-    ]);
-    const tokens = query
-      .replace(/[?|!|-]+$/g, "")
-      .trim()
-      .toLowerCase()
-      .split(/\s+/)
-      .filter(t => t.length > 2 && !stop.has(t));
-    return tokens.sort((a, b) => b.length - a.length)[0] ?? "";
-  }
 }
 
 // Runtime
@@ -349,17 +315,30 @@ export interface RuntimeOptions {
    */
   noTick?: boolean;
   /**
-   * Enable full ManifoldLifecycle wrapping: Triple-Modular Redundancy allocator,
-   * primary + emergency system failover, gravitational consolidation, and dream
-   * cycle (background topic expansion via the Unfolder).
-   * Default: plain System with lightweight decay tick only.
+   * Disable full ManifoldLifecycle wrapping (TMR allocator, primary/emergency
+   * failover, gravitational consolidation, and dream cycle).
+   * Default: lifecycle is active. Set this in unit/stress/perf tests that need
+   * a plain System with lightweight decay only.
    */
-  lifecycle?: boolean;
+  noLifecycle?: boolean;
   /**
    * Disable worker threads.  Useful in test environments that don't need
    * off-thread computation and want to avoid the worker startup overhead.
    */
   noWorkers?: boolean;
+  /**
+   * Interval in ms for the autonomous learner cycle (default: 10 000).
+   * The learner samples low-confidence vault facts and promotes them through
+   * the challenge loop independently of user input.
+   */
+  learnerIntervalMs?: number;
+  /**
+   * Enable the background constellation gap scanner (default: true when lifecycle is active).
+   * Set to false to disable proactive curiosity enqueueing.
+   */
+  proactivity?: boolean;
+  /** Gap scan interval in ms (default: 30 000). */
+  gapScanIntervalMs?: number;
 }
 
 export class Runtime {
@@ -374,9 +353,9 @@ export class Runtime {
   /** The ego-centre precept.  null when skipIdentity was set. */
   public readonly identity: SelfConcept | null;
   /**
-   * ManifoldLifecycle instance when RuntimeOptions.lifecycle was set.
+   * ManifoldLifecycle instance (active by default unless RuntimeOptions.noLifecycle).
    * Provides TMR allocation, primary/emergency failover, consolidation and
-   * dream cycle on top of the plain System.  null in the default boot path.
+   * dream cycle on top of the plain System.  null when noLifecycle is set.
    */
   public readonly lifecycle: ManifoldLifecycle | null;
   /**
@@ -388,7 +367,14 @@ export class Runtime {
    */
   public readonly workers: WorkerPool | null;
 
+  /** CognitiveLoop — the autonomous motivation daemon. Active when lifecycle is on. */
+  public cognitiveLoop: CognitiveLoop | null = null;
+
   private _tickTimer: ReturnType<typeof setInterval> | null = null;
+  private _learnerTimer: ReturnType<typeof setInterval> | null = null;
+  private _gapScanTimer: ReturnType<typeof setInterval> | null = null;
+  private _inquiryDrainTimer: ReturnType<typeof setInterval> | null = null;
+  private _gapSeen = new Set<string>();
   private _tickIntervalMs = 0;
   private _lifecycleCtx: DatabaseContext | null = null;
 
@@ -485,7 +471,7 @@ export class Runtime {
     // emergency failover, gravitational consolidation, and dream cycle.
     let lifecycle: ManifoldLifecycle | null = null;
     let lifecycleCtx: DatabaseContext | null = null;
-    if (opts.lifecycle) {
+    if (!opts.noLifecycle) {
       const emergency = new System();
       // Use a separate in-memory DB for lifecycle persistence (snapshots/hydration).
       lifecycleCtx = new DatabaseContext(":memory:");
@@ -521,9 +507,38 @@ export class Runtime {
       workers,
     });
 
-    if (!opts.noTick) {
-      rt.startTick();
+    // Wire the Cognitive Daemon (lifecycle active by default).
+    if (!opts.noLifecycle) {
+      rt.cognitiveLoop = new CognitiveLoop(rt);
+      // Hook InquiryQueue.enqueue → spawn Intent precept
+      rt.inference.getInquiryQueue().onEnqueue = (topic: string) => {
+        rt.cognitiveLoop!.spawnAndRegister(topic, 2.0, IntentTag.INQUIRY_GAP);
+      };
+      // Hook processQuestion unknown result → spawn USER_UNKNOWN Intent
+      rt.inference.onUnknown = (topic: string) => {
+        rt.cognitiveLoop!.spawnAndRegister(topic, 3.0, IntentTag.USER_UNKNOWN);
+      };
     }
+
+    if (!opts.noTick) {
+      rt.startTick(undefined, {
+        learnerIntervalMs: opts.learnerIntervalMs,
+        proactivity: opts.proactivity,
+        gapScanIntervalMs: opts.gapScanIntervalMs,
+      });
+    }
+
+    // Restore any unresolved inquiries from the previous session.
+    store
+      .loadInquiryQueue()
+      .then(items => rt.inference.getInquiryQueue().populate(items))
+      .catch(e => logger.warn("[INQUIRY LOAD]", e));
+
+    // Seed canonical syllogism templates so Phase 0b vault recall handles them
+    // before falling through to the hard-coded NLP rules in Phase 1.
+    Runtime._seedSyllogisms(store, atomizer, system).catch(e =>
+      logger.warn("[SYLLOGISM SEED]", e)
+    );
 
     return rt;
   }
@@ -538,7 +553,11 @@ export class Runtime {
    * the minimum needed for temporal ordering to mean anything: decay and age.
    */
   startTick(
-    intervalMs: number = DOPAT_CONFIG.observability.TICK_INTERVAL_MS
+    intervalMs: number = DOPAT_CONFIG.observability.TICK_INTERVAL_MS,
+    opts: Pick<
+      RuntimeOptions,
+      "learnerIntervalMs" | "proactivity" | "gapScanIntervalMs"
+    > = {}
   ): void {
     if (this._tickTimer !== null) return;
     this._tickIntervalMs = intervalMs;
@@ -551,6 +570,43 @@ export class Runtime {
         this.system.decay(intervalMs);
       }
     }, intervalMs);
+
+    // Autonomous learner cycle — runs independently of user input.
+    const learnerMs = opts.learnerIntervalMs ?? 10_000;
+    this._learnerTimer = setInterval(() => {
+      this.inference
+        .getLearner()
+        .runCycle(5)
+        .catch(e => logger.warn("[LEARNER TIMER]", e));
+    }, learnerMs);
+
+    // Start the Cognitive Daemon.
+    this.cognitiveLoop?.start();
+
+    // Background constellation gap scanner (requires lifecycle / workers).
+    const proactive = opts.proactivity !== false && this.lifecycle !== null;
+    if (proactive) {
+      const scanMs = opts.gapScanIntervalMs ?? 30_000;
+      this._gapScanTimer = setInterval(
+        () => this._runGapScan().catch(e => logger.warn("[GAP SCAN]", e)),
+        scanMs
+      );
+
+      // Autonomous InquiryQueue draining — works through pending topics at 5 s cadence.
+      this._inquiryDrainTimer = setInterval(() => {
+        this.inference
+          .getInquiryQueue()
+          .step(
+            3,
+            this.unfolder,
+            this.resolver,
+            this.system,
+            this.atomizer,
+            this.store
+          )
+          .catch(e => logger.warn("[INQUIRY DRAIN]", e));
+      }, 5_000);
+    }
   }
 
   stopTick(): void {
@@ -558,6 +614,19 @@ export class Runtime {
       clearInterval(this._tickTimer);
       this._tickTimer = null;
     }
+    if (this._learnerTimer !== null) {
+      clearInterval(this._learnerTimer);
+      this._learnerTimer = null;
+    }
+    if (this._gapScanTimer !== null) {
+      clearInterval(this._gapScanTimer);
+      this._gapScanTimer = null;
+    }
+    if (this._inquiryDrainTimer !== null) {
+      clearInterval(this._inquiryDrainTimer);
+      this._inquiryDrainTimer = null;
+    }
+    this.cognitiveLoop?.stop();
   }
 
   get isTickRunning(): boolean {
@@ -566,6 +635,106 @@ export class Runtime {
 
   get tickIntervalMs(): number {
     return this._tickIntervalMs;
+  }
+
+  /**
+   * Seeds canonical logical syllogism templates into the vault at high energy
+   * so Phase 0b vault recall handles them before the hard-coded Phase 1 NLP rules.
+   * Idempotent: templates already present (by signature) are skipped.
+   */
+  private static async _seedSyllogisms(
+    store: Store,
+    atomizer: Atomic.Engine,
+    system: System
+  ): Promise<void> {
+    // Template definitions: [premise text, conclusion text, energy]
+    // Energy 5.0 is well above normal vault entries (~1.0) so they rank first.
+    const templates: Array<[string, string, number]> = [
+      // Transitivity: A is B; B is C |- A is C
+      ["A is B B is C |-", "A is C", 5.0],
+      // Universal instantiation: All A are B; X is A |- X is B
+      ["All A are B X is A |-", "X is B", 5.0],
+      // Contrapositive: A implies B; not B |- not A
+      ["A implies B not B |-", "not A", 5.0],
+      // Existence: A was created in D |- A did not exist before D
+      ["A was created in D |-", "A did not exist before D", 5.0],
+    ];
+
+    for (const [premiseText, conclusionText, energy] of templates) {
+      try {
+        const premiseIds = atomizer.ingestSequence(premiseText, system);
+        const hit = await store.checkInterferencePattern(premiseIds);
+        if (hit) continue; // already seeded
+        const conclusionIds = atomizer.ingestSequence(conclusionText, system);
+        await store.crystallizeProof(premiseIds, conclusionIds, energy);
+        logger.debug(
+          `[SYLLOGISM SEED] seeded: "${premiseText}" → "${conclusionText}"`
+        );
+      } catch (e) {
+        logger.warn("[SYLLOGISM SEED] failed for template:", premiseText, e);
+      }
+    }
+  }
+
+  /**
+   * Scans constellation gaps and enqueues any new strained atom pairs as
+   * inquiry topics.  Skips pairs seen in the current scan window (_gapSeen).
+   */
+  private async _runGapScan(): Promise<void> {
+    try {
+      const queue = this.inference.getInquiryQueue();
+      let rows: Array<{ labelA: string; labelB: string }> = [];
+
+      if (this.workers) {
+        const cs = await this.workers.computeConstellations(this.system.length);
+        const filtered = cs.filter(g => g.members.length >= 3).slice(0, 15);
+        if (filtered.length === 0) return;
+        const rawGaps = await this.workers.computeGaps(
+          filtered,
+          this.system.length
+        );
+        rows = rawGaps.slice(0, 2).map(g => ({
+          labelA: this.atomizer.resolveScope(this.system.scope[g.atomA]) ?? "?",
+          labelB: this.atomizer.resolveScope(this.system.scope[g.atomB]) ?? "?",
+        }));
+      } else {
+        const idx = buildManifoldIndex(this.system);
+        const cs = constellations(this.system, { minSize: 3, index: idx });
+        if (cs.length === 0) return;
+        const gaps = constellationGaps(
+          this.system,
+          cs.slice(0, 15),
+          this.atomizer,
+          {
+            maxPerConstellation: 1,
+            minMassRatio: 0.05,
+          }
+        );
+        rows = gaps
+          .slice(0, 2)
+          .map(g => ({ labelA: g.labelA, labelB: g.labelB }));
+      }
+
+      // Clear seen set at the start of each scan so pairs can be re-evaluated
+      // after enough time has passed for new structure to emerge.
+      this._gapSeen.clear();
+
+      for (const r of rows) {
+        const key = `${r.labelA}:${r.labelB}`;
+        if (this._gapSeen.has(key)) continue;
+        this._gapSeen.add(key);
+        const query = `What is the relationship between ${r.labelA} and ${r.labelB}?`;
+        queue.enqueue(r.labelA, query);
+        // Spawn a CONSTELLATION_GAP Intent precept for the Cognitive Daemon.
+        this.cognitiveLoop?.spawnAndRegister(
+          r.labelA,
+          1.5,
+          IntentTag.CONSTELLATION_GAP
+        );
+      }
+    } catch {
+      // Gap scan is non-critical; swallow errors silently.
+    }
   }
 
   /** Releases GPU resources, stops the tick, closes database connections, and terminates workers. */

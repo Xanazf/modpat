@@ -1,6 +1,8 @@
-// @ts-ignore
-import System, { OperatorClass } from "./System";
+// @ts-expect-error
+
 import { SYNTAX_ATTRACTORS } from "@config";
+import type System from "./System";
+import { OperatorClass } from "./System";
 
 /**
  * The Synthesizer is responsible for collapsing a logical Geodesic path
@@ -102,14 +104,14 @@ export default class Synthesizer {
       .trim();
 
     // Balance fundamental structures
-    let openParens = (result.match(/\(/g) || []).length;
+    const openParens = (result.match(/\(/g) || []).length;
     let closeParens = (result.match(/\)/g) || []).length;
     while (openParens > closeParens) {
       result += ")";
       closeParens++;
     }
 
-    let openBraces = (result.match(/\{/g) || []).length;
+    const openBraces = (result.match(/\{/g) || []).length;
     let closeBraces = (result.match(/\}/g) || []).length;
     while (openBraces > closeBraces) {
       result += " }";

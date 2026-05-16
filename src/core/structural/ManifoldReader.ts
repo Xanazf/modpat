@@ -49,37 +49,39 @@ export class ManifoldReader {
     length: number
   ) {
     const { offsets: o, maxPrecepts: n } = layout;
-    this.mass        = new Float64Array(buffer, o.mass,        n);
-    this.scope       = new Float64Array(buffer, o.scope,       n);
-    this.depth       = new Float64Array(buffer, o.depth,       n);
-    this.time        = new Float64Array(buffer, o.time,        n);
-    this.posX        = new Float64Array(buffer, o.posX,        n);
-    this.posY        = new Float64Array(buffer, o.posY,        n);
-    this.posZ        = new Float64Array(buffer, o.posZ,        n);
-    this.posW        = new Float64Array(buffer, o.posW,        n);
-    this.density     = new Float64Array(buffer, o.density,     n);
+    this.mass = new Float64Array(buffer, o.mass, n);
+    this.scope = new Float64Array(buffer, o.scope, n);
+    this.depth = new Float64Array(buffer, o.depth, n);
+    this.time = new Float64Array(buffer, o.time, n);
+    this.posX = new Float64Array(buffer, o.posX, n);
+    this.posY = new Float64Array(buffer, o.posY, n);
+    this.posZ = new Float64Array(buffer, o.posZ, n);
+    this.posW = new Float64Array(buffer, o.posW, n);
+    this.density = new Float64Array(buffer, o.density, n);
     this.entropyRate = new Float64Array(buffer, o.entropyRate, n);
-    this.potency     = new Float64Array(buffer, o.potency,     n);
-    this.intensity   = new Float64Array(buffer, o.intensity,   n);
-    this.decayRate   = new Float64Array(buffer, o.decayRate,   n);
-    this.checksum    = new Float64Array(buffer, o.checksum,    n);
-    this.PartLayer   = new Uint32Array( buffer, o.PartLayer,   n);
-    this.ComplexLayer= new Uint32Array( buffer, o.ComplexLayer,n);
+    this.potency = new Float64Array(buffer, o.potency, n);
+    this.intensity = new Float64Array(buffer, o.intensity, n);
+    this.decayRate = new Float64Array(buffer, o.decayRate, n);
+    this.checksum = new Float64Array(buffer, o.checksum, n);
+    this.PartLayer = new Uint32Array(buffer, o.PartLayer, n);
+    this.ComplexLayer = new Uint32Array(buffer, o.ComplexLayer, n);
     this.operatorClass = new Uint8Array(buffer, o.operatorClass, n);
-    this.allocated   = new Uint8Array(  buffer, o.allocated,   n);
-    this.slotType    = new Uint8Array(  buffer, o.slotType,    n);
+    this.allocated = new Uint8Array(buffer, o.allocated, n);
+    this.slotType = new Uint8Array(buffer, o.slotType, n);
 
-    this.c       = layout.c;
+    this.c = layout.c;
     this.epsilon = layout.epsilon;
     this.maxilon = layout.maxilon;
-    this.length  = length;
+    this.length = length;
   }
 
   isAllocated(id: number): boolean {
     return id > 0 && id < this.length && this.allocated[id] === 1;
   }
 
-  getScope(id: number): number { return this.scope[id]; }
+  getScope(id: number): number {
+    return this.scope[id];
+  }
 
   getIdsByScope(scope: number): ReadonlySet<number> {
     const s = new Set<number>();
@@ -92,11 +94,17 @@ export class ManifoldReader {
   // Stubs for write-path methods not needed in workers
   update(_id: number): void {}
   setScope(_id: number, _scope: number): void {}
-  createLocation(_m: number, _s: number): number { return 0; }
+  createLocation(_m: number, _s: number): number {
+    return 0;
+  }
   freeLocation(_id: number): void {}
   setSequenceStart(_s: number, _id: number): void {}
-  getSequenceStart(_id: number): number { return -1; }
-  getSequenceEntries(): { scope0: number; startId: number }[] { return []; }
+  getSequenceStart(_id: number): number {
+    return -1;
+  }
+  getSequenceEntries(): { scope0: number; startId: number }[] {
+    return [];
+  }
   refreshConceptAge(_scope: number): void {}
   decay(_dt: number): void {}
 }

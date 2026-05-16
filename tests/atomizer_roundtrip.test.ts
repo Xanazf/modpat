@@ -9,8 +9,8 @@
  */
 import assert from "node:assert/strict";
 import { DOPAT_CONFIG } from "@config";
-import logger from "@utils/SpectralLogger";
 import { OperatorClass } from "@core_i/System";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 const FIXTURES = [

@@ -28,7 +28,10 @@ async function fetchWikipedia(topic: string): Promise<string | null> {
         setTimeout(() => reject(new Error("timeout")), FETCH_TIMEOUT_MS)
       ),
     ]);
-    const trimmed = (content as string).slice(0, CHAR_CAP).replace(/\n+/g, " ").trim();
+    const trimmed = (content as string)
+      .slice(0, CHAR_CAP)
+      .replace(/\n+/g, " ")
+      .trim();
     return trimmed || null;
   } catch {
     return null;
@@ -41,6 +44,10 @@ parentPort!.on("message", async (msg: WikiRequest) => {
     const result = await fetchWikipedia(topic);
     parentPort!.postMessage({ id, result });
   } catch (err: any) {
-    parentPort!.postMessage({ id, result: null, error: err?.message ?? String(err) });
+    parentPort!.postMessage({
+      id,
+      result: null,
+      error: err?.message ?? String(err),
+    });
   }
 });

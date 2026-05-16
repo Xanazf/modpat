@@ -1,12 +1,13 @@
-import path from "node:path";
 import { createRequire } from "node:module";
+import path from "node:path";
+import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import { SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
-import { DOPAT_CONFIG } from "@config";
-import wiki from "wikipedia";
+import { extractTriples } from "@utils/tripleExtract";
 import axios from "axios";
+import wiki from "wikipedia";
 
 // Wikipedia API requires a valid User-Agent to avoid 403 Forbidden errors.
 axios.defaults.headers.common["User-Agent"] =
@@ -154,26 +155,28 @@ export class DictionaryExpander {
     const seen = new Set<string>();
     const wordStr = norm.replace(/_/g, " ");
 
+    // G7 fix: crystallize word→definition and word→synonym as (input, output)
+    // pairs rather than (ids, ids) self-loops.  The input is the word; the
+    // output is the definition / synonym.  This lets Phase 0b vault recall map
+    // "word |-" to its meaning, instead of storing a VAR_0 → VAR_0 no-op.
+    const wordIds = atomizer.ingestSequence(wordStr, system);
+
     for (const def of result.definitions.slice(0, 3)) {
-      const fact = `${wordStr} is ${def.split(" ").slice(0, 8).join(" ")}`;
-      if (!seen.has(fact)) {
-        seen.add(fact);
-        const ids = atomizer.ingestSequence(fact, system);
-        if (store) await store.crystallizeProof(ids, ids, 0.8);
+      const defText = def.split(" ").slice(0, 8).join(" ");
+      const key = `${wordStr}>${defText}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const defIds = atomizer.ingestSequence(defText, system);
+        if (store) await store.crystallizeProof(wordIds, defIds, 0.8);
       }
     }
 
     for (const syn of result.synonyms.slice(0, 6)) {
-      for (const [a, b] of [
-        [wordStr, syn],
-        [syn, wordStr],
-      ] as const) {
-        const fact = `${a} is ${b}`;
-        if (!seen.has(fact)) {
-          seen.add(fact);
-          const ids = atomizer.ingestSequence(fact, system);
-          if (store) await store.crystallizeProof(ids, ids, 0.9);
-        }
+      const key = `${wordStr}>${syn}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const synIds = atomizer.ingestSequence(syn, system);
+        if (store) await store.crystallizeProof(wordIds, synIds, 0.9);
       }
     }
 
@@ -248,7 +251,8 @@ export default class Unfolder {
    * queryWikipedia() is routed through the isolated wiki worker instead of
    * running in the main thread.
    */
-  private wikiDelegate: ((topic: string) => Promise<string | null>) | null = null;
+  private wikiDelegate: ((topic: string) => Promise<string | null>) | null =
+    null;
 
   constructor(system: System | SystemRef, atomizer: Atomic.Engine) {
     this.systemRef =
@@ -391,13 +395,23 @@ export default class Unfolder {
 
     const allIds: number[] = [];
     for (let s = 0; s < sentences.length; s++) {
-      const ids = this.atomizer.ingestSequence(sentences[s], sys);
-      // Tag atoms with their sentence index via posZ so the geodesic can
-      // traverse sentences in causal order rather than random blob order.
-      for (const id of ids) {
-        sys.posZ[id] += s; // sentence 0 at +0, sentence 1 at +1, etc.
-        sys.update(id);
-        allIds.push(id);
+      // Try triple extraction first — SVO structure produces better manifold topology
+      // than raw prose.  Fall back to the raw sentence if no triples are found.
+      const triples = extractTriples(sentences[s]);
+      const seqs =
+        triples.length > 0
+          ? triples.map(t => `${t.subject} ${t.predicate} ${t.object}`)
+          : [sentences[s]];
+
+      for (const seq of seqs) {
+        const ids = this.atomizer.ingestSequence(seq, sys);
+        // Tag atoms with their sentence index via posZ so the geodesic can
+        // traverse sentences in causal order rather than random blob order.
+        for (const id of ids) {
+          sys.posZ[id] += s; // sentence 0 at +0, sentence 1 at +1, etc.
+          sys.update(id);
+          allIds.push(id);
+        }
       }
     }
     return new Uint32Array(allIds);

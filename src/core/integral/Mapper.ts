@@ -1,12 +1,12 @@
-import nlp from "compromise";
-import logger from "@utils/SpectralLogger";
+import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
+import { metrics } from "@core_s/Metrics";
+import type Unfolder from "@core_s/Unfolder";
+import logger from "@utils/SpectralLogger";
+import nlp from "compromise";
+import { GridIndex4D } from "../structural/GridIndex4D";
 import type System from "./System";
 import { SlotType, SystemRef } from "./System";
-import { GridIndex4D } from "../structural/GridIndex4D";
-import type Unfolder from "@core_s/Unfolder";
-import { DOPAT_CONFIG } from "@config";
-import { metrics } from "@core_s/Metrics";
 
 /**
  * The Mapper is responsible for finding the shortest logical path (Geodesic)
@@ -637,7 +637,7 @@ class Mapper implements Mapping.Engine {
       const st = this.system.slotType[j];
       if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
       if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
-      infl *= Math.exp(-Math.pow(dw * 50.0, 2));
+      infl *= Math.exp(-((dw * 50.0) ** 2));
       if (this.system.posW[j] < pw - 0.01) infl *= 0.01;
 
       const e = infl * Math.exp(-d2 / F);

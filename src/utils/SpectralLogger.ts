@@ -1,5 +1,5 @@
-import type System from "@core_i/System";
 import { SYSTEM_CONFIG } from "@config";
+import type System from "@core_i/System";
 import { SpectralVisualizer } from "./SpectralVisualizer";
 
 const visualizer = new SpectralVisualizer();

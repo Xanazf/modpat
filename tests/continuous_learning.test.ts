@@ -1,18 +1,17 @@
-import { DatabaseContext } from "@core_s/DatabaseContext";
-import { SystemPersistence } from "@core_s/Persistence";
-import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
-import Unfolder from "@core_s/Unfolder";
-import System from "@core_i/System";
-import { OperatorClass } from "@core_i/System";
-import { LiveInference } from "@core_i/Runtime";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
-import Resolver from "@core_i/Resolver";
-import Store from "@core_s/Memory";
-import * as assert from "assert";
-import { describe, it } from "./utils/harness";
 import { DOPAT_CONFIG } from "@config";
+import Resolver from "@core_i/Resolver";
+import { LiveInference } from "@core_i/Runtime";
+import System, { OperatorClass } from "@core_i/System";
+import { DatabaseContext } from "@core_s/DatabaseContext";
+import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
+import Store from "@core_s/Memory";
+import { SystemPersistence } from "@core_s/Persistence";
+import Unfolder from "@core_s/Unfolder";
+import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
+import { describe, it } from "./utils/harness";
 
 export async function executeContinuousLearningSuite() {
   await describe("CONTINUOUS LEARNING TEST SUITE", async () => {

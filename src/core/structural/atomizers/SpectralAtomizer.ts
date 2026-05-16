@@ -1,5 +1,5 @@
 import type System from "@core_i/System";
-import { SlotType, OperatorClass } from "@core_i/System";
+import { OperatorClass, type SlotType } from "@core_i/System";
 import { ComplexArray } from "@core_s/Waves";
 import { BaseAtomizer } from "./BaseAtomizer";
 

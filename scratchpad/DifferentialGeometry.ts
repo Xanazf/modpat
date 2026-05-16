@@ -196,7 +196,7 @@ function covariantDerivative(
 
   for (let k = 0; k < n; k++) {
     // Standard directional derivative
-    let partial = directionalDerivative(vectorField, direction, p, k);
+    const partial = directionalDerivative(vectorField, direction, p, k);
 
     // Correction term: \Gamma^k_{ij} * V^i * dx^j
     let correction = 0;

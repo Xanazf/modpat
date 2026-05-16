@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it, TestHarness } from "./utils/harness";
-import Unfolder, { UnfolderTimeoutError } from "@core_s/Unfolder";
+import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { metrics } from "@core_s/Metrics";
-import SemanticAtomizer from "@atomics/SemanticAtomizer";
+import Unfolder, { UnfolderTimeoutError } from "@core_s/Unfolder";
+import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeUnfolderSuite() {
   await describe("Fractal Unfolder Suite", async () => {

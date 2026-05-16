@@ -1,6 +1,6 @@
+import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import type { DuckDBConnection } from "@duckdb/node-api";
-import { DOPAT_CONFIG } from "@config";
 
 /**
  * Increment SCHEMA_VERSION when:

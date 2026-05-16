@@ -1,8 +1,8 @@
-import nlp from "compromise";
-import { parse, walk, generate } from "abstract-syntax-tree";
-import { SlotType, SystemRef } from "@core_i/System";
+import { SlotType, type SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
+import { generate, parse, walk } from "abstract-syntax-tree";
+import nlp from "compromise";
 
 // Synthesizer
 

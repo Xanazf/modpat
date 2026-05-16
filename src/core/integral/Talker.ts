@@ -1,8 +1,8 @@
-import nlp from "compromise";
-import { SystemRef } from "@core_i/System";
+import type { SystemRef } from "@core_i/System";
+import { shiftPerspective } from "@core_s/Identity";
 import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
-import { shiftPerspective } from "@core_s/Identity";
+import nlp from "compromise";
 
 /**
  * Handles command processing: ingests declarative statements into the manifold

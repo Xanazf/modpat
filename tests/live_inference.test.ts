@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { LiveInference } from "@core_i/Runtime";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
-import logger from "@utils/SpectralLogger";
+import { LiveInference } from "@core_i/Runtime";
 import { metrics } from "@core_s/Metrics";
+import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeLiveInferenceSuite() {

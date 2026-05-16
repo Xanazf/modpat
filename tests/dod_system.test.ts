@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import type System from "@core_i/System";
 import type LogicAtomizer from "@atomics/LogicAtomizer";
+import { DOPAT_CONFIG } from "@config";
+import type System from "@core_i/System";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
-import { DOPAT_CONFIG } from "@config";
 
 async function testMemoryAlignment(system: System) {
   const f64Buffers: (keyof System)[] = [

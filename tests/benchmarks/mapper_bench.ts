@@ -7,9 +7,10 @@
  *   3a: ≥10× speedup at n=50k versus baseline
  *   3b: 4× fewer exp() calls per iteration (implicit in analytic gradient)
  */
-import System from "@core_i/System";
-import Mapper from "@core_i/Mapper";
+
 import { DOPAT_CONFIG } from "@config";
+import Mapper from "@core_i/Mapper";
+import System from "@core_i/System";
 
 const CORPUS = [100, 1_000, 10_000, 50_000, 100_000, 1_000_000];
 const QUERIES_PER_SIZE = 20;
@@ -34,7 +35,7 @@ function buildFixture(n: number): System {
 
 function randomQuery(system: System): [number, number] {
   const n = system.length;
-  let a = Math.floor(Math.random() * n);
+  const a = Math.floor(Math.random() * n);
   let b = Math.floor(Math.random() * n);
   while (b === a) b = Math.floor(Math.random() * n);
   return [a, b];

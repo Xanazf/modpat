@@ -6,8 +6,8 @@
  * Isolates en-dictionary's large Map allocations from the main-thread GC.
  */
 
-import path from "node:path";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { parentPort } from "node:worker_threads";
 
 function resolveWordNetPath(): string {
@@ -41,7 +41,12 @@ interface SeedResult {
 }
 
 function lookup(word: string): SeedResult {
-  const result: SeedResult = { found: false, word, definitions: [], synonyms: [] };
+  const result: SeedResult = {
+    found: false,
+    word,
+    definitions: [],
+    synonyms: [],
+  };
   if (!dict) return result;
 
   const norm = word.toLowerCase().trim().replace(/\s+/g, "_");
@@ -63,7 +68,8 @@ function lookup(word: string): SeedResult {
         ?.replace(/["']/g, "")
         .replace(/\s+/g, " ")
         .trim();
-      if (def && !result.definitions.includes(def)) result.definitions.push(def);
+      if (def && !result.definitions.includes(def))
+        result.definitions.push(def);
 
       for (const ptr of data.pointers ?? []) {
         if (

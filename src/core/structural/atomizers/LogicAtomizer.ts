@@ -1,7 +1,11 @@
-import type System from "@core_i/System";
-import { SlotType, classifyOperatorToken, OperatorClass } from "@core_i/System";
-import { BaseAtomizer } from "./BaseAtomizer";
 import { DOPAT_CONFIG } from "@config";
+import type System from "@core_i/System";
+import {
+  classifyOperatorToken,
+  OperatorClass,
+  type SlotType,
+} from "@core_i/System";
+import { BaseAtomizer } from "./BaseAtomizer";
 
 /**
  * The Atomizer is a low-level logical parser responsible for converting

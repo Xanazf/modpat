@@ -1,8 +1,8 @@
+import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
 import type System from "@core_i/System";
-import { SlotType, classifyOperatorToken, OperatorClass } from "@core_i/System";
+import { classifyOperatorToken, OperatorClass, SlotType } from "@core_i/System";
 import nlp from "compromise";
 import { BaseAtomizer } from "./BaseAtomizer";
-import { SYNTAX_ATTRACTORS, DOPAT_CONFIG } from "@config";
 
 /**
  * The SemanticAtomizer serves as the Natural Language Interface (NLI) for the logical manifold.
@@ -70,7 +70,7 @@ export default class SemanticAtomizer
     // Ensure |- is NOT split.
     const preparedText = text
       .replace(/\|-/g, " SINK_MARKER ")
-      .replace(/([(){}\[\]:;.,+\-*/=<>])/g, " $1 ")
+      .replace(/([(){}[\]:;.,+\-*/=<>])/g, " $1 ")
       .replace(/SINK_MARKER/g, "|-");
 
     const rawTokens = preparedText.split(/\s+/).filter(t => t.length > 0);
@@ -81,7 +81,13 @@ export default class SemanticAtomizer
       isVerb: boolean;
     }[] = [];
 
-    for (const token of rawTokens) {
+    // Parse the entire token sequence once instead of one nlp() call per token.
+    const fullDoc = nlp(rawTokens.join(" "));
+    const termsByIndex: Array<{ tags?: string[] }> =
+      fullDoc.json()[0]?.terms ?? [];
+
+    for (let ti = 0; ti < rawTokens.length; ti++) {
+      const token = rawTokens[ti];
       const normal = token.toLowerCase();
       const isStructural = ["(", ")", "{", "}", ":", ",", "+", "|-"].includes(
         normal
@@ -94,14 +100,20 @@ export default class SemanticAtomizer
       );
       const isKeyword = SYNTAX_ATTRACTORS.KEYWORDS.has(normal);
 
-      // Simple NLP tagging per token to maintain identity but get basic metadata
-      const doc = nlp(token);
-      const term = doc.json()[0]?.terms[0] || {};
-      const tags = term.tags || [];
+      const term = termsByIndex[ti] ?? {};
+      const tags: string[] = (term as any).tags ?? [];
+      // A gerund following a determiner (e.g. "the running dog") may be tagged
+      // Adjective in context rather than Verb; treat both as verb-like so the
+      // gerund-disambiguation branch in the materialization loop still fires.
+      const isGerundInContext =
+        normal.endsWith("ing") &&
+        ti > 0 &&
+        ["the", "a", "an"].includes(rawTokens[ti - 1].toLowerCase());
       const isVerb =
         tags.includes("Verb") ||
         tags.includes("Copula") ||
-        tags.includes("PastTense");
+        tags.includes("PastTense") ||
+        isGerundInContext;
       const isPlural =
         tags.includes("Plural") || normal === "are" || normal === "were";
 
@@ -289,7 +301,7 @@ export default class SemanticAtomizer
     // Tokenize using the same preparation step as ingestSequence.
     const preparedText = template
       .replace(/\|-/g, " SINK_MARKER ")
-      .replace(/([(){}\[\]:;.,+\-*/=<>])/g, " $1 ")
+      .replace(/([(){}[\]:;.,+\-*/=<>])/g, " $1 ")
       .replace(/SINK_MARKER/g, "|-");
 
     const rawTokens = preparedText.split(/\s+/).filter(t => t.length > 0);

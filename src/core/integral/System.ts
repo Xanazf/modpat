@@ -75,6 +75,8 @@ export enum OperatorClass {
   Query = 8,
   /** Syntactic landmarks for physicalized code synthesis. */
   SyntaxAnchor = 9,
+  /** Proactive curiosity signal spawned by motivation sources (CognitiveLoop). */
+  Intent = 10,
 }
 
 /**
@@ -256,12 +258,25 @@ export interface ManifoldLayout {
   epsilon: number;
   maxilon: number;
   offsets: {
-    mass: number; scope: number; depth: number; time: number;
-    posX: number; posY: number; posZ: number; posW: number;
-    density: number; entropyRate: number; potency: number; intensity: number;
-    decayRate: number; checksum: number;
-    PartLayer: number; ComplexLayer: number;
-    operatorClass: number; allocated: number; slotType: number;
+    mass: number;
+    scope: number;
+    depth: number;
+    time: number;
+    posX: number;
+    posY: number;
+    posZ: number;
+    posW: number;
+    density: number;
+    entropyRate: number;
+    potency: number;
+    intensity: number;
+    decayRate: number;
+    checksum: number;
+    PartLayer: number;
+    ComplexLayer: number;
+    operatorClass: number;
+    allocated: number;
+    slotType: number;
   };
 }
 
@@ -274,33 +289,35 @@ export function computeManifoldLayout(
 ): ManifoldLayout {
   const bF64 = maxPrecepts * 8;
   const bU32 = maxPrecepts * 4;
-  const bU8  = maxPrecepts * 1;
-  const base14   = bF64 * 14;
+  const bU8 = maxPrecepts * 1;
+  const base14 = bF64 * 14;
   const base2U32 = base14 + bU32 * 2;
   return {
     maxPrecepts,
     byteLength: base14 + bU32 * 2 + bU8 * 3,
-    c, epsilon, maxilon,
+    c,
+    epsilon,
+    maxilon,
     offsets: {
-      mass:        0,
-      scope:       bF64,
-      depth:       2 * bF64,
-      time:        3 * bF64,
-      posX:        4 * bF64,
-      posY:        5 * bF64,
-      posZ:        6 * bF64,
-      posW:        7 * bF64,
-      density:     8 * bF64,
+      mass: 0,
+      scope: bF64,
+      depth: 2 * bF64,
+      time: 3 * bF64,
+      posX: 4 * bF64,
+      posY: 5 * bF64,
+      posZ: 6 * bF64,
+      posW: 7 * bF64,
+      density: 8 * bF64,
       entropyRate: 9 * bF64,
-      potency:     10 * bF64,
-      intensity:   11 * bF64,
-      decayRate:   12 * bF64,
-      checksum:    13 * bF64,
-      PartLayer:      base14,
-      ComplexLayer:   base14 + bU32,
-      operatorClass:  base2U32,
-      allocated:      base2U32 + bU8,
-      slotType:       base2U32 + 2 * bU8,
+      potency: 10 * bF64,
+      intensity: 11 * bF64,
+      decayRate: 12 * bF64,
+      checksum: 13 * bF64,
+      PartLayer: base14,
+      ComplexLayer: base14 + bU32,
+      operatorClass: base2U32,
+      allocated: base2U32 + bU8,
+      slotType: base2U32 + 2 * bU8,
     },
   };
 }
@@ -985,5 +1002,5 @@ class SystemRef {
   }
 }
 
-export { LogicOperations, TargetBuffer, classifyOperatorToken, SystemRef };
+export { classifyOperatorToken, LogicOperations, SystemRef, TargetBuffer };
 export default System;

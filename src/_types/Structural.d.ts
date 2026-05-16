@@ -55,7 +55,23 @@ declare namespace PMath {
 }
 
 declare namespace Memory {
-  const enum KnowledgeState {
+  type InquiryStatus =
+    | "pending"
+    | "tried_dict"
+    | "tried_wiki"
+    | "ask_user"
+    | "resolved";
+
+  interface InquiryItem {
+    id: string;
+    topic: string;
+    originalQuery: string;
+    status: InquiryStatus;
+    addedAt: number;
+    attempts: number;
+  }
+
+  enum KnowledgeState {
     Heard = 0,
     Remembered = 1,
     Learned = 2,
@@ -116,13 +132,14 @@ declare namespace Memory {
     ): Promise<{ ids: Uint32Array; slotFlags: bigint; energy: number } | null>;
 
     signatureForText(text: string): string;
-    rawFactExists(fact: string): Promise<boolean>;
     storeFact(
       fact: string,
       source: string,
       confidence: number,
       signature: string
     ): Promise<void>;
+    saveInquiryQueue(items: InquiryItem[]): Promise<void>;
+    loadInquiryQueue(): Promise<InquiryItem[]>;
 
     sampleForChallenge(limit: number): Promise<ChallengeCandidate[]>;
     updateKnowledgeState(

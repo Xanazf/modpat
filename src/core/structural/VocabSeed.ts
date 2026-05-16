@@ -16,9 +16,9 @@
  */
 
 import fs from "node:fs";
+import type Store from "@core_s/Memory";
 import type { DictionaryExpander, DictionaryExpansion } from "@core_s/Unfolder";
 import type { WorkerPool } from "@core_s/WorkerPool";
-import type Store from "@core_s/Memory";
 
 export interface SeedProgress {
   processed: number;
@@ -161,7 +161,10 @@ export class VocabSeedWorker {
             }
           }
           for (const syn of result.synonyms.slice(0, 6)) {
-            for (const [a, b] of [[norm, syn], [syn, norm]] as const) {
+            for (const [a, b] of [
+              [norm, syn],
+              [syn, norm],
+            ] as const) {
               const fact = `${a} is ${b}`;
               if (!seen.has(fact)) {
                 seen.add(fact);

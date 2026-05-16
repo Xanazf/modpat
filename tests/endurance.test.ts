@@ -17,15 +17,15 @@
  */
 
 import assert from "node:assert/strict";
+import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
+import { metrics } from "@core_s/Metrics";
 import { SystemPersistence } from "@core_s/Persistence";
 import Unfolder from "@core_s/Unfolder";
-import { metrics } from "@core_s/Metrics";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
-import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 
 // Corpus
 //

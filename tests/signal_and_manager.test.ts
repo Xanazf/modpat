@@ -1,17 +1,17 @@
 import assert from "node:assert";
-import { OperatorClass } from "@core_i/System";
-import { DOPAT_CONFIG } from "@config";
-import { DatabaseContext } from "@core_s/DatabaseContext";
-import { ManifoldLifecycle, TMRFreeList } from "@core_s/ManifoldLifecycle";
-import { DeltaQueue } from "@core_s/DeltaQueue";
-import { SystemPersistence } from "@core_s/Persistence";
 import type SpectralAtomizer from "@atomics/SpectralAtomizer";
+import { DOPAT_CONFIG } from "@config";
+import { OperatorClass } from "@core_i/System";
+import { DatabaseContext } from "@core_s/DatabaseContext";
+import { DeltaQueue } from "@core_s/DeltaQueue";
+import { ManifoldLifecycle, TMRFreeList } from "@core_s/ManifoldLifecycle";
+import { SystemPersistence } from "@core_s/Persistence";
 import logger from "@utils/SpectralLogger";
 import {
   describe,
   it,
-  TestHarness,
   type TestEnvironment,
+  TestHarness,
 } from "./utils/harness";
 
 export async function executeSignalManagerSuite() {

@@ -9,9 +9,9 @@
  * Run with --verbose for W-matrix, accumulated-resonance, and sink-candidate dumps.
  */
 import assert from "node:assert/strict";
+import type { ResolverDiagnostics } from "@core_i/Resolver";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "../utils/harness";
-import type { ResolverDiagnostics } from "@core_i/Resolver";
 
 const VERBOSE = process.argv.includes("--verbose");
 const TAU = 0.05; // minimum sinkStrength to count as a "positive" result

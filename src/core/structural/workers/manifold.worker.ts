@@ -7,17 +7,17 @@
  */
 
 import { parentPort, workerData } from "node:worker_threads";
-import { ManifoldReader } from "@core_s/ManifoldReader";
+import type { ManifoldLayout } from "@core_i/System";
+import { GridIndex4D } from "@core_s/GridIndex4D";
+import type { Constellation } from "@core_s/ManifoldMetrics";
 import {
   constellations,
   distance4D,
-  orbitRadius,
   orbitalParent,
+  orbitRadius,
   satellites,
 } from "@core_s/ManifoldMetrics";
-import type { Constellation } from "@core_s/ManifoldMetrics";
-import type { ManifoldLayout } from "@core_i/System";
-import { GridIndex4D } from "@core_s/GridIndex4D";
+import { ManifoldReader } from "@core_s/ManifoldReader";
 
 // Raw gap record: no labels (atomizer not available in worker; main thread enriches).
 export interface RawGap {
@@ -85,10 +85,12 @@ function computeRawGaps(
     );
     if (heavy.length < 2) continue;
 
-    const pairGaps: { a: number; b: number; dist: number; score: number }[] = [];
+    const pairGaps: { a: number; b: number; dist: number; score: number }[] =
+      [];
     for (let i = 0; i < heavy.length; i++) {
       for (let j = i + 1; j < heavy.length; j++) {
-        const a = heavy[i], b = heavy[j];
+        const a = heavy[i],
+          b = heavy[j];
         const dist = distance4D(a, b, reader as any);
         const rA = orbitRadius(a, reader as any);
         const rB = orbitRadius(b, reader as any);
@@ -100,8 +102,17 @@ function computeRawGaps(
       }
     }
     pairGaps.sort((x, y) => y.score - x.score);
-    for (const { a, b, dist, score } of pairGaps.slice(0, maxPerConstellation)) {
-      result.push({ constellationIdx: ci, atomA: a, atomB: b, distance: dist, gapScore: score });
+    for (const { a, b, dist, score } of pairGaps.slice(
+      0,
+      maxPerConstellation
+    )) {
+      result.push({
+        constellationIdx: ci,
+        atomA: a,
+        atomB: b,
+        distance: dist,
+        gapScore: score,
+      });
     }
   }
   return result;
@@ -118,7 +129,10 @@ parentPort!.on("message", (msg: ManifoldRequest) => {
       parentPort!.postMessage({ id, result });
     } else if (type === "gaps") {
       const consts = msg.consts ?? [];
-      const result = computeRawGaps(consts, { maxPerConstellation: 2, minMassRatio: 0.05 });
+      const result = computeRawGaps(consts, {
+        maxPerConstellation: 2,
+        minMassRatio: 0.05,
+      });
       parentPort!.postMessage({ id, result });
     } else if (type === "orbital") {
       const index = getIndex(length);
@@ -135,7 +149,12 @@ parentPort!.on("message", (msg: ManifoldRequest) => {
         const radius = orbitRadius(i, reader as any);
         const sats = satellites(i, reader as any, index);
         if (parentId !== null || sats.length > 0) {
-          results.push({ id: i, parentId, radius, satelliteCount: sats.length });
+          results.push({
+            id: i,
+            parentId,
+            radius,
+            satelliteCount: sats.length,
+          });
         }
       }
       parentPort!.postMessage({ id, result: results });

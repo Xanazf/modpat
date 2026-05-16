@@ -1,11 +1,13 @@
 import logger from "@src/utils/SpectralLogger";
 import { program } from "commander";
-import { runGroundingTests } from "./grounding/propositional.test";
 import { runLogicTest as executeAristotelianSuite } from "./aristotelian_quantum.test";
 import { executeAtomizerRoundTripSuite } from "./atomizer_roundtrip.test";
+import { executeCodeSynthesisSuite } from "./code_synthesis.test";
 import { executeLogicSuite } from "./dod_resolution_matrix.test";
 import { executeSuite as executeSystemSuite } from "./dod_system.test";
+import { executeEnduranceSuite } from "./endurance.test";
 import { executeGPUOffloadTest } from "./gpu_offload.test";
+import { runGroundingTests } from "./grounding/propositional.test";
 import { executeLiveInferenceSuite } from "./live_inference.test";
 import { runMapperReviewTest } from "./mapper_review.test";
 import { executeE2ETest } from "./pcs_e2e.test";
@@ -14,15 +16,15 @@ import { runRigorousTests as executeRigorousLogicSuite } from "./rigorous_logic.
 import { executeSemanticSuite } from "./semantic_atomizer.test";
 import { executeComplexSemanticSuite } from "./semantic_reasoning_perf.test";
 import { executeSignalManagerSuite } from "./signal_and_manager.test";
+import { runSignatureConsistencyTests } from "./signature_consistency.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { executeUMAPSuite } from "./umap_loader.test";
 import { executeUnfolderSuite } from "./unfolder.test";
 import { TestHarness } from "./utils/harness";
 import { runRigorousTraps as executeLogicTrapsSuite } from "./verbose_logic_traps.test";
-import { executeCodeSynthesisSuite } from "./code_synthesis.test";
-import { executeEnduranceSuite } from "./endurance.test";
 
 async function run() {
+  let exitCode = 0;
   program
     .option("-s, --shared", "Use shared system environment across tests", false)
     .option(
@@ -62,15 +64,16 @@ async function run() {
     await executeCodeSynthesisSuite();
     await runGroundingTests();
     await executeAtomizerRoundTripSuite();
+    await runSignatureConsistencyTests();
     await executeEnduranceSuite();
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {
     logger.error("\nTEST SUITE FAILED", error);
-    process.exit(1);
+    exitCode = 1;
   } finally {
     await TestHarness.disposeAll();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 

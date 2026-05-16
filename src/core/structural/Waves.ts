@@ -499,4 +499,4 @@ function LowestOddFactor(n: number): number {
   return n;
 }
 
-export { ComplexArray, FFT_LOGIC, FFT, InvFFT, frequencyMap };
+export { ComplexArray, FFT, FFT_LOGIC, frequencyMap, InvFFT };

@@ -1,13 +1,13 @@
-import nlp from "compromise";
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
-// @ts-ignore
+import nlp from "compromise";
+// @ts-expect-error
 import Mapper from "./Mapper";
-// @ts-ignore
+// @ts-expect-error
 import Synthesizer from "./Synthesizer";
-// @ts-ignore
+// @ts-expect-error
 import System, { OperatorClass } from "./System";
 
 /**

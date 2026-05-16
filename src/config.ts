@@ -132,6 +132,8 @@ const DOPAT_CONFIG = {
     DREAM_POS_X_JITTER: 10,
     /** Maximum entries in the DeltaQueue before shedding oldest deltas. */
     DELTA_QUEUE_MAX: 10_000,
+    /** Maximum tension zones to ingest per dreamCycle invocation (prevents burst latency). */
+    DREAM_ZONES_PER_CYCLE: 3,
   },
 
   atomizer: {
@@ -305,10 +307,10 @@ export const SYNTAX_ATTRACTORS = {
 
 export {
   ATOMIC_PATTERNS,
-  SYSTEM_CONFIG,
   DOPAT_CONFIG,
   FULL_DIRECTIONAL_PATTERNS,
   LOGIC_PATTERNS,
   RESOLVER_ACTIONS,
   RIGHT_DIRECTIONAL_PATTERNS,
+  SYSTEM_CONFIG,
 };

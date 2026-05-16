@@ -10,19 +10,17 @@
  * tasks are correctly correlated without serializing callers.
  */
 
-import { Worker } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 import type { ManifoldLayout } from "@core_i/System";
 import type { Constellation } from "@core_s/ManifoldMetrics";
-import type { RawGap } from "@core_s/workers/manifold.worker";
 import type { DictionaryExpansion } from "@core_s/Unfolder";
+import type { RawGap } from "@core_s/workers/manifold.worker";
 
 type Resolver<T> = { resolve: (v: T) => void; reject: (e: Error) => void };
 
 function workerPath(name: string): string {
-  return fileURLToPath(
-    new URL(`./workers/${name}`, import.meta.url)
-  );
+  return fileURLToPath(new URL(`./workers/${name}`, import.meta.url));
 }
 
 // Use tsx loader so TypeScript worker files execute without pre-compilation.
@@ -41,9 +39,9 @@ export class WorkerPool {
   private seedWorker: Worker;
 
   private manifoldPending = new Map<number, Resolver<any>>();
-  private wikiPending     = new Map<number, Resolver<string | null>>();
-  private seedPending     = new Map<number, Resolver<DictionaryExpansion>>();
-  private seedReady       = false;
+  private wikiPending = new Map<number, Resolver<string | null>>();
+  private seedPending = new Map<number, Resolver<DictionaryExpansion>>();
+  private seedReady = false;
   private seedQueue: Array<() => void> = [];
 
   private nextId = 1;
@@ -58,25 +56,33 @@ export class WorkerPool {
       execArgv: TSX_EXECARGV,
       workerData: { buffer, layout },
     });
-    this.manifoldWorker.on("message", (msg: { id: number; result?: any; error?: string }) => {
-      const pending = this.manifoldPending.get(msg.id);
-      if (!pending) return;
-      this.manifoldPending.delete(msg.id);
-      if (msg.error) pending.reject(new Error(msg.error));
-      else pending.resolve(msg.result);
-    });
-    this.manifoldWorker.on("error", err => this._rejectAll(this.manifoldPending, err));
+    this.manifoldWorker.on(
+      "message",
+      (msg: { id: number; result?: any; error?: string }) => {
+        const pending = this.manifoldPending.get(msg.id);
+        if (!pending) return;
+        this.manifoldPending.delete(msg.id);
+        if (msg.error) pending.reject(new Error(msg.error));
+        else pending.resolve(msg.result);
+      }
+    );
+    this.manifoldWorker.on("error", err =>
+      this._rejectAll(this.manifoldPending, err)
+    );
 
     this.wikiWorker = new Worker(workerPath("wiki.worker.ts"), {
       execArgv: TSX_EXECARGV,
     });
-    this.wikiWorker.on("message", (msg: { id: number; result?: string | null; error?: string }) => {
-      const pending = this.wikiPending.get(msg.id);
-      if (!pending) return;
-      this.wikiPending.delete(msg.id);
-      if (msg.error) pending.reject(new Error(msg.error));
-      else pending.resolve(msg.result ?? null);
-    });
+    this.wikiWorker.on(
+      "message",
+      (msg: { id: number; result?: string | null; error?: string }) => {
+        const pending = this.wikiPending.get(msg.id);
+        if (!pending) return;
+        this.wikiPending.delete(msg.id);
+        if (msg.error) pending.reject(new Error(msg.error));
+        else pending.resolve(msg.result ?? null);
+      }
+    );
     this.wikiWorker.on("error", err => this._rejectAll(this.wikiPending, err));
 
     this.seedWorker = new Worker(workerPath("seed.worker.ts"), {
@@ -104,7 +110,9 @@ export class WorkerPool {
     map.clear();
   }
 
-  private _id(): number { return this.nextId++; }
+  private _id(): number {
+    return this.nextId++;
+  }
 
   // Manifold tasks (read-only, SharedArrayBuffer)
 

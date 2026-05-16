@@ -1,13 +1,13 @@
-import nlp from "compromise";
-import { DOPAT_CONFIG } from "@config";
-import { metrics } from "@core_s/Metrics";
-import type Resolver from "@core_i/Resolver";
-import { OperatorClass, SystemRef } from "@core_i/System";
-import type Store from "@core_s/Memory";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer"; // kept for resolveScope, which is on Atomic.Engine
-import logger from "@utils/SpectralLogger";
+import { DOPAT_CONFIG } from "@config";
+import type Resolver from "@core_i/Resolver";
+import { OperatorClass, type SystemRef } from "@core_i/System";
+import { isIdentityQueryAboutSelf, shiftPerspective } from "@core_s/Identity";
+import type Store from "@core_s/Memory";
+import { metrics } from "@core_s/Metrics";
 import type Unfolder from "@core_s/Unfolder";
-import { shiftPerspective, isIdentityQueryAboutSelf } from "@core_s/Identity";
+import logger from "@utils/SpectralLogger";
+import nlp from "compromise";
 
 const BIGRAM_VOCABULARY = new Set([
   "machine_learning",
@@ -368,11 +368,18 @@ class Listener {
         const sym = this.atomizer.resolveScope(this.system.scope[i]) ?? "";
         let matchScore = 0;
         for (const kw of heatNodes) {
-          if (sym === kw || sym.startsWith(kw) || kw.startsWith(sym)) matchScore++;
+          if (sym === kw || sym.startsWith(kw) || kw.startsWith(sym))
+            matchScore++;
         }
-        if (matchScore > bestMatchScore) { bestMatchScore = matchScore; entryId = i; }
+        if (matchScore > bestMatchScore) {
+          bestMatchScore = matchScore;
+          entryId = i;
+        }
         const density = this.system.mass[i] * (1 + this.system.depth[i]);
-        if (density > bestDensity) { bestDensity = density; exitId = i; }
+        if (density > bestDensity) {
+          bestDensity = density;
+          exitId = i;
+        }
       }
 
       if (entryId !== exitId) {
@@ -428,7 +435,10 @@ class Listener {
       // of each other) group together regardless of depth/operator variation.
       const layer = Math.floor(this.system.posZ[id]);
       let group = layers.get(layer);
-      if (!group) { group = []; layers.set(layer, group); }
+      if (!group) {
+        group = [];
+        layers.set(layer, group);
+      }
       group.push(id);
     }
 

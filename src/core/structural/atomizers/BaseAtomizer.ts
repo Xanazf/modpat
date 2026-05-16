@@ -1,5 +1,5 @@
-import { SYSTEM_CONFIG } from "@src/config";
 import { UMAPLoader } from "@core_s/UMAPLoader";
+import { SYSTEM_CONFIG } from "@src/config";
 
 /**
  * All first-person pronouns are normalised to their canonical form before scope

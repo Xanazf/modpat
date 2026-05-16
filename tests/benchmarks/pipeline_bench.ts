@@ -5,10 +5,11 @@
  * Measures p50/p95 query latency for three query types across corpus sizes.
  * Commit baseline output to plans/benchmark_baseline.txt for comparison with Track 3 results.
  */
-import System from "@core_i/System";
-import Resolver from "@core_i/Resolver";
-import Store from "@core_s/Memory";
+
 import LogicAtomizer from "@atomics/LogicAtomizer";
+import Resolver from "@core_i/Resolver";
+import System from "@core_i/System";
+import Store from "@core_s/Memory";
 
 const CORPUS_SIZES = [100, 1_000, 5_000];
 const QUERIES = [

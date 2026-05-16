@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { it, describe, TestHarness } from "./utils/harness";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
-import Unfolder from "@core_s/Unfolder";
 import { LiveInference } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
+import Unfolder from "@core_s/Unfolder";
+import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeE2ETest() {
   await describe("Physicalized Code Synthesis (PCS) 4D Contextual Loom E2E", async () => {
