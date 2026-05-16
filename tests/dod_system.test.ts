@@ -3,6 +3,7 @@ import type System from "@core_i/System";
 import type LogicAtomizer from "@atomics/LogicAtomizer";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
+import { DOPAT_CONFIG } from "@config";
 
 async function testMemoryAlignment(system: System) {
   const f64Buffers: (keyof System)[] = [
@@ -46,21 +47,29 @@ async function testPointerArithmetic(system: System) {
 }
 
 async function testPhysicsDeterminism(system: System) {
+  const scale = DOPAT_CONFIG.PHYSICS.PRECEPT_SCALE;
+
+  // Density is now mass / PRECEPT_SCALE (constant denominator).
+  // Scope is a pure identity tag and no longer participates in physics.
   const idNormal = system.createLocation(100, 10);
   assert.strictEqual(
     system.density[idNormal],
-    100 / 10,
+    100 / scale,
     "Density calculation failed"
   );
 
-  const idZeroScope = system.createLocation(50, 0);
+  // Zero-scope atoms are now treated the same as any other atom —
+  // scope no longer affects the denominator.
+  const idAnyScope = system.createLocation(50, 0);
   assert.strictEqual(
-    system.density[idZeroScope],
-    system.maxilon,
-    "Maxilon limit fallback failed"
+    system.density[idAnyScope],
+    50 / scale,
+    "Constant-scale density failed"
   );
 
-  const superMassiveId = system.createLocation(system.maxilon * 2, 0.5);
+  // Supermassive atoms are clamped to maxilon.
+  // mass must exceed PRECEPT_SCALE × maxilon for density to overflow.
+  const superMassiveId = system.createLocation(system.maxilon * scale * 2, 1);
   assert.strictEqual(
     system.density[superMassiveId],
     system.maxilon,

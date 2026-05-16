@@ -195,14 +195,14 @@ export class TMRFreeList implements Root.FreeList {
 }
 
 /**
- * The ManifoldManager acts as the guardian and regulator of the logical manifolds.
+ * The ManifoldLifecycle acts as the guardian and regulator of the logical manifolds.
  *
  * It manages both the primary and emergency systems, ensuring universal
  * integrity through self-healing routines, Triple Modular Redundancy (TMR),
  * and continuous monitoring for high-mass "threats" that could destabilize
  * the logical topology.
  */
-export class ManifoldManager {
+export class ManifoldLifecycle {
   /** The primary logical universe. */
   public primarySystem: System;
   /** A parallel backup universe, used when the primary system encounters a critical anomaly. */
@@ -265,7 +265,7 @@ export class ManifoldManager {
       (label: string) => (reason: string, _values: number[]) => {
         this.triggerInterrupt(`TMR quarantine [${label}]: ${reason}`).catch(
           err => {
-            console.error(`[ManifoldManager] TMR interrupt error:`, err);
+            console.error(`[ManifoldLifecycle] TMR interrupt error:`, err);
           }
         );
       };
@@ -331,13 +331,13 @@ export class ManifoldManager {
     const corruptedIds = this.activeSystem.checkIntegrity();
     if (corruptedIds.length > 0) {
       console.warn(
-        `[ManifoldManager] Detected ${corruptedIds.length} corrupted precepts. Initiating self-healing...`
+        `[ManifoldLifecycle] Detected ${corruptedIds.length} corrupted precepts. Initiating self-healing...`
       );
       this.isHydrating = true;
       this.stabilityPromise = this.activeSystem
         .hydrate(this.persistence)
         .then(() => {
-          console.log(`[ManifoldManager] Self-healing complete.`);
+          console.log(`[ManifoldLifecycle] Self-healing complete.`);
         })
         .finally(() => {
           this.isHydrating = false;
@@ -357,7 +357,7 @@ export class ManifoldManager {
    */
   public async triggerInterrupt(reason: string): Promise<void> {
     console.error(
-      `[ManifoldManager] CRITICAL INTERRUPT: ${reason}. Switching to Emergency Manifold!`
+      `[ManifoldLifecycle] CRITICAL INTERRUPT: ${reason}. Switching to Emergency Manifold!`
     );
     this.activeSystem = this.emergencySystem;
     this.activeAllocator = this.emergencyAllocator;
@@ -372,12 +372,12 @@ export class ManifoldManager {
       .hydrate(this.persistence)
       .then(() => {
         console.log(
-          `[ManifoldManager] Emergency Manifold hydrated successfully.`
+          `[ManifoldLifecycle] Emergency Manifold hydrated successfully.`
         );
       })
       .catch(err => {
         console.error(
-          `[ManifoldManager] Failed to hydrate Emergency Manifold:`,
+          `[ManifoldLifecycle] Failed to hydrate Emergency Manifold:`,
           err
         );
       })
@@ -675,20 +675,20 @@ export class ManifoldManager {
     // Phase 4: Queue the next dream cycle asynchronously.
     // Safe because dreamCycle only writes to pendingDreams, never to activeSystem directly.
     this.dreamCycle().catch(err => {
-      console.error("[ManifoldManager] Error during dream cycle:", err);
+      console.error("[ManifoldLifecycle] Error during dream cycle:", err);
     });
 
     // Scan for destabilizing anomalies
     this.monitorThreats().catch(err => {
       console.error(
-        "[ManifoldManager] Error monitoring threats during tick:",
+        "[ManifoldLifecycle] Error monitoring threats during tick:",
         err
       );
     });
 
     // Trigger background self-healing
     this.selfHealRoutine().catch(err => {
-      console.error("[ManifoldManager] Error during self-healing tick:", err);
+      console.error("[ManifoldLifecycle] Error during self-healing tick:", err);
     });
   }
 

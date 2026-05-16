@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it, describe, TestHarness } from "./utils/harness";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import Unfolder from "@core_s/Unfolder";
-import { LiveInference } from "@core_i/LiveInference";
+import { LiveInference } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
 
 export async function executeE2ETest() {

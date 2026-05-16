@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import LiveInference from "@core_i/LiveInference";
+import { LiveInference } from "@core_i/Runtime";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import logger from "@utils/SpectralLogger";
 import { metrics } from "@core_s/Metrics";

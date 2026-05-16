@@ -101,6 +101,12 @@ declare namespace Root {
 
     // Check if a location is currently allocated
     isAllocated(id: number): boolean;
+
+    // Temporal freshness
+    /** Sets posW = AGE_FRESHNESS for every precept that carries this scope. */
+    refreshConceptAge(scope: number): void;
+    /** Applies thermodynamic decay and posW freshness fade over deltaTime (ms). */
+    decay(deltaTime: number): void;
   }
 
   interface ReadonlyManifoldView

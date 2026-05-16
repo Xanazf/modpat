@@ -73,63 +73,23 @@ export abstract class BaseAtomizer {
   }
 
   /**
-   * Calculates the Base Frequency (Scope) for a given symbol.
-   * In the logical manifold, symbols are distinguished by their structural "frequency".
-   * Logic operators are offset into a higher "Heat Field" than semantic operands
-   * to ensure they act as dominant attractors in the topology.
+   * Returns the stable scope (identity tag) for a symbol.
    *
-   * @param symbol The string token to map.
-   * @param isOperator Whether the token is a logical operator.
-   * @returns The calculated physical scope (frequency).
+   * Scope is now a plain sequential integer — the symbol's registration index.
+   * It carries no type information; atom type lives exclusively in
+   * system.operatorClass[id].  The isOperator parameter is accepted for call-site
+   * compatibility but has no effect on the returned value.
    */
-  public getSymbolScope(symbol: string, isOperator: boolean): number {
+  public getSymbolScope(symbol: string, _isOperator?: boolean): number {
     const norm = symbol.toLowerCase().trim();
     const canonical = PRONOUN_CANONICAL.get(norm) ?? norm;
-    const idx = this.getSymbolIdx(canonical);
-    // Guard: operator indices must stay below the semantic band to prevent scope collisions.
-    // Increase SEMANTIC_OFFSET in config if this fires.
-    if (isOperator && idx >= SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET) {
-      throw new Error(
-        `Operator band overflow: "${symbol}" idx=${idx} would collide with the semantic band ` +
-          `(SEMANTIC_OFFSET=${SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET}). ` +
-          `Increase SEMANTIC_OFFSET or reduce the number of distinct operators.`
-      );
-    }
-    const offset = isOperator
-      ? SYSTEM_CONFIG.DOD_EMBEDDING.LOGIC_OFFSET
-      : SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET;
-    return (idx + offset) * SYSTEM_CONFIG.DOD_EMBEDDING.BASE_FREQUENCY;
+    return this.getSymbolIdx(canonical);
   }
 
   /**
-   * Resolves a physical Scope (frequency) back into its original string symbol.
-   * Reverses the mapping logic by identifying the frequency band and extracting the index.
-   *
-   * @param scope The physical frequency to decode.
-   * @returns The original string symbol, or "<?>" if unknown.
-   */
-  protected resolveSymbolFromScope(scope: number): string {
-    const normalizedScope = scope / SYSTEM_CONFIG.DOD_EMBEDDING.BASE_FREQUENCY;
-
-    // Determine which field (Logic or Semantic) the scope belongs to.
-    let symbolIdx: number;
-    if (normalizedScope >= SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET) {
-      symbolIdx = normalizedScope - SYSTEM_CONFIG.DOD_EMBEDDING.SEMANTIC_OFFSET;
-    } else {
-      symbolIdx = normalizedScope - SYSTEM_CONFIG.DOD_EMBEDDING.LOGIC_OFFSET;
-    }
-
-    // Round to account for floating-point drift in the manifold.
-    const cleanIdx = Math.round(symbolIdx);
-    return this.reverseMap.get(cleanIdx) || "<?>";
-  }
-
-  /**
-   * Public accessor for resolving a scope integer back to a string symbol.
-   * Useful for external components that need to inspect the manifold.
+   * Resolves a scope back to its symbol string via direct map lookup.
    */
   public resolveScope(scope: number): string | undefined {
-    const s = this.resolveSymbolFromScope(scope);
-    return s === "<?>" ? undefined : s;
+    return this.reverseMap.get(scope);
   }
 }

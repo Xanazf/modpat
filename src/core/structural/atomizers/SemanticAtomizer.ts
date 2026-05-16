@@ -218,11 +218,14 @@ export default class SemanticAtomizer
       );
 
       system.posZ[id] = depth;
-      system.posW[id] = context + i * 0.001;
+      // posW = temporal freshness: starts at maximum (1.0) for every newly
+      // ingested precept and decays via Runtime.tick().  Formerly held a
+      // context-hash + sequence-offset value, which provided no decay signal.
+      system.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
 
-      // Sync Matter layer content
+      // Sync Matter layer content (time drives entropyRate; kept separate from posW)
       system.depth[id] = depth;
-      system.time[id] = system.posW[id];
+      system.time[id] = i * 0.01; // sequence position, used for entropyRate
       system.decayRate[id] = decay;
 
       // Finalize 4D Coordinates.
@@ -321,7 +324,7 @@ export default class SemanticAtomizer
 
         system.posZ[id] = depth;
         system.posY[id] = i * 0.1;
-        system.posW[id] = 0.0;
+        system.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
         system.depth[id] = depth;
         system.update(id);
         sequenceIds[i] = id;
@@ -354,7 +357,7 @@ export default class SemanticAtomizer
   ): string {
     const output: string[] = [];
     for (let i = 0; i < sequenceIds.length; i++) {
-      output.push(this.resolveSymbolFromScope(system.scope[sequenceIds[i]]));
+      output.push(this.resolveScope(system.scope[sequenceIds[i]]) ?? "<?>");
     }
     return output.join(" ");
   }

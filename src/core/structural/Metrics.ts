@@ -50,7 +50,7 @@ class Metrics {
     return Object.fromEntries(this.data);
   }
 
-  /** Call once per ManifoldManager tick; emits JSONL every N ticks. */
+  /** Call once per ManifoldLifecycle tick; emits JSONL every N ticks. */
   onTick(): void {
     this.tickCount++;
     if (

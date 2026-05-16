@@ -12,7 +12,7 @@
 import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
 
-// ── SelfConcept ───────────────────────────────────────────────────────────────
+// SelfConcept
 
 /**
  * SelfConcept — the ego-centre of the logical manifold.
@@ -104,7 +104,7 @@ export class SelfConcept {
   }
 }
 
-// ── Perspective rewriting ─────────────────────────────────────────────────────
+// Perspective rewriting
 
 /**
  * Transforms second-person input (directed AT the system) into first-person

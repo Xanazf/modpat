@@ -4,6 +4,99 @@ import { SlotType, SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
 
+// Synthesizer
+
+/** A retrieved code pattern ready for composition. */
+export interface CodePattern {
+  /** Abstract pattern string, e.g. "function VAR_0(VAR_1) { VAR_BODY }" */
+  template: string;
+  /** Packed slot-type bitmap from wave_forms.slot_flags */
+  slotFlags: bigint;
+}
+
+/**
+ * The Synthesizer collapses a set of retrieved code patterns into a single
+ * concrete code string (compose → instantiate).
+ */
+export class Synthesizer {
+  private readonly BITS_PER_VAR = 5;
+  private readonly SLOT_MASK = 0x1fn;
+
+  public slotTypeFor(varId: number, slotFlags: bigint): SlotType {
+    return Number(
+      (slotFlags >> BigInt(varId * this.BITS_PER_VAR)) & this.SLOT_MASK
+    ) as SlotType;
+  }
+
+  /**
+   * Composes patterns (outer → inner) into a single template by filling each
+   * outer pattern's first Body/Condition VAR slot with the next pattern.
+   */
+  public compose(patterns: CodePattern[]): string {
+    if (patterns.length === 0) return "";
+    if (patterns.length === 1) return patterns[0].template;
+    let accumulated = patterns[0].template;
+    const { slotFlags } = patterns[0];
+    for (let p = 1; p < patterns.length; p++) {
+      accumulated = this._fillContinuationSlots(
+        accumulated,
+        slotFlags,
+        patterns[p].template
+      );
+    }
+    return accumulated;
+  }
+
+  private _fillContinuationSlots(
+    outer: string,
+    slotFlags: bigint,
+    inner: string
+  ): string {
+    const varPattern = /VAR_(\d+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = varPattern.exec(outer)) !== null) {
+      const st = this.slotTypeFor(parseInt(match[1], 10), slotFlags);
+      if (st & SlotType.Body || st & SlotType.Condition) {
+        const escaped = match[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return outer.replace(new RegExp(escaped, "g"), inner);
+      }
+    }
+    const lastBrace = outer.lastIndexOf("}");
+    return lastBrace !== -1
+      ? outer.slice(0, lastBrace) + inner + outer.slice(lastBrace)
+      : `${outer} ${inner}`;
+  }
+
+  /** Replaces all VAR_N placeholders with bound values; unbound VARs become "_". */
+  public instantiate(
+    template: string,
+    varBindings: Map<number, string>
+  ): string {
+    return template.replace(
+      /VAR_(\d+)/g,
+      (_, id) => varBindings.get(+id) ?? "_"
+    );
+  }
+
+  /** Builds a varBindings map from concrete tokens in order of appearance. */
+  public buildBindings(
+    tokens: string[],
+    slotFlags: bigint
+  ): Map<number, string> {
+    const bindings = new Map<number, string>();
+    let nextVar = 0;
+    for (const token of tokens) {
+      if (!token || token === "unknown") continue;
+      const st = this.slotTypeFor(nextVar, slotFlags);
+      if (!(st & SlotType.Body) && !(st & SlotType.Condition)) {
+        bindings.set(nextVar, token);
+      }
+      nextVar++;
+    }
+    return bindings;
+  }
+}
+
 /** Maps JS/TS binary operator symbols to semantic intent words. */
 const OPERATOR_INTENT: Record<string, string> = {
   "+": "addition",

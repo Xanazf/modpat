@@ -16,15 +16,25 @@ import fs from "node:fs";
 import path from "node:path";
 import System, { OperatorClass } from "@core_i/System";
 import Resolver from "@core_i/Resolver";
-import LogicAtomizer from "@atomics/LogicAtomizer";
-import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import Store from "@core_s/Memory";
-import { LiveInference } from "@core_i/LiveInference";
+import { LiveInference } from "@core_i/Runtime";
 import Unfolder from "@core_s/Unfolder";
 import { SelfConcept } from "@core_s/Identity";
 import { SpectralVisualizer } from "@utils/SpectralVisualizer";
+import Runtime from "@core_i/Runtime";
+import { VocabSeedWorker } from "@core_s/VocabSeed";
+import {
+  distance4D,
+  orbitRadius,
+  orbitalParent,
+  satellites,
+  constellations,
+  constellationGaps,
+  buildManifoldIndex,
+} from "@core_s/ManifoldMetrics";
+import { SYSTEM_CONFIG, DOPAT_CONFIG } from "@config";
 
-// ── ANSI helpers ─────────────────────────────────────────────────────────────
+// ANSI helpers
 
 const C = {
   reset: "\x1b[0m",
@@ -54,7 +64,7 @@ const red = c(C.red);
 const gray = c(C.dim + C.gray);
 const magenta = c(C.magenta);
 
-// ── OperatorClass labels ──────────────────────────────────────────────────────
+// OperatorClass labels
 
 const OP_NAME = [
   "None",
@@ -80,100 +90,134 @@ function opColor(cls: number): string {
   return C.white;
 }
 
-// ── Session state ─────────────────────────────────────────────────────────────
+// Session state
 
+let runtime: Runtime;
 let system: System;
 let atomizer: Atomic.Engine;
 let resolver: Resolver;
 let store: Store;
 let unfolder: Unfolder;
 let inference: LiveInference;
+let self: SelfConcept | null = null;
 const viz = new SpectralVisualizer();
 
+let seeder: VocabSeedWorker | null = null;
+
 let verbose = false;
-let atomMode: "semantic" | "base" = "semantic";
+let atomMode: "semantic" | "base" | "spectral" = "semantic";
 let dbPath = "./data/repl.db";
-const self = new SelfConcept();
 
 let sessionIngested = 0;
 let sessionQueried = 0;
 let sessionDiscovered = 0;
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// Init
 
 async function init(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.includes("--base")) atomMode = "base";
+  if (args.includes("--spectral")) atomMode = "spectral";
   const dbArg = args.find(a => a.startsWith("--db="));
   if (dbArg) dbPath = dbArg.slice(5);
 
-  process.stdout.write(
-    `\n${bold(cyan("╔══════════════════════════════════════╗"))}\n` +
-      `${bold(cyan("║"))}   ${bold("ModPAT Live Inference REPL")}        ${bold(cyan("║"))}\n` +
-      `${bold(cyan("╚══════════════════════════════════════╝"))}\n\n`
-  );
-
-  system = new System();
-  tick("System allocated (1 M precept capacity)");
-
-  if (atomMode === "semantic") {
-    const sem = new SemanticAtomizer();
-    process.stdout.write(
-      gray("  Initializing SemanticAtomizer (GloVe + UMAP)…")
-    );
-    const t0 = Date.now();
-    try {
-      await sem.init();
-      const ms = Date.now() - t0;
-      process.stdout.write(`\r`);
-      tick(`SemanticAtomizer ready ${gray(`(${ms} ms)`)}`);
-      atomizer = sem;
-    } catch (e: any) {
-      process.stdout.write(`\r`);
-      warn(
-        `SemanticAtomizer failed (${e.message}) — falling back to LogicAtomizer`
-      );
-      atomMode = "base";
-      const log = new LogicAtomizer();
-      await log.init();
-      atomizer = log;
-    }
-  } else {
-    const log = new LogicAtomizer();
-    await log.init();
-    tick("LogicAtomizer ready");
-  }
+  process.stdout.write(`\n  ModPAT Live Inference REPL\n\n`);
 
   // Ensure data dir exists for the db file.
   const dir = path.dirname(path.resolve(dbPath));
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  store = new Store(system, atomizer, dbPath);
-  await store.waitForInit();
-  tick(`Store ready ${gray(`(${dbPath})`)}`);
+  process.stdout.write(gray("  Booting runtime…\n"));
+  const t0 = Date.now();
 
-  resolver = new Resolver(system, atomizer, store);
-  unfolder = new Unfolder(system, atomizer as any);
-  inference = new LiveInference(system, atomizer, resolver, store, unfolder);
-  tick("Resolver and LiveInference online");
+  runtime = await Runtime.boot({
+    atomizer: atomMode,
+    db: dbPath,
+    onFallback: reason => {
+      warn(
+        `SemanticAtomizer unavailable (${reason}) — falling back to LogicAtomizer`
+      );
+    },
+  });
 
-  // WordNet dictionary initialises in the background (~2s).
+  ({ system, atomizer, resolver, store, unfolder, inference } = runtime);
+  atomMode = runtime.atomizerMode;
+  self = runtime.identity;
+
+  const ms = Date.now() - t0;
+  process.stdout.write("\r");
+  tick(
+    `Runtime online ${gray(`(${atomMode}, ${ms} ms)`)}  ` +
+      `tick ${gray(`every ${runtime.tickIntervalMs / 1000}s`)}`
+  );
+
+  // WordNet dictionary initialises in the background (~2s), then the
+  // vocabulary seeder starts — no need to await it.
   unfolder.dictionary.waitForInit().then(() => {
-    if (unfolder.dictionary.isReady) {
-      tick(`WordNet 3.1 ready ${gray("— void route: dictionary → wikipedia")}`);
+    if (!unfolder.dictionary.isReady) return;
+    tick(`WordNet 3.1 ready ${gray("— void route: dictionary → wikipedia")}`);
+
+    seeder = new VocabSeedWorker(SYSTEM_CONFIG.DOD_EMBEDDING.UMAP_DICT_PATH);
+    if (seeder.total > 0) {
+      tick(
+        `Vocab seeder armed ${gray(`(${seeder.total.toLocaleString()} words)`)}`
+      );
+      seeder.start(system, atomizer, store, unfolder.dictionary, {
+        batchSize: 20,
+        intervalMs: 150,
+        onProgress: p => {
+          if (p.processed % 1000 === 0) {
+            const pct = ((p.processed / p.total) * 100).toFixed(1);
+            tick(
+              `Vocab seed: ${pct}% — ${p.matured.toLocaleString()} constellations formed`
+            );
+          }
+        },
+      });
     }
   });
 
-  await self.initialize(system, atomizer, store);
-  tick(
-    `Self-concept online ${gray(`(id=${self.selfId} scope=${self.selfScope})`)}  ` +
-      `— ${cyan('"the system is online"')}`
-  );
+  if (self) {
+    tick(
+      `Self-concept online ${gray(`(id=${self.selfId} scope=${self.selfScope})`)}  ` +
+        `— ${cyan('"the system is online"')}`
+    );
+  }
 
   process.stdout.write(
     `\n  ${gray("atomizer:")} ${atomMode}   ${gray("db:")} ${dbPath}\n` +
       `  Type ${cyan(":help")} for commands.\n\n`
   );
+
+  // Background constellation gap scanner — runs every 30s, quietly enqueues
+  // the most strained atom pair in each top constellation as an inquiry topic.
+  // The gap represents a gravitational bond with no known inferential basis;
+  // investigating it may either confirm the connection or split the constellation.
+  const GAP_SCAN_INTERVAL_MS = 30_000;
+  const runGapScan = () => {
+    const idx = buildManifoldIndex(system);
+    const cs = constellations(system, { minSize: 3, index: idx });
+    if (cs.length === 0) return;
+    const gaps = constellationGaps(system, cs.slice(0, 15), atomizer, {
+      maxPerConstellation: 1,
+      minMassRatio: 0.05,
+    });
+    const queue = inference.getInquiryQueue();
+    for (const g of gaps.slice(0, 2)) {
+      const topic = g.labelA;
+      const query = `What is the relationship between ${g.labelA} and ${g.labelB}?`;
+      queue.enqueue(topic, query);
+    }
+  };
+  const scheduleGapScan = () => {
+    setTimeout(() => {
+      try {
+        runGapScan();
+      } catch {}
+      scheduleGapScan();
+    }, GAP_SCAN_INTERVAL_MS);
+  };
+  scheduleGapScan();
 }
 
 function tick(msg: string) {
@@ -184,7 +228,7 @@ function warn(msg: string) {
   process.stdout.write(`  ${yellow("⚠")} ${msg}\n`);
 }
 
-// ── Stats bar ─────────────────────────────────────────────────────────────────
+// Stats bar
 
 let cachedKnowledge = { heard: 0, remembered: 0, learned: 0, generalized: 0 };
 
@@ -220,6 +264,15 @@ function statsBar(sinkStrength: number | null): string {
       .join(" ");
     parts.push(tier);
   }
+  if (seeder && !seeder.isDone) {
+    const pct =
+      seeder.total > 0
+        ? Math.floor((seeder.processed / seeder.total) * 100)
+        : 0;
+    parts.push(
+      seeder.running ? magenta(`seed:${pct}%`) : gray(`seed:${pct}%⏸`)
+    );
+  }
   return dim(`[${parts.join("  ")}]`);
 }
 
@@ -231,7 +284,7 @@ function countAllocated(): number {
   return n;
 }
 
-// ── Verbose diagnostics ───────────────────────────────────────────────────────
+// Verbose diagnostics
 
 function showVerbose(): void {
   const diag = resolver.lastDiagnostics;
@@ -265,6 +318,30 @@ function showVerbose(): void {
     process.stdout.write(
       `  ${gray("target:")} ${cyan(best.label)}  ${gray(`strength=${best.strength.toFixed(4)}`)}  coherence=${coherenceStr}\n`
     );
+  }
+
+  // Bridge candidates from the bidirectional pass
+  const bridges = diag.bridgeCandidates;
+  if (bridges.length > 0) {
+    const missingLinks = bridges.filter(b => b.isMissingLink);
+    const bridgeLine = bridges
+      .slice(0, 4)
+      .map(b => {
+        const score = `${b.bridgeScore.toFixed(3)}`;
+        const tag = b.isMissingLink ? red("?") : green("↔");
+        return `${tag}${cyan(b.label)}${gray(`(${score})`)}`;
+      })
+      .join("  ");
+    process.stdout.write(`  ${gray("bridge:")} ${bridgeLine}\n`);
+    if (missingLinks.length > 0) {
+      const missingLine = missingLinks
+        .slice(0, 3)
+        .map(b => red(b.label))
+        .join("  ");
+      process.stdout.write(
+        `  ${red("missing:")} ${missingLine}  ${gray("← ask about these")}\n`
+      );
+    }
   }
 
   // Discovered operators
@@ -311,9 +388,22 @@ function showVerbose(): void {
     process.stdout.write(`  ${gray("wave:")} ${bar}\n`);
     process.stdout.write(`         ${labelLine}\n`);
   }
+
+  // Working memory context
+  const wm = inference.getWorkingMemory();
+  if (wm.size > 0) {
+    const recent = wm
+      .recent(3)
+      .map(
+        f =>
+          `${cyan(f.conclusion)}${f.explanation ? gray(`→${f.explanation.split(" → ").pop()}`) : ""}`
+      )
+      .join("  ");
+    process.stdout.write(`  ${gray("context:")} ${recent}\n`);
+  }
 }
 
-// ── Command handling ──────────────────────────────────────────────────────────
+// Command handling
 
 async function handleCommand(raw: string): Promise<void> {
   const parts = raw.slice(1).trim().split(/\s+/);
@@ -333,6 +423,11 @@ async function handleCommand(raw: string): Promise<void> {
           `  ${cyan(":learn")} ${gray("[n]")}         run n self-test cycles (default 10)\n` +
           `  ${cyan(":knowledge")}         show knowledge state breakdown (Heard/Remembered/Learned)\n` +
           `  ${cyan(":challenge")} ${gray("<q>")}     probe a query without vault recall\n` +
+          `  ${cyan(":seed")} ${gray("[pause|resume]")}  vocab seeder status / control\n` +
+          `  ${cyan(":orbit")} ${gray("<word>")}        orbital info for a specific atom\n` +
+          `  ${cyan(":constellations")} ${gray("[n]")}  show top n constellations (default 10)\n` +
+          `  ${cyan(":memory")}            working memory — what has been established\n` +
+          `  ${cyan(":gaps")} ${gray("[n]")}           top n constellation gaps (curiosity targets)\n` +
           `  ${cyan(":reset")}             clear the manifold (not the store)\n` +
           `  ${cyan(":exit")} / Ctrl-C     quit\n\n`
       );
@@ -368,7 +463,9 @@ async function handleCommand(raw: string): Promise<void> {
             .join("  ")}\n` +
           `\n  ${bold("Session")}\n` +
           `    ingested: ${sessionIngested}  queried: ${sessionQueried}  operators discovered: ${sessionDiscovered}\n` +
-          `    db: ${gray(dbPath)}  atomizer: ${gray(atomMode)}\n\n`
+          `    db: ${gray(dbPath)}  atomizer: ${gray(atomMode)}\n` +
+          `    tick: ${runtime.isTickRunning ? green(`every ${runtime.tickIntervalMs / 1000}s`) : yellow("stopped")}  ` +
+          `age decay: ${gray(`half-life ≈ ${(Math.LN2 / DOPAT_CONFIG.PHYSICS.AGE_DECAY_RATE).toFixed(0)}s`)}\n\n`
       );
       break;
     }
@@ -434,7 +531,7 @@ async function handleCommand(raw: string): Promise<void> {
       const count = Number.isFinite(n) && n > 0 ? n : 10;
       process.stdout.write(gray(`  Running ${count} self-test cycles…\n`));
       const t0 = Date.now();
-      const report = await inference.getSelfTeacher().runCycle(count);
+      const report = await inference.getLearner().runCycle(count);
       const ms = Date.now() - t0;
       const k = report.summary;
       process.stdout.write(
@@ -510,8 +607,193 @@ async function handleCommand(raw: string): Promise<void> {
       break;
     }
 
+    case "seed": {
+      if (!seeder) {
+        warn("Seeder not yet initialised — WordNet may still be loading.");
+        break;
+      }
+      const sub = args[0]?.toLowerCase();
+      if (sub === "pause") {
+        seeder.pause();
+        process.stdout.write(`  ${yellow("⏸")} Seeder paused.\n\n`);
+      } else if (sub === "resume") {
+        seeder.start(system, atomizer, store, unfolder.dictionary, {
+          batchSize: 20,
+          intervalMs: 150,
+          onProgress: p => {
+            if (p.processed % 1000 === 0) {
+              const pct = ((p.processed / p.total) * 100).toFixed(1);
+              tick(
+                `Vocab seed: ${pct}% — ${p.matured.toLocaleString()} constellations formed`
+              );
+            }
+          },
+        });
+        process.stdout.write(`  ${green("▶")} Seeder resumed.\n\n`);
+      } else {
+        const p = seeder.snapshot();
+        const pct =
+          p.total > 0 ? ((p.processed / p.total) * 100).toFixed(1) : "0.0";
+        const status = p.done
+          ? cyan("complete")
+          : p.running
+            ? green("running")
+            : yellow("paused");
+        process.stdout.write(
+          `\n  ${bold("Vocabulary seeder")}\n` +
+            `    words: ${p.processed.toLocaleString()} / ${p.total.toLocaleString()} (${pct}%)\n` +
+            `    constellations formed: ${green(p.matured.toLocaleString())}\n` +
+            `    status: ${status}\n\n`
+        );
+      }
+      break;
+    }
+
+    case "orbit":
+    case "o": {
+      const wordArg = args.join(" ").trim();
+      if (!wordArg) {
+        warn(":orbit requires a word");
+        break;
+      }
+      const ids = atomizer.ingestSequence(wordArg, system);
+      if (ids.length === 0) {
+        warn(`"${wordArg}" not in manifold`);
+        break;
+      }
+      const targetId = ids[0];
+      const idx = buildManifoldIndex(system);
+      const parent = orbitalParent(targetId, system, idx);
+      const sats = satellites(targetId, system, idx);
+      const r = orbitRadius(targetId, system);
+      const parentLabel =
+        parent !== null
+          ? cyan(
+              atomizer.decodeSequence(new Uint32Array([parent]), system).trim()
+            )
+          : gray("none");
+      process.stdout.write(
+        `\n  ${bold("Orbital info:")} ${cyan(wordArg)} ${gray(`(id=${targetId})`)}\n` +
+          `    orbit radius:  ${r.toFixed(2)}\n` +
+          `    parent:        ${parentLabel}${parent !== null ? gray(` (id=${parent})`) : ""}\n` +
+          `    satellites:    ${
+            sats.length > 0
+              ? sats
+                  .slice(0, 8)
+                  .map(s =>
+                    dim(
+                      atomizer
+                        .decodeSequence(new Uint32Array([s]), system)
+                        .trim()
+                    )
+                  )
+                  .join("  ")
+              : gray("none")
+          }\n` +
+          (sats.length > 8
+            ? `    ${gray(`… and ${sats.length - 8} more`)}\n`
+            : "") +
+          `\n`
+      );
+      break;
+    }
+
+    case "constellations":
+    case "cs": {
+      const n = parseInt(args[0] ?? "10", 10);
+      const count = Number.isFinite(n) && n > 0 ? n : 10;
+      process.stdout.write(gray(`  Computing constellations…\n`));
+      const idx = buildManifoldIndex(system);
+      const groups = constellations(system, { minSize: 2, index: idx });
+      if (groups.length === 0) {
+        process.stdout.write(
+          `  ${gray("No constellations detected yet.")}\n\n`
+        );
+        break;
+      }
+      process.stdout.write(
+        `\n  ${bold(`Top ${Math.min(count, groups.length)} constellations`)} ${gray(`(${groups.length} total)`)}\n`
+      );
+      for (const g of groups.slice(0, count)) {
+        const starLabel = atomizer
+          .decodeSequence(new Uint32Array([g.star]), system)
+          .trim();
+        const memberSample = g.members
+          .slice(0, 5)
+          .map(id =>
+            dim(atomizer.decodeSequence(new Uint32Array([id]), system).trim())
+          )
+          .join(" ");
+        process.stdout.write(
+          `    ${cyan("★")} ${cyan(starLabel.padEnd(16))} ` +
+            `${gray(`${g.members.length} members`)}  ${memberSample}` +
+            (g.members.length > 5 ? gray(` +${g.members.length - 5}`) : "") +
+            "\n"
+        );
+      }
+      process.stdout.write("\n");
+      break;
+    }
+
+    case "memory":
+    case "mem": {
+      const wm = inference.getWorkingMemory();
+      const frames = wm.recent(wm.size);
+      if (frames.length === 0) {
+        process.stdout.write(`  ${gray("Working memory is empty.")}\n\n`);
+        break;
+      }
+      process.stdout.write(
+        `\n  ${bold("Working memory")} ${gray(`(${frames.length} turns)`)}\n`
+      );
+      for (const f of frames) {
+        const expl = f.explanation ? gray(`  ← ${f.explanation}`) : "";
+        process.stdout.write(
+          `    ${gray(`T${f.turn}`)}  ${dim(f.query.slice(0, 40).padEnd(40))}` +
+            `  ${cyan(f.conclusion)}${expl}\n`
+        );
+      }
+      process.stdout.write("\n");
+      break;
+    }
+
+    case "gaps":
+    case "gap": {
+      const n = parseInt(args[0] ?? "8", 10);
+      const count = Number.isFinite(n) && n > 0 ? n : 8;
+      process.stdout.write(gray(`  Scanning constellation gaps…\n`));
+      const idx = buildManifoldIndex(system);
+      const cs = constellations(system, { minSize: 3, index: idx });
+      const gaps = constellationGaps(system, cs.slice(0, 20), atomizer, {
+        maxPerConstellation: 2,
+        minMassRatio: 0.05,
+      });
+      if (gaps.length === 0) {
+        process.stdout.write(
+          `  ${gray("No significant constellation gaps detected.")}\n\n`
+        );
+        break;
+      }
+      process.stdout.write(
+        `\n  ${bold(`Top ${Math.min(count, gaps.length)} constellation gaps`)} ` +
+          `${gray(`(curiosity targets)`)}\n`
+      );
+      for (const g of gaps.slice(0, count)) {
+        const starLabel = atomizer
+          .decodeSequence(new Uint32Array([g.constellation.star]), system)
+          .trim();
+        process.stdout.write(
+          `    ${red("?")} ${cyan(g.labelA.padEnd(14))} ↔ ${cyan(g.labelB.padEnd(14))}` +
+            `  ${gray(`dist=${g.distance.toFixed(1)}`)}  ${gray(`[★${starLabel}]`)}\n`
+        );
+      }
+      process.stdout.write("\n");
+      break;
+    }
+
     case "reset": {
       system.reset();
+      inference.getWorkingMemory().clear();
       sessionIngested = 0;
       sessionQueried = 0;
       sessionDiscovered = 0;
@@ -532,7 +814,7 @@ async function handleCommand(raw: string): Promise<void> {
   }
 }
 
-// ── Input handling ────────────────────────────────────────────────────────────
+// Input handling
 
 async function handleInput(line: string): Promise<void> {
   if (!line) return;
@@ -566,7 +848,7 @@ async function handleInput(line: string): Promise<void> {
   if (verbose) {
     showVerbose();
     // Flag self-referential queries so the ego-centre is visible in the loop.
-    if (self.selfId !== -1) {
+    if (self && self.selfId !== -1) {
       const inputIds = atomizer.ingestSequence(line, system);
       if (self.isSelfReferential(inputIds, system)) {
         process.stdout.write(
@@ -582,8 +864,14 @@ async function handleInput(line: string): Promise<void> {
     .trim();
 
   if (replyText) {
+    // Show explanation from working memory (populated by processQuestion)
+    const lastFrame = inference.getWorkingMemory().recent(1)[0];
+    const explSuffix =
+      lastFrame?.explanation && replyText.includes(lastFrame.conclusion)
+        ? `  ${gray(`(${lastFrame.explanation})`)}`
+        : "";
     process.stdout.write(
-      `  ${green("↳")} ${replyText}  ${statsBar(sinkStr > 0 ? sinkStr : null)}\n\n`
+      `  ${green("↳")} ${replyText}${explSuffix}  ${statsBar(sinkStr > 0 ? sinkStr : null)}\n\n`
     );
   } else {
     process.stdout.write(`  ${gray("(no response)")}  ${statsBar(null)}\n\n`);
@@ -608,19 +896,27 @@ async function drainInquiryQueue(): Promise<void> {
     resolver,
     system,
     atomizer,
-    store
+    store,
+    (item, answer) => {
+      // Inquiry loop closed: re-surface the answer the system just discovered.
+      // The crystallization already happened inside _retry(); show it to the user.
+      process.stdout.write(
+        `  ${green("↺")} ${bold("Inquiry resolved:")} ${cyan(`"${item.topic}"`)} → ${green(answer)}\n` +
+          `     ${dim(`(re-derived from "${item.originalQuery.replace(/\|-\s*$/, "").trim()}"`)}\n\n`
+      );
+    }
   );
 
   for (const item of toAsk) {
     process.stdout.write(
-      `  ${yellow("❓")} ${bold("I couldn't understand")} ${cyan(`"${item.topic}"`)}\n` +
-        `     ${dim(`(from: "${item.originalQuery.replace(/\|-\s*$/, "").trim()}")`)} \n` +
-        `     Can you tell me what ${cyan(`"${item.topic}"`)} means?\n\n`
+      `  ${yellow("❓")} ${bold("I need to understand")} ${cyan(`"${item.topic}"`)}\n` +
+        `     ${dim(`(to answer: "${item.originalQuery.replace(/\|-\s*$/, "").trim()}")`)} \n` +
+        `     Can you tell me what ${cyan(`"${item.topic}"`)} means, or how it relates to ${cyan(`"${item.originalQuery.split(" ")[0] ?? "the question"}"?`)}\n\n`
     );
   }
 }
 
-// ── Shutdown ──────────────────────────────────────────────────────────────────
+// Shutdown
 
 async function shutdown(): Promise<void> {
   process.stdout.write(
@@ -628,15 +924,14 @@ async function shutdown(): Promise<void> {
       `  ${gray("Closing store…")}`
   );
   try {
-    await resolver.dispose();
-    await store.close();
+    await runtime.dispose();
     process.stdout.write(` ${green("done")}\n`);
   } catch {
     process.stdout.write(` ${yellow("(already closed)")}\n`);
   }
 }
 
-// ── Main loop ─────────────────────────────────────────────────────────────────
+// Main loop
 
 async function main(): Promise<void> {
   await init();

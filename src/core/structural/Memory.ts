@@ -48,7 +48,7 @@ export default class Store implements Memory.Vault {
   private instance!: DuckDBInstance;
   /** The active connection to the persistent vault. */
   private _connection!: DuckDBConnection;
-  /** Shared reference cell, swap fires on ManifoldManager failover. */
+  /** Shared reference cell, swap fires on ManifoldLifecycle failover. */
   private systemRef: SystemRef;
   private get system(): Root.ManifoldView {
     return this.systemRef.current;
@@ -421,7 +421,7 @@ export default class Store implements Memory.Vault {
    */
   public async checkInterferencePattern(
     inputSequence: Uint32Array
-  ): Promise<{ ids: Uint32Array; slotFlags: bigint } | null> {
+  ): Promise<{ ids: Uint32Array; slotFlags: bigint; energy: number } | null> {
     const { signature, varMap } = this.abstractSequence(inputSequence);
     const [qx, qy, qz, qw] = this.calculateCentroid(inputSequence);
 
@@ -432,6 +432,7 @@ export default class Store implements Memory.Vault {
 
     let targetPattern: string | null = null;
     let slotFlags = 0n;
+    let vaultEnergy = 0;
 
     // Grid-window spatial resonance query: coarse bucket filter reduces candidates from
     // O(rows_per_signature) to O(1) before the exact squared-distance fine filter.
@@ -447,7 +448,8 @@ export default class Store implements Memory.Vault {
     const stmt = await this._connection.prepare(`
       SELECT target_pattern, slot_flags, signature AS matched_sig,
              (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2) + pow(anchor_w - ?, 2)) as resonance,
-             net_energy * (1 + LN(1 + COALESCE(usage_count, 0)) * ${uw}) AS combined_score
+             net_energy * (1 + LN(1 + COALESCE(usage_count, 0)) * ${uw}) AS combined_score,
+             net_energy
       FROM wave_forms
       WHERE signature = ?
         AND (grid_x IS NULL OR grid_x BETWEEN ? AND ?)
@@ -482,6 +484,7 @@ export default class Store implements Memory.Vault {
         if (resonance < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD) {
           targetPattern = rows[0][0]?.toString() || null;
           slotFlags = BigInt(String(rows[0][1] ?? "0"));
+          vaultEnergy = Number(rows[0][5] ?? 0);
           const matchedSig = rows[0][2]?.toString() ?? null;
           if (matchedSig) {
             // Fire-and-forget: increment usage count without blocking the retrieval.
@@ -549,7 +552,7 @@ export default class Store implements Memory.Vault {
       }
     }
 
-    return { ids: new Uint32Array(resultIds), slotFlags };
+    return { ids: new Uint32Array(resultIds), slotFlags, energy: vaultEnergy };
   }
 
   /**
@@ -663,7 +666,7 @@ export default class Store implements Memory.Vault {
              COALESCE(w.context_hash, '')       AS context_hash
       FROM raw_facts r
       JOIN wave_forms w ON r.signature = w.signature
-      WHERE COALESCE(w.knowledge_state, 0) < 2
+      WHERE COALESCE(w.knowledge_state, 0) < 3
         AND w.net_energy > 0
         AND r.fact IS NOT NULL AND LENGTH(r.fact) > 0
       ORDER BY COALESCE(w.reproduction_count, 0) ASC, w.net_energy DESC
@@ -752,6 +755,33 @@ export default class Store implements Memory.Vault {
    * Used by the contradiction detector as a pre-ingestion check that does not
    * create any manifold precepts.
    */
+  /**
+   * Inserts a fact text into raw_facts so Phase 2 vault search can find it.
+   * Idempotent: skips silently if the fact already exists.
+   */
+  public async storeFact(
+    fact: string,
+    source: string,
+    confidence: number,
+    signature: string
+  ): Promise<void> {
+    const exists = await this.rawFactExists(fact);
+    if (exists) return;
+    const stmt = await this._connection.prepare(
+      `INSERT INTO raw_facts (fact, source, confidence, ingested_at, signature) VALUES (?, ?, ?, ?, ?)`
+    );
+    try {
+      stmt.bindVarchar(1, fact);
+      stmt.bindVarchar(2, source);
+      stmt.bindDouble(3, confidence);
+      stmt.bindBigInt(4, BigInt(Date.now()));
+      stmt.bindVarchar(5, signature);
+      await stmt.run();
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
   public async rawFactExists(fact: string): Promise<boolean> {
     const stmt = await this._connection.prepare(
       `SELECT 1 FROM raw_facts WHERE fact = ? LIMIT 1`

@@ -808,6 +808,13 @@ class System implements Root.ManifoldView {
     }
   }
 
+  public refreshConceptAge(scope: number): void {
+    for (const id of this.scopeIndex.get(scope) ?? []) {
+      this.posW[id] = 1.0;
+      this.update(id);
+    }
+  }
+
   /**
    * Creates a reactive signal (get/set pair) for a specific physical property of a precept.
    * Signals are cached to allow efficient reactivity in the heat field.

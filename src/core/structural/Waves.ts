@@ -182,9 +182,7 @@ class ComplexArray extends BaseComplexArray {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
 // Wave Logic Operators
-// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * FFT_LOGIC provides a set of logical operators that operate on wave-based

@@ -1,7 +1,7 @@
 /**
  * Endurance Suite — full-pipeline knowledge digestion under sustained load.
  *
- * Drives the complete stack: SemanticAtomizer → Manifold → ManifoldManager
+ * Drives the complete stack: SemanticAtomizer → Manifold → ManifoldLifecycle
  * ticks (DeltaQueue drain, consolidation, dream cycle) → Resolver → Vault.
  * A mock Unfolder serves deterministic corpus content so the dream cycle
  * fires without network calls.
@@ -19,7 +19,7 @@
 import assert from "node:assert/strict";
 import { DOPAT_CONFIG } from "@config";
 import { DatabaseContext } from "@core_s/DatabaseContext";
-import { ManifoldManager } from "@core_s/ManifoldManager";
+import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { SystemPersistence } from "@core_s/Persistence";
 import Unfolder from "@core_s/Unfolder";
 import { metrics } from "@core_s/Metrics";
@@ -27,7 +27,7 @@ import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 
-// ─── Corpus ────────────────────────────────────────────────────────────────
+// Corpus
 //
 // All sentences use the operator vocabulary the resolver understands:
 // "implies" (IdentityShift), "is/are" (IdentityShift), "and" (Conjunction).
@@ -103,7 +103,7 @@ const CORPUS: string[] = [
   "all mammals are warm-blooded",
 ];
 
-// ─── Mock Unfolder ─────────────────────────────────────────────────────────
+// Mock Unfolder
 
 /**
  * Serves CORPUS sentences round-robin so the dream cycle gets deterministic
@@ -125,16 +125,16 @@ class CorpusUnfolder extends Unfolder {
   }
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
+// Helpers
 
 /** Yields to the microtask queue so dream-cycle promises can resolve. */
 function flushAsync(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
 
-/** Runs `ticks` ManifoldManager ticks in batches, flushing async between each batch. */
+/** Runs `ticks` ManifoldLifecycle ticks in batches, flushing async between each batch. */
 async function runTicks(
-  manager: ManifoldManager,
+  manager: ManifoldLifecycle,
   ticks: number,
   batchSize = 25
 ): Promise<void> {
@@ -147,7 +147,7 @@ async function runTicks(
   }
 }
 
-// ─── Suite ─────────────────────────────────────────────────────────────────
+// Suite
 
 export async function executeEnduranceSuite() {
   await describe("ENDURANCE — Knowledge Digestion Under Load", async () => {
@@ -161,7 +161,7 @@ export async function executeEnduranceSuite() {
     const dbConn = await dbCtx.connect();
     const persistence = new SystemPersistence(dbConn);
 
-    const manager = new ManifoldManager(
+    const manager = new ManifoldLifecycle(
       env.system,
       emergencyEnv.system,
       persistence
@@ -174,7 +174,7 @@ export async function executeEnduranceSuite() {
     );
     manager.setUnfolder(unfolder);
 
-    // ── Phase 1: Corpus ingestion throughput ─────────────────────────────
+    // Phase 1: Corpus ingestion throughput
 
     await it("Phase 1: ingest full corpus and measure throughput", async () => {
       const t0 = performance.now();
@@ -218,7 +218,7 @@ export async function executeEnduranceSuite() {
       );
     });
 
-    // ── Phase 2: Tick endurance ───────────────────────────────────────────
+    // Phase 2: Tick endurance
 
     await it("Phase 2: 5000 ticks — delta queue, consolidation, dream cycles", async () => {
       const TICKS = 5000;
@@ -257,7 +257,7 @@ export async function executeEnduranceSuite() {
       );
     });
 
-    // ── Phase 3: Reasoning quality probe ─────────────────────────────────
+    // Phase 3: Reasoning quality probe
 
     await it("Phase 3: resolution quality — battery of knowledge queries", async () => {
       interface QueryCase {
@@ -318,7 +318,7 @@ export async function executeEnduranceSuite() {
       );
     });
 
-    // ── Phase 4: Structural integrity ─────────────────────────────────────
+    // Phase 4: Structural integrity
 
     await it("Phase 4: structural integrity — zero corrupted precepts", async () => {
       const corrupted = env.system.checkIntegrity();
@@ -356,7 +356,7 @@ export async function executeEnduranceSuite() {
       );
     });
 
-    // ── Phase 5: Vault coverage ───────────────────────────────────────────
+    // Phase 5: Vault coverage
 
     await it("Phase 5: vault coverage — crystallised proofs exist", async () => {
       const res = await env.store.connection.runAndReadAll(
@@ -383,7 +383,7 @@ export async function executeEnduranceSuite() {
       assert.ok(avgEnergy > 0, "average vault energy must be positive");
     });
 
-    // ── Phase 6: Concurrent delta load ───────────────────────────────────
+    // Phase 6: Concurrent delta load
 
     await it("Phase 6: 1000 typed deltas queued and drained cleanly", async () => {
       const DELTA_COUNT = 1000;
@@ -453,7 +453,7 @@ export async function executeEnduranceSuite() {
       await flushAsync();
     });
 
-    // ── Phase 7: Metrics snapshot ─────────────────────────────────────────
+    // Phase 7: Metrics snapshot
 
     await it("Phase 7: metrics — counters reflect real pipeline activity", async () => {
       const snap = metrics.getSnapshot();
@@ -473,7 +473,7 @@ export async function executeEnduranceSuite() {
         "system.length (gauge)": v("system.length"),
       };
 
-      logger.log("\n  ── Final Metrics Snapshot ──");
+      logger.log("\\n  Final Metrics Snapshot");
       for (const [key, val] of Object.entries(report)) {
         logger.log(`  ${key.padEnd(28)} ${val.toLocaleString()}`);
       }
@@ -496,7 +496,7 @@ export async function executeEnduranceSuite() {
       );
     });
 
-    // ── Teardown ──────────────────────────────────────────────────────────
+    // Teardown
 
     await dbCtx.close();
     await TestHarness.disposeEnvironment(env);

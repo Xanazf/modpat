@@ -2,7 +2,6 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import type System from "@core_i/System";
 import { SystemRef } from "@core_i/System";
-import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { DOPAT_CONFIG } from "@config";
@@ -50,7 +49,7 @@ interface CTX7_ContextResponse {
   infoSnippets: CTX7_InfoSnippet[];
 }
 
-// ── DictionaryExpander ────────────────────────────────────────────────────────
+// DictionaryExpander
 // WordNet-based local expansion: fast, offline, no network.  Tried first inside
 // Unfolder.expand(); Wikipedia / Context7 is the fallback when the word is not
 // in the dictionary or produces no useful cluster.
@@ -182,7 +181,7 @@ export class DictionaryExpander {
   }
 }
 
-// ── Unfolder sources ──────────────────────────────────────────────────────────
+// Unfolder sources
 
 export interface SearchResult {
   title?: string;
@@ -226,18 +225,25 @@ export default class Unfolder {
   private get system(): Root.ManifoldView {
     return this.systemRef.current;
   }
-  private atomizer: SemanticAtomizer;
+  private atomizer: Atomic.Engine;
   private expandCount: number = 0;
   /** Local dictionary: tried first in expand() before any network fetch. */
   public readonly dictionary = new DictionaryExpander();
   /**
-   * Optional delta sink. When set (by ManifoldManager.setUnfolder()), expand()
+   * Raw prose fetched during the most recent network expansion (Wikipedia / Context7).
+   * Empty when the last expansion was served by the local dictionary.
+   * Listener uses this to extract a coherent sentence for immediate response,
+   * while the ingested tokens build long-term manifold topology in parallel.
+   */
+  public lastFetchedContent: string = "";
+  /**
+   * Optional delta sink. When set (by ManifoldLifecycle.setUnfolder()), expand()
    * posts a Delta.Ingest instead of writing to the manifold directly — ensuring
    * all mutations go through the single-writer tick-drain path.
    */
   private onDelta: ((delta: Delta.Any) => void) | null = null;
 
-  constructor(system: System | SystemRef, atomizer: SemanticAtomizer) {
+  constructor(system: System | SystemRef, atomizer: Atomic.Engine) {
     this.systemRef =
       system instanceof SystemRef ? system : new SystemRef(system);
     this.atomizer = atomizer;
@@ -280,6 +286,7 @@ export default class Unfolder {
     // Slow path: Wikipedia / Context7 (network, seconds).
     const fullContent = await this.fetchContent(activeTopic);
     if (!fullContent) return false;
+    this.lastFetchedContent = fullContent;
 
     const basePosX = this.system.posX[voidPreceptId];
     const basePosY = this.system.posY[voidPreceptId];
@@ -298,7 +305,7 @@ export default class Unfolder {
       return true;
     }
 
-    // Fallback: direct manifold write (standalone / tests without ManifoldManager).
+    // Fallback: direct manifold write (standalone / tests without ManifoldLifecycle).
     const newPreceptIds = this.ingestContent(fullContent);
     if (newPreceptIds.length === 0) return false;
 

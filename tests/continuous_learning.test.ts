@@ -1,10 +1,10 @@
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { SystemPersistence } from "@core_s/Persistence";
-import { ManifoldManager } from "@core_s/ManifoldManager";
+import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import Unfolder from "@core_s/Unfolder";
 import System from "@core_i/System";
 import { OperatorClass } from "@core_i/System";
-import LiveInference from "@core_i/LiveInference";
+import { LiveInference } from "@core_i/Runtime";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import Resolver from "@core_i/Resolver";
 import Store from "@core_s/Memory";
@@ -28,7 +28,7 @@ export async function executeContinuousLearningSuite() {
     const emergency = new System();
     await primary.hydrate(persistence);
 
-    const manager = new ManifoldManager(primary, emergency, persistence);
+    const manager = new ManifoldLifecycle(primary, emergency, persistence);
     const atomizer = new SemanticAtomizer();
     await atomizer.init();
     const store = new Store(primary, atomizer, dbPath);

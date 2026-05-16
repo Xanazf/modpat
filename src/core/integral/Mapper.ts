@@ -19,7 +19,7 @@ import { metrics } from "@core_s/Metrics";
  * 4. Age Coordinates (posW): The temporal context/loom.
  */
 class Mapper implements Mapping.Engine {
-  /** Shared reference cell, swap fires on ManifoldManager failover. */
+  /** Shared reference cell, swap fires on ManifoldLifecycle failover. */
   private systemRef: SystemRef;
   private get system(): Root.ManifoldView {
     return this.systemRef.current;
@@ -229,7 +229,7 @@ class Mapper implements Mapping.Engine {
       }
     }
 
-    return (
+    const result =
       finalIds ||
       this.extractIds(
         px,
@@ -239,8 +239,45 @@ class Mapper implements Mapping.Engine {
         steps,
         options.preExpandLength || 0,
         targetId
-      )
-    );
+      );
+
+    // Constellation refactoring: reinforce atoms on the discovered path.
+    // Each traversal increases the mass of intermediate semantic atoms slightly,
+    // making them stronger gravitational attractors — tightening their orbital
+    // bonds with nearby atoms and naturally merging constellations that share
+    // frequently-used inference bridges.
+    this.reinforcePath(result);
+
+    return result;
+  }
+
+  /**
+   * Reinforces the inferential mass of atoms along a successfully computed path.
+   *
+   * Semantics: an atom that was chosen by the Mapper as part of the optimal
+   * logical path is demonstrably useful.  Raising its mass slightly makes it
+   * a stronger gravitational centre, pulling related atoms into its orbit and
+   * solidifying constellation structure over time.
+   *
+   * The 5% growth per traversal is bounded by MAX_REINFORCE_MASS (well below
+   * TRAP_MASS_THRESHOLD) so reinforcement never causes the Mapper to avoid
+   * its own previously-reinforced bridges.
+   */
+  private reinforcePath(path: Uint32Array): void {
+    const sys = this.system;
+    const REINFORCE_FACTOR = 1.05;
+    const MAX_REINFORCE_MASS = sys.c * 20; // capped well below TRAP_MASS_THRESHOLD
+
+    for (let i = 1; i < path.length - 1; i++) {
+      // skip source and target
+      const id = path[i];
+      if (!sys.isAllocated(id)) continue;
+      if (sys.operatorClass[id] !== 0) continue; // semantic atoms only
+      const m = sys.mass[id];
+      if (m <= 0) continue;
+      sys.mass[id] = Math.min(m * REINFORCE_FACTOR, MAX_REINFORCE_MASS);
+      sys.update(id);
+    }
   }
 
   /**

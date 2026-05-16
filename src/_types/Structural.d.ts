@@ -79,6 +79,12 @@ declare namespace Memory {
     coherence: number;
     /** Actions taken by the coherence loop during this challenge. */
     learned: string[];
+    /**
+     * True when the coherent result used a bridge candidate whose label is
+     * NOT in the fact text — indicating the system reached the answer via a
+     * stepping stone from a different domain (generalization signal).
+     */
+    hasGeneralizationSignal: boolean;
   }
 
   interface ValidationReport {
@@ -107,10 +113,16 @@ declare namespace Memory {
     ): Promise<void>;
     checkInterferencePattern(
       inputSequence: Uint32Array
-    ): Promise<{ ids: Uint32Array; slotFlags: bigint } | null>;
+    ): Promise<{ ids: Uint32Array; slotFlags: bigint; energy: number } | null>;
 
     signatureForText(text: string): string;
     rawFactExists(fact: string): Promise<boolean>;
+    storeFact(
+      fact: string,
+      source: string,
+      confidence: number,
+      signature: string
+    ): Promise<void>;
 
     sampleForChallenge(limit: number): Promise<ChallengeCandidate[]>;
     updateKnowledgeState(

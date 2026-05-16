@@ -428,7 +428,7 @@ class System implements Root.ManifoldView {
 
   /**
    * Replaces the free-list allocator, transferring any existing entries to the new one.
-   * Called by ManifoldManager to wire in TMR protection after construction.
+   * Called by ManifoldLifecycle to wire in TMR protection after construction.
    */
   public setAllocator(allocator: Root.FreeList): void {
     while (this.freeList.length > 0) {
@@ -653,7 +653,10 @@ class System implements Root.ManifoldView {
    */
   public update(id: number, from?: string): void {
     const m = this.mass[id];
-    const s = Math.max(this.scope[id], this.epsilon);
+    // Scope is now a pure identity tag (symbolIdx); use the fixed PRECEPT_SCALE
+    // constant instead so derived properties stay numerically stable regardless
+    // of which symbol index was assigned.
+    const s = DOPAT_CONFIG.PHYSICS.PRECEPT_SCALE;
     const d = this.depth[id];
     const t = this.time[id];
 
@@ -666,7 +669,7 @@ class System implements Root.ManifoldView {
     this.entropyRate[id] = Math.min((t / s) * physicalScale, this.maxilon);
     // Energy Layer Intersection (posZ:posX)
     this.potency[id] = Math.min(
-      (d / Math.max(m, this.epsilon)) * physicalScale,
+      (d / Math.max(Math.abs(m), this.epsilon)) * physicalScale,
       this.maxilon
     );
     // Intensity Layer Intersection (posZ:posY)
@@ -767,28 +770,29 @@ class System implements Root.ManifoldView {
 
   /**
    * Temporal Manifold Dynamics: simulates the passage of time and logical friction.
-   * Matter decays exponentially while Age (time) increases based on per-precept rate.
+   * Matter decays exponentially while temporal freshness (posW) fades,
+   * and low-mass precepts drift toward the manifold origin.
    *
-   * @param deltaTime Elapsed simulation time.
+   * @param deltaTime Elapsed simulation time in milliseconds.
    */
   public decay(deltaTime: number): void {
-    const VACUUM_THRESHOLD = DOPAT_CONFIG.DRIFT_THRESHOLD * 0.001; // Critical threshold before deletion
-    const CRITICAL_ENTROPY = 100.0; // Point at which logic becomes purely chaotic noise
+    const dtSec = deltaTime / 1000;
+    const VACUUM_THRESHOLD = DOPAT_CONFIG.DRIFT_THRESHOLD * 0.001;
+    const CRITICAL_ENTROPY = 100.0;
+    // Freshness (posW) decays continuously across ALL allocated atoms.
+    const ageFactor = Math.exp(-DOPAT_CONFIG.PHYSICS.AGE_DECAY_RATE * dtSec);
 
     for (let i = 0; i < this.length; i++) {
-      // Skip deallocated locations.
       if (!this.isAllocated(i)) continue;
 
       const rate = this.decayRate[i] || 0.01;
 
-      // Age increases based on the decay constant (scaled to seconds).
-      this.time[i] += rate * (deltaTime / 1000);
-      // Matter decays exponentially over time (scaled to seconds).
-      this.mass[i] *= Math.exp(-rate * (deltaTime / 1000));
+      // Age accumulates (used for entropyRate = time / PRECEPT_SCALE).
+      this.time[i] += rate * dtSec;
+      // Mass decays exponentially.
+      this.mass[i] *= Math.exp(-rate * dtSec);
 
-      // Thermodynamic Forgetting (Topological Pruning)
-      // If a precept's mass drops below the vacuum threshold and its entropy is critically high,
-      // it signifies "heat death" for this node. We garbage-collect it to prevent topological noise.
+      // Thermodynamic Forgetting: prune heat-dead nodes.
       if (
         Math.abs(this.mass[i]) < VACUUM_THRESHOLD &&
         this.entropyRate[i] > CRITICAL_ENTROPY
@@ -797,18 +801,39 @@ class System implements Root.ManifoldView {
         continue;
       }
 
-      // Natural Drift: dead or forgotten precepts drift towards the manifold origin.
-      // Applied using a continuous exponential decay model instead of an explicit Euler step.
+      // Temporal freshness decay: posW = "how recently was this concept used?"
+      // Decays for every allocated atom so stale concepts lose their energy
+      // advantage in the Resolver's forward pass over time.
+      this.posW[i] = Math.max(0, this.posW[i] * ageFactor);
+
+      // Spatial drift: low-mass precepts lose their positional anchor.
+      // Bug-fix: original code used raw deltaTime (ms) as seconds in the
+      // exponent, causing near-instant position erasure for large tick intervals.
       if (Math.abs(this.mass[i]) < DOPAT_CONFIG.DRIFT_THRESHOLD) {
-        const driftDamping = Math.exp(-0.1 * deltaTime);
+        const driftDamping = Math.exp(-0.1 * dtSec);
         this.posX[i] *= driftDamping;
         this.posY[i] *= driftDamping;
         this.posZ[i] *= driftDamping;
-        this.posW[i] *= driftDamping;
+        // posW drift is already handled above; do not double-decay.
       }
 
-      // Re-calculate derived properties after decay.
       this.update(i, "decay");
+    }
+  }
+
+  /**
+   * Refreshes the temporal freshness (posW) of every precept that carries the
+   * given scope, setting it to AGE_FRESHNESS (1.0).
+   *
+   * Call this whenever a concept participates in a successful inference — vault
+   * hit, bridge resolution, or explicit user reference.  The freshness decays
+   * back toward zero between ticks, giving recently-used concepts a head start
+   * in the Resolver's forward-energy seeding.
+   */
+  public refreshConceptAge(scope: number): void {
+    for (const id of this.scopeIndex.get(scope) ?? []) {
+      this.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
+      this.update(id); // keep checksum in sync with the new posW
     }
   }
 
@@ -870,7 +895,7 @@ class System implements Root.ManifoldView {
 /**
  * A mutable reference cell wrapping a System instance.
  * Components that hold a SystemRef always dereference via `.current`, so
- * ManifoldManager can atomically redirect every holder to a new System in a
+ * ManifoldLifecycle can atomically redirect every holder to a new System in a
  * single call to `swap()`, no per-component update required.
  */
 class SystemRef {

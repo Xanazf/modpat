@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { OperatorClass } from "@core_i/System";
 import { DOPAT_CONFIG } from "@config";
 import { DatabaseContext } from "@core_s/DatabaseContext";
-import { ManifoldManager, TMRFreeList } from "@core_s/ManifoldManager";
+import { ManifoldLifecycle, TMRFreeList } from "@core_s/ManifoldLifecycle";
 import { DeltaQueue } from "@core_s/DeltaQueue";
 import { SystemPersistence } from "@core_s/Persistence";
 import type SpectralAtomizer from "@atomics/SpectralAtomizer";
@@ -23,7 +23,7 @@ export async function executeSignalManagerSuite() {
     const dbCtx = new DatabaseContext(":memory:");
     const dbConn = await dbCtx.connect();
     const persistence = new SystemPersistence(dbConn);
-    const manager = new ManifoldManager(
+    const manager = new ManifoldLifecycle(
       env.system,
       emergencySystem,
       persistence
@@ -196,7 +196,7 @@ export async function executeSignalManagerSuite() {
       );
     });
 
-    // ── TMR 5a hardening tests (isolated allocator, not the shared manager one) ──
+    // TMR 5a hardening tests (isolated allocator, not the shared manager one)
 
     await it("Test 6: TMR single-buffer CRC corruption corrected by majority vote", async () => {
       const tmr = new TMRFreeList();
@@ -279,7 +279,7 @@ export async function executeSignalManagerSuite() {
       );
     });
 
-    // ── Track 6 — DeltaQueue concurrency model ──
+    // Track 6 — DeltaQueue concurrency model
 
     await it("Test 8: DeltaQueue unit — drain returns all posted records and resets length", async () => {
       const dq = new DeltaQueue(100);
@@ -302,13 +302,13 @@ export async function executeSignalManagerSuite() {
       );
     });
 
-    await it("Test 9: ManifoldManager — FreeDelta is buffered until tick()", async () => {
+    await it("Test 9: ManifoldLifecycle — FreeDelta is buffered until tick()", async () => {
       const base2 = await TestHarness.getEnvironment("base");
       const emergency2 = (await TestHarness.getEnvironment("base")).system;
       const dbCtx2 = new DatabaseContext(":memory:");
       const dbConn2 = await dbCtx2.connect();
       const persistence2 = new SystemPersistence(dbConn2);
-      const manager2 = new ManifoldManager(
+      const manager2 = new ManifoldLifecycle(
         base2.system,
         emergency2,
         persistence2

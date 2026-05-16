@@ -173,6 +173,29 @@ class Listener {
     const { signature: questionSignature } =
       this.store.abstractSequence(queryQuanta);
     this.lastSignature = questionSignature;
+
+    // Phase 0: Vault cache lookup — moved here from Resolver so the Resolver is
+    // a pure physics engine.  Uses queryQuanta (the topological query WITHOUT the
+    // Sink "|-") because crystallization also uses that same sequence as the key.
+    {
+      const cached = await this.store.checkInterferencePattern(queryQuanta);
+      if (cached && cached.ids.length > 0) {
+        const decoded = this.atomizer
+          .decodeSequence(cached.ids, this.system)
+          .trim();
+        if (decoded && decoded !== "unknown") {
+          metrics.increment("resolution.phase0.hit");
+          this.resolver.reinforceVaultHit(queryQuanta, cached.ids);
+          const response =
+            wasIdentityQuery && topologicalQuery.trim() === "i am"
+              ? `i am ${decoded}`
+              : decoded;
+          this.respond(response);
+          return response;
+        }
+      }
+    }
+
     const derivationPath = await this.resolver.resolveSequence(queryQuanta);
     const inferredMeaning = this.atomizer
       .decodeSequence(derivationPath, this.system)
@@ -266,9 +289,7 @@ class Listener {
       return fallback;
     }
 
-    this.respond(
-      `[Unfolder] Expanding logical void for: ${attractionCenter}...`
-    );
+    logger.debug(`[Unfolder] Expanding logical void for: ${attractionCenter}`);
 
     const voidScope = this.atomizer.getSymbolScope("void", false);
     const voidId = this.system.createLocation(-this.system.c, voidScope);
@@ -299,18 +320,24 @@ class Listener {
     }
     const postExpandLength = this.system.length;
 
-    const reDerivationPath = await this.resolver.resolveSequence(queryQuanta);
+    // Phase 4: re-resolve with the richer manifold using the coherence loop.
+    // resolveCoherent is strictly more powerful than resolveSequence: it iterates,
+    // scores amplitude × contrast, and diagnoses void/conflict/weak explicitly.
+    const coherentResult = await this.resolver.resolveCoherent(queryQuanta, {
+      maxIterations: 3,
+    });
     const reInferredMeaning = this.atomizer
-      .decodeSequence(reDerivationPath, this.system)
+      .decodeSequence(coherentResult.ids, this.system)
       .replace(/\s+/g, " ")
       .trim();
-
     const normalizedReInferred = reInferredMeaning.replace(/[^a-z0-9]/g, "");
 
     if (
       reInferredMeaning &&
       normalizedReInferred !== normalizedTopQuery &&
-      reInferredMeaning !== "unknown"
+      reInferredMeaning !== "unknown" &&
+      (coherentResult.diagnosis === "coherent" ||
+        coherentResult.diagnosis === "weak")
     ) {
       metrics.increment("resolution.phase4.hit");
       this.respond(reInferredMeaning);
@@ -319,120 +346,56 @@ class Listener {
 
     if (postExpandLength <= preExpandLength) {
       metrics.increment("resolution.miss");
-      const fallback = "unknown";
-      this.respond(fallback);
-      return fallback;
+      this.respond("unknown");
+      return "unknown";
     }
 
-    const targetQuantum =
-      postExpandLength > preExpandLength
-        ? postExpandLength - 1
-        : queryQuanta[
-            Math.max(
-              0,
-              (() => {
-                let idx = queryQuanta.length - 1;
-                while (
-                  idx >= 0 &&
-                  this.system.operatorClass[queryQuanta[idx]] !==
-                    OperatorClass.None
-                )
-                  idx--;
-                return Math.max(0, idx);
-              })()
-            )
-          ];
+    // Phase 5: Extract a coherent sentence from the raw fetched prose.
+    //
+    // The geodesic approach on Wikipedia-expanded content produces word salad:
+    // unstructured text ingested as individual token-precepts doesn't form the
+    // operator→operand inferential topology the Resolver needs, so any path
+    // through those precepts is semantically arbitrary. Instead, use the prose
+    // that the Unfolder already fetched — ingestion built long-term manifold
+    // topology, now return the most query-relevant sentence as the immediate answer.
+    const rawContent = this.unfolder.lastFetchedContent;
+    if (rawContent) {
+      // Split on sentence boundaries, score each sentence by keyword overlap.
+      const sentences = rawContent
+        .replace(/\s+/g, " ")
+        .split(/(?<=[.!?])\s+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 15);
 
-    const isHowQuery = query.toLowerCase().includes("how");
-    if (isHowQuery && queryQuanta.length > 0) {
-      const bestActionId = preExpandLength;
-
-      if (bestActionId !== -1) {
-        const boostScopes = new Set<number>();
-        const keywordTokens = new Set<string>();
+      let best = "";
+      let bestScore = -1;
+      for (const s of sentences) {
+        const lower = s.toLowerCase();
+        let score = 0;
         for (const kw of heatNodes) {
-          for (const tok of kw.toLowerCase().split(/\s+/)) {
-            if (tok.length > 2) keywordTokens.add(tok);
-          }
+          if (lower.includes(kw)) score++;
         }
-        for (let i = preExpandLength; i < postExpandLength; i++) {
-          const sym = this.atomizer.resolveScope(this.system.scope[i]);
-          if (sym && keywordTokens.has(sym))
-            boostScopes.add(this.system.scope[i]);
+        // Prefer longer sentences at equal score (more informative).
+        if (
+          score > bestScore ||
+          (score === bestScore && s.length > best.length)
+        ) {
+          bestScore = score;
+          best = s;
         }
+      }
+      if (!best && sentences.length > 0) best = sentences[0];
 
-        logger.debug(`[DEBUG Phase5] heatNodes: ${JSON.stringify(heatNodes)}`);
-        logger.debug(
-          `[DEBUG Phase5] keywordTokens: ${JSON.stringify([...keywordTokens])}`
-        );
-        logger.debug(`[DEBUG Phase5] boostScopes size: ${boostScopes.size}`);
-        logger.debug(
-          `[DEBUG Phase5] bestActionId: ${bestActionId} => "${this.atomizer.resolveScope(this.system.scope[bestActionId])}", posZ=${this.system.posZ[bestActionId].toFixed(2)}`
-        );
-        logger.debug(
-          `[DEBUG Phase5] targetQuantum: ${targetQuantum} => "${this.atomizer.resolveScope(this.system.scope[targetQuantum])}", posZ=${this.system.posZ[targetQuantum].toFixed(2)}`
-        );
-        logger.debug(
-          `[DEBUG Phase5] preExpandLength: ${preExpandLength}, postExpandLength: ${postExpandLength}`
-        );
-
-        const layerBounds = new Map<number, { first: number; last: number }>();
-        for (let i = preExpandLength; i < postExpandLength; i++) {
-          const lk = Math.floor(
-            this.system.posZ[i] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
-          );
-          const b = layerBounds.get(lk);
-          if (!b) layerBounds.set(lk, { first: i, last: i });
-          else b.last = i;
-        }
-        const sortedLayers = [...layerBounds.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([, bounds]) => bounds);
-        logger.debug(`[DEBUG Phase5] layers: ${JSON.stringify(sortedLayers)}`);
-
-        const combinedIds: number[] = [];
-        for (let seg = 0; seg < sortedLayers.length; seg++) {
-          const { first, last } = sortedLayers[seg];
-          const segPath = await this.resolver.calculateGeodesic(
-            first,
-            last,
-            128,
-            undefined,
-            undefined,
-            preExpandLength
-          );
-          const skipFirst =
-            DOPAT_CONFIG.structural.INTRA_LAYER_SKIP_FIRST && seg > 0;
-          for (let k = skipFirst ? 1 : 0; k < segPath.length; k++) {
-            const id = segPath[k];
-            if (
-              combinedIds.length === 0 ||
-              combinedIds[combinedIds.length - 1] !== id
-            ) {
-              combinedIds.push(id);
-            }
-          }
-        }
-
-        if (combinedIds.length > 0) {
-          const answerString = this.atomizer
-            .decodeSequence(new Uint32Array(combinedIds), this.system)
-            .replace(/\s+/g, " ")
-            .trim();
-
-          if (answerString && answerString !== "unknown") {
-            metrics.increment("resolution.phase5.hit");
-            this.respond(`[Geodesic Generative]: ${answerString}`);
-            return answerString;
-          }
-        }
+      if (best) {
+        metrics.increment("resolution.phase5.hit");
+        this.respond(best);
+        return best;
       }
     }
 
     metrics.increment("resolution.miss");
-    const fallback = "unknown";
-    this.respond(fallback);
-    return fallback;
+    this.respond("unknown");
+    return "unknown";
   }
 
   private async resolveThroughSystem(

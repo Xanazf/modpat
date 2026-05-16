@@ -1,6 +1,6 @@
 /**
  * Typed deltas posted by async producers (dreamCycle, Unfolder, GPU readbacks)
- * and drained synchronously by ManifoldManager.tick().
+ * and drained synchronously by ManifoldLifecycle.tick().
  */
 declare namespace Delta {
   interface Ingest {

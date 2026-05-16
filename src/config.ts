@@ -13,6 +13,25 @@ const DOPAT_CONFIG = {
   USE_GPU: true,
   DRIFT_THRESHOLD: 100.0,
   PHYSICS: {
+    /**
+     * Normalization constant for derived physical properties (density, entropyRate, intensity).
+     * Previously this was the atom's scope value, which happened to be ~1024 for most
+     * atoms under the old SEMANTIC_OFFSET scheme.  Now that scope is a pure identity tag
+     * (small integer), this constant makes the physics self-consistent without scope coupling.
+     */
+    PRECEPT_SCALE: 1024.0,
+    /**
+     * Initial posW (temporal freshness) assigned to a precept when it is first ingested
+     * or when its concept is accessed via a vault hit.  Always 1.0 (maximum freshness).
+     */
+    AGE_FRESHNESS: 1.0,
+    /**
+     * Per-second exponential decay rate for posW freshness.
+     * freshness(t) = freshness(0) × e^(-AGE_DECAY_RATE × t_seconds)
+     * At 0.05 → half-life ≈ 14 s.  Concepts stay warm for roughly a minute
+     * before their energy bonus in the Resolver becomes negligible.
+     */
+    AGE_DECAY_RATE: 0.05,
     INFLUENCE_RADIUS: 400.0,
     INFLUENCE_FALLOFF: 40.0,
     PENALTY_RADIUS: 100.0,
@@ -29,8 +48,12 @@ const DOPAT_CONFIG = {
   },
 
   resolver: {
-    /** Scope equality tolerance; increase if floating-point noise causes false negatives. */
-    SCOPE_EPSILON: 1e-6,
+    /**
+     * Energy bonus applied to the Resolver's forward-pass initial vibration
+     * for each token whose concept (scope) was recently accessed (posW > 0).
+     * freshness_bonus = posW[id] × AGE_ENERGY_WEIGHT (capped so total ≤ 1.0).
+     */
+    AGE_ENERGY_WEIGHT: 0.15,
     /** Propagation damping factor. */
     PROPAGATION_ALPHA: 0.85,
     /** Number of propagation iterations for stability. */
@@ -119,17 +142,36 @@ const DOPAT_CONFIG = {
   },
 
   observability: {
-    /** Emit a JSONL metrics snapshot every N ManifoldManager ticks. */
+    /** Emit a JSONL metrics snapshot every N ManifoldLifecycle ticks. */
     METRICS_EMIT_INTERVAL_TICKS: 100,
     /** Path for the append-only JSONL metrics log. */
     METRICS_LOG_PATH: "./logs/modpat_metrics.jsonl",
+    /**
+     * How often Runtime.startTick() fires the lightweight maintenance tick
+     * (decay + age refresh).  Chosen to be slow enough not to interfere with
+     * interactive REPL responsiveness while still providing meaningful decay.
+     */
+    TICK_INTERVAL_MS: 5000,
+  },
+
+  orbital: {
+    /**
+     * Base gravitational radius for an atom's zone of influence.
+     * orbitRadius(id) = BASE_RADIUS × √(|mass| / (c² + |mass|))
+     * Always in [0, BASE_RADIUS). Set to a meaningful fraction of typical
+     * inter-atom spacing in the manifold.
+     */
+    BASE_RADIUS: 50.0,
+    /**
+     * Atoms with |mass| < system.c × MIN_PARENT_MASS_RATIO are "dust":
+     * they never act as orbital parents even when geometrically close.
+     */
+    MIN_PARENT_MASS_RATIO: 0.1,
   },
 };
 
 export function validateConfig(): void {
   const { resolver, mapper, memory, structural } = DOPAT_CONFIG;
-
-  if (resolver.SCOPE_EPSILON <= 0) throw new Error("SCOPE_EPSILON must be > 0");
 
   if (resolver.PROPAGATION_ALPHA <= 0 || resolver.PROPAGATION_ALPHA >= 1)
     throw new Error("PROPAGATION_ALPHA must be in (0, 1)");
@@ -171,9 +213,6 @@ const SYSTEM_CONFIG = {
     STABILITY_THRESHOLD: 0.95,
   },
   DOD_EMBEDDING: {
-    LOGIC_OFFSET: 0,
-    SEMANTIC_OFFSET: 1024,
-    BASE_FREQUENCY: 1.0,
     GLOVE_PATH:
       "data/wiki_giga_2024_50_MFT20_vectors_seed_123_alpha_0.75_eta_0.075_combined.txt",
     UMAP_DICT_PATH: "data/dictionary.txt",

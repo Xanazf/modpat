@@ -5,7 +5,7 @@ import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
 import Mapper from "./Mapper";
-import Synthesizer from "./Synthesizer";
+import { Synthesizer, type CodePattern } from "./Coder";
 import System, { OperatorClass, SlotType, SystemRef } from "./System";
 import { GridIndex4D } from "../structural/GridIndex4D";
 
@@ -38,6 +38,26 @@ export interface CoherentResult {
    *  - "exhausted" — max iterations reached without crossing threshold
    */
   diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
+}
+
+/**
+ * A token that sits at the intersection of the forward and backward resonance waves.
+ *
+ * Bridge candidates emerge naturally from bidirectional propagation:
+ *  - High forwardEnergy  → reached from the premises
+ *  - High backwardEnergy → needed to reach the goal (Sink)
+ *  - High bridgeScore    → forward and backward waves meet here (inference bridge)
+ *  - isMissingLink       → needed by goal but not yet supported by premises;
+ *                          the system should ask about this token
+ */
+export interface BridgeCandidate {
+  idx: number;
+  id: number;
+  label: string;
+  forwardEnergy: number;
+  backwardEnergy: number;
+  bridgeScore: number;
+  isMissingLink: boolean;
 }
 
 /** A token found by resonance-peak analysis to exhibit operator-like wave topology. */
@@ -80,6 +100,13 @@ export interface ResolverDiagnostics {
   maxNetEnergy: number;
   /** Operators discovered from wave resonance peaks during this resolution pass. */
   discoveredOperators: DiscoveredOperator[];
+  /**
+   * Bridge candidates from the bidirectional resonance pass, sorted by
+   * bridgeScore descending.  Entries with isMissingLink=true are the tokens
+   * that the goal needs but the current premises don't yet supply — they are
+   * the natural targets for targeted inquiry.
+   */
+  bridgeCandidates: BridgeCandidate[];
 }
 
 /**
@@ -88,7 +115,7 @@ export interface ResolverDiagnostics {
  * dynamical system where energy (resonance) vibrates through a manifold.
  */
 export default class Resolver implements Resolution.Engine {
-  /** Shared reference cell, swap fires on ManifoldManager failover. */
+  /** Shared reference cell, swap fires on ManifoldLifecycle failover. */
   private systemRef: SystemRef;
   private get system(): Root.ManifoldView {
     return this.systemRef.current;
@@ -118,6 +145,12 @@ export default class Resolver implements Resolution.Engine {
   private E_new_buffer: Float64Array;
   /** Buffer for temporal vibration updates. */
   private T_next_buffer: Float64Array;
+  /** Backward resonance energy vector — energy propagating from goal toward premises. */
+  private T_back_buffer: Float64Array;
+  /** Scratch buffer for the backward propagation step. */
+  private T_back_next_buffer: Float64Array;
+  /** Accumulated backward energy per node across all backward propagation steps. */
+  private backwardEnergyBuffer: Float64Array;
   /** Temporary storage for identified direct logical scopes. */
   private directScopesBuffer: Float64Array;
   /** Result buffer for the final inferred quantum sequence. */
@@ -125,6 +158,17 @@ export default class Resolver implements Resolution.Engine {
   /** 4D spatial index reused across fuzzy-centroid lookups; rebuilt when system length changes. */
   private readonly spatialIndex = new GridIndex4D();
   private lastIndexedLength = -1;
+
+  /**
+   * Evidence accumulator for operator discovery.
+   * Maps precept ID → { class, count } so a token must appear as a candidate
+   * across OPERATOR_DISCOVERY_CONFIRMATION_THRESHOLD queries before being
+   * permanently promoted.  Single-query false positives never contaminate the manifold.
+   */
+  private operatorEvidence = new Map<
+    number,
+    { cls: OperatorClass; count: number }
+  >();
 
   /** Sink strength of the winning target node from the most recent resolveSequence call. */
   public lastSinkStrength = 0;
@@ -161,6 +205,9 @@ export default class Resolver implements Resolution.Engine {
     this.E_curr_buffer = new Float64Array(maxN * maxN);
     this.E_new_buffer = new Float64Array(maxN * maxN);
     this.T_next_buffer = new Float64Array(maxN);
+    this.T_back_buffer = new Float64Array(maxN);
+    this.T_back_next_buffer = new Float64Array(maxN);
+    this.backwardEnergyBuffer = new Float64Array(maxN);
     this.directScopesBuffer = new Float64Array(maxN);
     this.resultIdsBuffer = new Uint32Array(maxN);
 
@@ -215,6 +262,35 @@ export default class Resolver implements Resolution.Engine {
   /**
    * Disposes of GPU resources and clean up the engine state.
    */
+  /**
+   * Called by Listener when a vault cache hit is found (Phase 0 now lives there).
+   * Boosts masses and refreshes concept ages for both the input and output atoms,
+   * maintaining the vault→physics feedback loop from inside the Resolver's context.
+   */
+  public reinforceVaultHit(
+    inputIds: Uint32Array,
+    outputIds: Uint32Array
+  ): void {
+    this.boostAtomMasses(inputIds);
+    this.boostAtomMasses(outputIds);
+  }
+
+  private boostAtomMasses(ids: Uint32Array): void {
+    const BOOST = 1.02;
+    const CAP = this.system.c * 30;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (!this.system.isAllocated(id)) continue;
+      const m = this.system.mass[id];
+      if (m <= 0) continue;
+      this.system.mass[id] = Math.min(m * BOOST, CAP);
+      this.system.update(id);
+      // Refresh temporal freshness: this concept just participated in a proven
+      // inference — it should stay warm in the forward-energy seeding.
+      this.system.refreshConceptAge(this.system.scope[id]);
+    }
+  }
+
   public async dispose(): Promise<void> {
     if (this.gpu) {
       await this.gpu.dispose();
@@ -224,7 +300,7 @@ export default class Resolver implements Resolution.Engine {
 
   /**
    * Runs the physics simulation (Phases 2–7) without consulting the vault (Phase 0)
-   * or the NLP derivation rules (Phase 1). Used by SelfTeacher to test whether the
+   * or the NLP derivation rules (Phase 1). Used by Learner to test whether the
    * system can independently reproduce a result from manifold topology alone.
    *
    * @param sequenceIds The input sequence of quantum IDs (should end with a Sink token).
@@ -248,6 +324,13 @@ export default class Resolver implements Resolution.Engine {
    * @param sequenceIds The input sequence of quantum IDs.
    * @returns The resolved sequence representing the conclusion.
    */
+  /**
+   * Optional set of scopes from working memory — any token in the current sequence
+   * whose scope appears here gets a warm-start energy bonus in the forward pass,
+   * making recently-established concepts naturally "louder" in the resonance.
+   */
+  public contextScopes: Set<number> = new Set();
+
   public async resolveSequence(sequenceIds: Uint32Array): Promise<Uint32Array> {
     const N = sequenceIds.length;
     if (N === 0) return new Uint32Array(0);
@@ -282,18 +365,9 @@ export default class Resolver implements Resolution.Engine {
     }
 
     if (queryOpClass === OperatorClass.IdentityShift && subjectIds.length > 0) {
-      // Phase 0a: Vault cache — skip in probe mode.
-      // Probe mode tests "can I derive this from manifold topology alone?" so
-      // crystallized cached proofs must be bypassed.
-      if (!this.probeMode && this.store) {
-        const cached = await this.store.checkInterferencePattern(sequenceIds);
-        if (cached && cached.ids.length > 0) {
-          logger.debug(
-            `[DEBUG RESOLVER] Phase 0 matched IDs (CACHED): ${cached.ids.join(",")}, words: ${this.atomizer.decodeSequence(cached.ids, this.system)}`
-          );
-          return cached.ids;
-        }
-      }
+      // Phase 0a (vault cache) was moved to Listener.processQuestion so the
+      // Resolver stays a pure physics engine.  Listener calls reinforceVaultHit()
+      // on a hit and returns early before reaching here.
 
       // Phase 0b: Manifold semantic lookup — always runs, even in probe mode.
       // This scans the live ingested token graph (scope index, ring buffer, fuzzy
@@ -312,6 +386,10 @@ export default class Resolver implements Resolution.Engine {
         // Crystallize only in normal mode — probe mode is read-only.
         if (!this.probeMode && this.store) {
           await this.store.crystallizeProof(sequenceIds, result, 1.0);
+          // Boost masses: a freshly derived and crystallized inference also
+          // reinforces its atoms so the path becomes more prominent over time.
+          this.boostAtomMasses(sequenceIds);
+          this.boostAtomMasses(result);
         }
         return result;
       }
@@ -331,6 +409,32 @@ export default class Resolver implements Resolution.Engine {
     energyVibration.fill(0);
     if (N > 0) energyVibration[0] = 1.0; // Seed the system with initial resonance energy.
 
+    // Working-memory warm start: tokens whose scope appears in recent conclusions
+    // get bonus energy so established context naturally amplifies in the forward wave.
+    if (this.contextScopes.size > 0) {
+      const CONTEXT_WEIGHT = 0.35;
+      for (let i = 1; i < N; i++) {
+        if (this.contextScopes.has(this.system.scope[sequenceIds[i]])) {
+          energyVibration[i] = Math.max(energyVibration[i], CONTEXT_WEIGHT);
+        }
+      }
+    }
+
+    // Age-freshness bonus: concepts that were recently accessed (high posW) get
+    // a head start in the forward wave.  This is the manifold-level equivalent of
+    // working memory — concepts don't just stay warm for a few session turns, they
+    // retain a decaying advantage until the Runtime tick fades them out.
+    const ageWeight = DOPAT_CONFIG.resolver.AGE_ENERGY_WEIGHT;
+    for (let i = 0; i < N; i++) {
+      const freshness = this.system.posW[sequenceIds[i]];
+      if (freshness > 0.01) {
+        energyVibration[i] = Math.min(
+          1.0,
+          energyVibration[i] + freshness * ageWeight
+        );
+      }
+    }
+
     // Initialize the Transfer Matrix (W) defining the conductivity of logic.
     const transferMatrix = this.W_buffer.subarray(0, N * N);
     transferMatrix.fill(0);
@@ -349,12 +453,12 @@ export default class Resolver implements Resolution.Engine {
       // Identify the Sink Node: the logical conclusion point.
       if (opClass === OperatorClass.Sink) sinkNodeIdx = i;
 
-      // Constructive Interference: Tokens sharing the same scope (meaning) attract energy.
+      // Constructive Interference: Tokens sharing the same scope (same symbol) attract energy.
       for (let j = 0; j < N; j++) {
         if (
           i !== j &&
-          Math.abs(this.system.scope[sequenceIds[j]] - scope) <
-            DOPAT_CONFIG.resolver.SCOPE_EPSILON
+          this.system.scope[sequenceIds[j]] === scope &&
+          scope !== 0
         ) {
           transferMatrix[i * N + j] = Math.max(
             transferMatrix[i * N + j],
@@ -402,7 +506,6 @@ export default class Resolver implements Resolution.Engine {
     // ¬¬A does not match here because the second ¬ negates an operator token, not a
     // semantic one, so no IdentityShift consequent is found and no edge is written.
     {
-      const eps = DOPAT_CONFIG.resolver.SCOPE_EPSILON;
       for (let i = 0; i < N - 1; i++) {
         if (
           this.system.operatorClass[sequenceIds[i]] !== OperatorClass.Inversion
@@ -421,10 +524,7 @@ export default class Resolver implements Resolution.Engine {
               OperatorClass.IdentityShift &&
             j + 1 < N - 1
           ) {
-            if (
-              Math.abs(this.system.scope[sequenceIds[j + 1]] - negatedScope) <
-              eps
-            ) {
+            if (this.system.scope[sequenceIds[j + 1]] === negatedScope) {
               const bPos = j + 1;
               const aPos = j - 1;
               const backVal = -DOPAT_CONFIG.resolver.W_LENSING;
@@ -439,6 +539,11 @@ export default class Resolver implements Resolution.Engine {
 
     // Energy Conservation (Diffusion Matrix Normalization)
     // Ensures resonance energy does not magically multiply and explode the matrix.
+    // After normalization, constructive-interference entries get a floor so tokens
+    // with many same-scope matches don't get diluted into noise.  The floor is
+    // W_CONSTRUCTIVE / (N + 1), ensuring at least one same-scope token keeps a
+    // meaningful signal even in a dense sequence.
+    const constructiveFloor = DOPAT_CONFIG.resolver.W_CONSTRUCTIVE / (N + 1);
     for (let i = 0; i < N; i++) {
       let rowSum = 0;
       for (let j = 0; j < N; j++) {
@@ -447,6 +552,20 @@ export default class Resolver implements Resolution.Engine {
       if (rowSum > 0) {
         for (let j = 0; j < N; j++) {
           transferMatrix[i * N + j] /= rowSum;
+        }
+      }
+      // Floor: constructive entries must stay at least constructiveFloor.
+      const scope_i = this.system.scope[sequenceIds[i]];
+      if (scope_i !== 0) {
+        for (let j = 0; j < N; j++) {
+          if (i !== j && this.system.scope[sequenceIds[j]] === scope_i) {
+            if (
+              transferMatrix[i * N + j] > 0 &&
+              transferMatrix[i * N + j] < constructiveFloor
+            ) {
+              transferMatrix[i * N + j] = constructiveFloor;
+            }
+          }
         }
       }
     }
@@ -528,6 +647,84 @@ export default class Resolver implements Resolution.Engine {
       accumulatedResonance
     );
 
+    // Phase 3.6: Backward Resonance Pass — goal-directed propagation.
+    //
+    // Propagates energy backward from the Sink node through W^T (the transposed
+    // transfer matrix).  W[i→j] in the forward direction becomes W^T[j→i] in the
+    // backward direction: if i energises j forward, then j energises i backward.
+    //
+    // After both passes:
+    //  forward_energy[i]  = how strongly the premises DRIVE token i
+    //  backward_energy[i] = how strongly the goal REQUIRES token i
+    //  bridge_score       = forward × backward (tokens where waves meet)
+    //  missing_link       = high backward, low forward → needed but not yet supplied
+    //
+    // Missing links are the system's natural question targets: "to reach this
+    // conclusion I need to understand X — can you help?"
+    const T_back = this.T_back_buffer.subarray(0, N);
+    const T_back_nx = this.T_back_next_buffer.subarray(0, N);
+    const backwardEnergy = this.backwardEnergyBuffer.subarray(0, N);
+    T_back.fill(0);
+    T_back_nx.fill(0);
+    backwardEnergy.fill(0);
+
+    if (sinkNodeIdx !== -1) {
+      T_back[sinkNodeIdx] = 1.0;
+      backwardEnergy[sinkNodeIdx] = 1.0;
+
+      for (
+        let step = 0;
+        step < DOPAT_CONFIG.resolver.PROPAGATION_ITERS;
+        step++
+      ) {
+        T_back_nx.fill(0);
+        for (let i = 0; i < N; i++) {
+          let sum = 0;
+          for (let j = 0; j < N; j++) {
+            // W^T[i][j] = W[j][i]: backward energy at j flows to i via the forward edge j→i
+            sum += transferMatrix[j * N + i] * T_back[j];
+          }
+          T_back_nx[i] = sum * logicalConductivity;
+          backwardEnergy[i] += T_back_nx[i];
+        }
+        T_back.set(T_back_nx);
+      }
+    }
+
+    // Compute per-node forward energy (total incoming from the accumulated forward matrix)
+    // and build the bridge candidate list.
+    const bridgeCandidates: BridgeCandidate[] = [];
+    const FWD_THRESHOLD = 0.05; // below this: not reached by premises
+    const BACK_THRESHOLD = 0.05; // above this: meaningfully required by goal
+
+    for (let i = 0; i < N; i++) {
+      if (this.system.operatorClass[sequenceIds[i]] !== OperatorClass.None)
+        continue;
+
+      let fwd = 0;
+      for (let j = 0; j < N; j++) {
+        if (j !== i) fwd += accumulatedResonance[j * N + i]; // incoming forward energy
+      }
+      const bwd = backwardEnergy[i];
+      const bridgeScore = fwd * bwd;
+      const isMissingLink = bwd > BACK_THRESHOLD && fwd < FWD_THRESHOLD;
+
+      if (bridgeScore > 0 || isMissingLink) {
+        bridgeCandidates.push({
+          idx: i,
+          id: sequenceIds[i],
+          label: this.atomizer
+            .decodeSequence(new Uint32Array([sequenceIds[i]]), this.system)
+            .trim(),
+          forwardEnergy: fwd,
+          backwardEnergy: bwd,
+          bridgeScore,
+          isMissingLink,
+        });
+      }
+    }
+    bridgeCandidates.sort((a, b) => b.bridgeScore - a.bridgeScore);
+
     // If no explicit Sink node (|-) was provided, return the original sequence.
     if (sinkNodeIdx === -1) return sequenceIds;
 
@@ -589,6 +786,7 @@ export default class Resolver implements Resolution.Engine {
       selectedTargetIdx: targetNodeIdx,
       maxNetEnergy,
       discoveredOperators: this.lastDiscoveredOperators,
+      bridgeCandidates,
     };
 
     logger.debug(
@@ -605,7 +803,6 @@ export default class Resolver implements Resolution.Engine {
     // excluded — they are the *given* negation, not the *inferred* one.  The most-negatively-
     // affected remaining operand is the new inference.  We return [not_token, that_operand].
     {
-      const eps = DOPAT_CONFIG.resolver.SCOPE_EPSILON;
       const directlyNegatedScopes = new Set<number>();
       let inversionTokenId = -1;
       for (let i = 0; i < N - 1; i++) {
@@ -619,11 +816,11 @@ export default class Resolver implements Resolution.Engine {
         }
       }
       if (inversionTokenId !== -1 && directlyNegatedScopes.size > 0) {
-        let minStrength = -DOPAT_CONFIG.resolver.SCOPE_EPSILON; // must be meaningfully negative
+        let minStrength = -1e-9; // must be meaningfully negative (physics threshold, not scope)
         let negatedConclusionId = -1;
         for (const c of allSinkCandidates) {
-          const isDirectlyNegated = [...directlyNegatedScopes].some(
-            s => Math.abs(this.system.scope[c.id] - s) < eps
+          const isDirectlyNegated = directlyNegatedScopes.has(
+            this.system.scope[c.id]
           );
           if (!isDirectlyNegated && c.strength < minStrength) {
             minStrength = c.strength;
@@ -773,30 +970,13 @@ export default class Resolver implements Resolution.Engine {
     if (direct && direct.ids.length > 0) {
       const template = this.atomizer.decodeSequence(direct.ids, this.system);
       const contextTokens = Array.from(sequenceIds)
+        .filter(id => this.system.operatorClass[id] === OperatorClass.None)
         .map(id =>
           this.atomizer
             .decodeSequence(new Uint32Array([id]), this.system)
             .trim()
         )
-        .filter(
-          t =>
-            t &&
-            this.system.operatorClass[
-              sequenceIds[
-                Array.from(sequenceIds).indexOf(
-                  sequenceIds.find(
-                    (_, i) =>
-                      this.atomizer
-                        .decodeSequence(
-                          new Uint32Array([sequenceIds[i]]),
-                          this.system
-                        )
-                        .trim() === t
-                  ) ?? 0
-                )
-              ]
-            ] === OperatorClass.None
-        );
+        .filter(t => t.length > 0);
 
       const varBindings = this.synthesizer.buildBindings(
         contextTokens,
@@ -822,7 +1002,7 @@ export default class Resolver implements Resolution.Engine {
     // Sort outer→inner (higher posZ = outermost structure first).
     attractors.sort((a, b) => b.posZ - a.posZ);
 
-    const patterns: import("./Synthesizer").CodePattern[] = [];
+    const patterns: CodePattern[] = [];
     for (const { id } of attractors.slice(0, 6)) {
       const attrSeq = new Uint32Array([id]);
       const result = await this.store.checkInterferencePattern(attrSeq);
@@ -946,27 +1126,47 @@ export default class Resolver implements Resolution.Engine {
       });
     }
 
-    // Apply high-confidence discoveries to the manifold.
-    // Promotes operatorClass and elevates mass to c² so the token becomes a
-    // proper massive attractor body in future resonance and geodesic passes.
+    // Confidence accumulation: a token must appear as a candidate across
+    // OPERATOR_DISCOVERY_CONFIRMATION_THRESHOLD distinct queries before being
+    // permanently promoted.  This prevents single-query noise from contaminating
+    // the manifold with spurious operator classifications.
+    const CONFIRM_THRESHOLD = 3;
+    const discoveredIds = new Set(discovered.map(d => d.id));
+
     for (const d of discovered) {
       if (d.confidence < cfg.OPERATOR_DISCOVERY_CONFIDENCE_THRESHOLD) continue;
-      this.system.operatorClass[d.id] = d.inferredClass;
-      this.system.mass[d.id] = this.system.c ** 2;
-      this.system.update(d.id, "operator_discovery");
-      logger.debug(
-        `[OPERATOR DISCOVERY] "${d.label}" → ${OperatorClass[d.inferredClass]}` +
-          ` (outbound_ratio=${d.outboundRatio.toFixed(3)},` +
-          ` confidence=${d.confidence.toFixed(3)})`
-      );
+      const ev = this.operatorEvidence.get(d.id);
+      if (!ev || ev.cls !== d.inferredClass) {
+        // New or reclassified candidate: reset count
+        this.operatorEvidence.set(d.id, { cls: d.inferredClass, count: 1 });
+      } else {
+        ev.count++;
+        if (ev.count >= CONFIRM_THRESHOLD) {
+          // Confirmed across multiple queries — promote permanently.
+          this.system.operatorClass[d.id] = d.inferredClass;
+          this.system.mass[d.id] = this.system.c ** 2;
+          this.system.update(d.id, "operator_discovery");
+          this.operatorEvidence.delete(d.id); // no longer needs tracking
+          logger.debug(
+            `[OPERATOR DISCOVERY] confirmed "${d.label}" → ${OperatorClass[d.inferredClass]}` +
+              ` after ${CONFIRM_THRESHOLD} observations`
+          );
+        }
+      }
+    }
+
+    // Decay evidence for candidates NOT seen in this query (slow forgetting).
+    for (const [id, ev] of this.operatorEvidence) {
+      if (!discoveredIds.has(id)) {
+        ev.count--;
+        if (ev.count <= 0) this.operatorEvidence.delete(id);
+      }
     }
 
     return discovered;
   }
 
-  // ═══════════════════════════════════════════════════════════════════
   // Coherent Resolution Loop
-  // ═══════════════════════════════════════════════════════════════════
 
   /**
    * Resolves a sequence by iterating until the wave collapses to a coherent
@@ -1260,11 +1460,7 @@ export default class Resolver implements Resolution.Engine {
     for (let r = ringEntries.length - 1; r >= 0; r--) {
       const { scope0, startId } = ringEntries[r];
       if (queryIdSet.has(startId)) continue; // never match the current query's own entry
-      if (
-        Math.abs(scope0 - this.system.scope[subjectIds[0]]) >=
-        DOPAT_CONFIG.resolver.SCOPE_EPSILON
-      )
-        continue;
+      if (scope0 !== this.system.scope[subjectIds[0]]) continue;
       if (!this.system.isAllocated(startId)) continue;
 
       // Verify every token in the subject sequence at consecutive memory positions
@@ -1274,8 +1470,7 @@ export default class Resolver implements Resolution.Engine {
         if (
           cId >= length ||
           !this.system.isAllocated(cId) ||
-          Math.abs(this.system.scope[cId] - this.system.scope[subjectIds[j]]) >=
-            DOPAT_CONFIG.resolver.SCOPE_EPSILON
+          this.system.scope[cId] !== this.system.scope[subjectIds[j]]
         ) {
           match = false;
           break;
@@ -1285,11 +1480,7 @@ export default class Resolver implements Resolution.Engine {
 
       // Check that the operator immediately follows the subject
       const opId = startId + subjectIds.length;
-      if (
-        opId < length &&
-        Math.abs(this.system.scope[opId] - operatorScope) <
-          DOPAT_CONFIG.resolver.SCOPE_EPSILON
-      ) {
+      if (opId < length && this.system.scope[opId] === operatorScope) {
         return this.collectSequence(opId + 1, 1);
       }
     }
@@ -1412,8 +1603,7 @@ export default class Resolver implements Resolution.Engine {
 
       if (
         opClass === operatorIdClass &&
-        Math.abs(this.system.scope[i] - operatorScope) <
-          DOPAT_CONFIG.resolver.SCOPE_EPSILON
+        this.system.scope[i] === operatorScope
       ) {
         // Try Memory Subject Match
         const memSub = this.getClusterCentroid(this.system.ComplexLayer[i], -1);

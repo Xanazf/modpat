@@ -1,8 +1,7 @@
 import type System from "@core_i/System";
 import { SlotType, classifyOperatorToken, OperatorClass } from "@core_i/System";
 import { BaseAtomizer } from "./BaseAtomizer";
-// TODO:
-// import { RIGHT_DIRECTIONAL_PATTERNS } from "@config";
+import { DOPAT_CONFIG } from "@config";
 
 /**
  * The Atomizer is a low-level logical parser responsible for converting
@@ -95,7 +94,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
       // posZ: Energy coordinate (matches Depth content).
       system.posZ[id] = system.depth[id];
       // posW: Age coordinate (matches Time content).
-      system.posW[id] = system.time[id];
+      system.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS; // freshly ingested = maximally recent
 
       // Finalize derived properties.
       system.update(id);
@@ -129,7 +128,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
     for (let i = 0; i < sequenceIds.length; i++) {
       const id = sequenceIds[i];
       // Resolve the symbol by reversing the Scope-to-Index mapping.
-      output.push(this.resolveSymbolFromScope(system.scope[id]));
+      output.push(this.resolveScope(system.scope[id]) ?? "<?>");
     }
     return output.join(" ");
   }
