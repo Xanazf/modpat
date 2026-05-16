@@ -350,52 +350,103 @@ class Listener {
       return "unknown";
     }
 
-    // Phase 5: Extract a coherent sentence from the raw fetched prose.
+    // Phase 5: Geodesic plan through sentence-layered expanded content.
     //
-    // The geodesic approach on Wikipedia-expanded content produces word salad:
-    // unstructured text ingested as individual token-precepts doesn't form the
-    // operator→operand inferential topology the Resolver needs, so any path
-    // through those precepts is semantically arbitrary. Instead, use the prose
-    // that the Unfolder already fetched — ingestion built long-term manifold
-    // topology, now return the most query-relevant sentence as the immediate answer.
-    const rawContent = this.unfolder.lastFetchedContent;
-    if (rawContent) {
-      // Split on sentence boundaries, score each sentence by keyword overlap.
-      const sentences = rawContent
-        .replace(/\s+/g, " ")
-        .split(/(?<=[.!?])\s+/)
-        .map(s => s.trim())
-        .filter(s => s.length > 15);
+    // ingestContent() places each sentence at a distinct posZ layer
+    // (sentence 0 → factZ+0, sentence 1 → factZ+1, ...).  The Mapper's
+    // geodesic therefore traverses sentences in causal/logical order.
+    // Decoding the path layer-by-layer produces a coherent step-by-step
+    // answer — the plan emerges directly from the physics.
+    if (postExpandLength > preExpandLength) {
+      let entryId = preExpandLength;
+      let exitId = postExpandLength - 1;
+      let bestMatchScore = -1;
+      let bestDensity = -Infinity;
 
-      let best = "";
-      let bestScore = -1;
-      for (const s of sentences) {
-        const lower = s.toLowerCase();
-        let score = 0;
+      for (let i = preExpandLength; i < postExpandLength; i++) {
+        if (!this.system.isAllocated(i)) continue;
+        const sym = this.atomizer.resolveScope(this.system.scope[i]) ?? "";
+        let matchScore = 0;
         for (const kw of heatNodes) {
-          if (lower.includes(kw)) score++;
+          if (sym === kw || sym.startsWith(kw) || kw.startsWith(sym)) matchScore++;
         }
-        // Prefer longer sentences at equal score (more informative).
-        if (
-          score > bestScore ||
-          (score === bestScore && s.length > best.length)
-        ) {
-          bestScore = score;
-          best = s;
-        }
+        if (matchScore > bestMatchScore) { bestMatchScore = matchScore; entryId = i; }
+        const density = this.system.mass[i] * (1 + this.system.depth[i]);
+        if (density > bestDensity) { bestDensity = density; exitId = i; }
       }
-      if (!best && sentences.length > 0) best = sentences[0];
 
-      if (best) {
-        metrics.increment("resolution.phase5.hit");
-        this.respond(best);
-        return best;
+      if (entryId !== exitId) {
+        const boostScopes = new Set<number>();
+        for (const kw of heatNodes) {
+          const scope = this.atomizer.getSymbolScope(kw, false);
+          if (scope > 0) boostScopes.add(scope);
+        }
+
+        const geodesicPath = await this.resolver.calculateGeodesic(
+          entryId,
+          exitId,
+          128,
+          boostScopes.size > 0 ? boostScopes : undefined,
+          undefined,
+          preExpandLength
+        );
+
+        const plan = this.buildPlanFromGeodesic(geodesicPath, preExpandLength);
+        if (plan) {
+          metrics.increment("resolution.phase5.hit");
+          this.respond(plan);
+          return plan;
+        }
       }
     }
 
     metrics.increment("resolution.miss");
     this.respond("unknown");
     return "unknown";
+  }
+
+  /**
+   * Decodes a geodesic path as a step-by-step plan by grouping atoms into
+   * their sentence layers (posZ floor) and decoding each layer in order.
+   *
+   * Because ingestContent() tagged each sentence's atoms with an incremental
+   * posZ offset, Math.floor(posZ) uniquely identifies which sentence an atom
+   * came from.  Sorting layers by ascending Z gives causal/logical order.
+   *
+   * Returns a newline-separated numbered list when multiple steps are found,
+   * a bare string for a single step, or null when the path is uninformative.
+   */
+  private buildPlanFromGeodesic(
+    geodesicPath: Uint32Array,
+    preExpandLength: number
+  ): string | null {
+    const layers = new Map<number, number[]>();
+
+    for (const id of geodesicPath) {
+      if (id < preExpandLength || !this.system.isAllocated(id)) continue;
+      // Use Math.floor so that atoms in the same sentence (posZ within 1 unit
+      // of each other) group together regardless of depth/operator variation.
+      const layer = Math.floor(this.system.posZ[id]);
+      let group = layers.get(layer);
+      if (!group) { group = []; layers.set(layer, group); }
+      group.push(id);
+    }
+
+    if (layers.size === 0) return null;
+
+    const steps = [...layers.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, atoms]) =>
+        this.atomizer
+          .decodeSequence(new Uint32Array(atoms), this.system)
+          .replace(/\s+/g, " ")
+          .trim()
+      )
+      .filter(s => s.length > 3 && s !== "unknown");
+
+    if (steps.length === 0) return null;
+    if (steps.length === 1) return steps[0];
+    return steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
   }
 
   private async resolveThroughSystem(

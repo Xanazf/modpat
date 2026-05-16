@@ -23,6 +23,7 @@ import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import Store from "@core_s/Memory";
 import Unfolder from "@core_s/Unfolder";
+import { WorkerPool } from "@core_s/WorkerPool";
 import logger from "@utils/SpectralLogger";
 import Listener, { isCodeIntent } from "./Listener";
 import Talker from "./Talker";
@@ -354,6 +355,11 @@ export interface RuntimeOptions {
    * Default: plain System with lightweight decay tick only.
    */
   lifecycle?: boolean;
+  /**
+   * Disable worker threads.  Useful in test environments that don't need
+   * off-thread computation and want to avoid the worker startup overhead.
+   */
+  noWorkers?: boolean;
 }
 
 export class Runtime {
@@ -373,6 +379,14 @@ export class Runtime {
    * dream cycle on top of the plain System.  null in the default boot path.
    */
   public readonly lifecycle: ManifoldLifecycle | null;
+  /**
+   * Worker pool for off-thread computation: manifold metrics, Wikipedia fetch,
+   * and WordNet dictionary lookup.  Shares the System's SharedArrayBuffer
+   * with the manifold worker so reads are zero-copy.
+   * Null in unit-test boots where no tick / no workers are desired
+   * (set RuntimeOptions.noWorkers to suppress).
+   */
+  public readonly workers: WorkerPool | null;
 
   private _tickTimer: ReturnType<typeof setInterval> | null = null;
   private _tickIntervalMs = 0;
@@ -389,6 +403,7 @@ export class Runtime {
     identity: SelfConcept | null;
     lifecycle?: ManifoldLifecycle | null;
     lifecycleCtx?: DatabaseContext | null;
+    workers?: WorkerPool | null;
   }) {
     this.system = fields.system;
     this.atomizer = fields.atomizer;
@@ -400,6 +415,7 @@ export class Runtime {
     this.identity = fields.identity;
     this.lifecycle = fields.lifecycle ?? null;
     this._lifecycleCtx = fields.lifecycleCtx ?? null;
+    this.workers = fields.workers ?? null;
   }
 
   /**
@@ -483,6 +499,14 @@ export class Runtime {
       lifecycle.setUnfolder(unfolder);
     }
 
+    // WorkerPool: off-thread manifold metrics, Wikipedia fetch, WordNet lookup.
+    let workers: WorkerPool | null = null;
+    if (!opts.noWorkers) {
+      workers = new WorkerPool(system.buffer, system.getLayout());
+      // Route wiki fetches through the isolated wiki worker.
+      unfolder.setWikiDelegate(topic => workers!.fetchWikipedia(topic));
+    }
+
     const rt = new Runtime({
       system,
       atomizer,
@@ -494,6 +518,7 @@ export class Runtime {
       identity,
       lifecycle,
       lifecycleCtx,
+      workers,
     });
 
     if (!opts.noTick) {
@@ -543,12 +568,13 @@ export class Runtime {
     return this._tickIntervalMs;
   }
 
-  /** Releases GPU resources, stops the tick, and closes database connections. */
+  /** Releases GPU resources, stops the tick, closes database connections, and terminates workers. */
   async dispose(): Promise<void> {
     this.stopTick();
     await this.resolver.dispose();
     await this.store.close();
     if (this._lifecycleCtx) await this._lifecycleCtx.close();
+    if (this.workers) await this.workers.dispose();
   }
 }
 

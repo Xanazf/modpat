@@ -245,6 +245,67 @@ const LogicOperations = {
 const _EMPTY_SET: ReadonlySet<number> = Object.freeze(new Set<number>());
 
 /**
+ * Byte-offset map describing how every typed-array view is laid out inside the
+ * System's SharedArrayBuffer.  Workers reconstruct zero-copy views from this
+ * record without importing the System class.
+ */
+export interface ManifoldLayout {
+  maxPrecepts: number;
+  byteLength: number;
+  c: number;
+  epsilon: number;
+  maxilon: number;
+  offsets: {
+    mass: number; scope: number; depth: number; time: number;
+    posX: number; posY: number; posZ: number; posW: number;
+    density: number; entropyRate: number; potency: number; intensity: number;
+    decayRate: number; checksum: number;
+    PartLayer: number; ComplexLayer: number;
+    operatorClass: number; allocated: number; slotType: number;
+  };
+}
+
+/** Compute buffer offsets for any maxPrecepts value (mirrors the System constructor). */
+export function computeManifoldLayout(
+  maxPrecepts: number,
+  c: number,
+  epsilon: number,
+  maxilon: number
+): ManifoldLayout {
+  const bF64 = maxPrecepts * 8;
+  const bU32 = maxPrecepts * 4;
+  const bU8  = maxPrecepts * 1;
+  const base14   = bF64 * 14;
+  const base2U32 = base14 + bU32 * 2;
+  return {
+    maxPrecepts,
+    byteLength: base14 + bU32 * 2 + bU8 * 3,
+    c, epsilon, maxilon,
+    offsets: {
+      mass:        0,
+      scope:       bF64,
+      depth:       2 * bF64,
+      time:        3 * bF64,
+      posX:        4 * bF64,
+      posY:        5 * bF64,
+      posZ:        6 * bF64,
+      posW:        7 * bF64,
+      density:     8 * bF64,
+      entropyRate: 9 * bF64,
+      potency:     10 * bF64,
+      intensity:   11 * bF64,
+      decayRate:   12 * bF64,
+      checksum:    13 * bF64,
+      PartLayer:      base14,
+      ComplexLayer:   base14 + bU32,
+      operatorClass:  base2U32,
+      allocated:      base2U32 + bU8,
+      slotType:       base2U32 + 2 * bU8,
+    },
+  };
+}
+
+/**
  * The System represents the core logical manifold: a contiguous block of memory
  * where logical "precepts" (prepositions, the "x" in "if x, then y")
  * are stored as physical entities within a dual-layer manifold of matter and coordinates.
@@ -254,7 +315,7 @@ const _EMPTY_SET: ReadonlySet<number> = Object.freeze(new Set<number>());
  */
 class System implements Root.ManifoldView {
   /** The contiguous block of memory (Logical Manifold) hosting all physical states. */
-  public readonly buffer: ArrayBuffer;
+  public readonly buffer: SharedArrayBuffer;
 
   public updateRing = new RingBuffer<string>(10);
 
@@ -375,7 +436,7 @@ class System implements Root.ManifoldView {
       blockU32 * 2 + // PartLayer, ComplexLayer
       blockU8 * 3; // operatorClass, allocated, slotType
 
-    this.buffer = new ArrayBuffer(totalBytes);
+    this.buffer = new SharedArrayBuffer(totalBytes);
 
     let offset = 0;
 
@@ -835,6 +896,16 @@ class System implements Root.ManifoldView {
       this.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
       this.update(id); // keep checksum in sync with the new posW
     }
+  }
+
+  /** Returns the buffer layout descriptor for worker reconstruction. */
+  public getLayout(): ManifoldLayout {
+    return computeManifoldLayout(
+      DOPAT_CONFIG.MAX_PRECEPTS,
+      this.c,
+      this.epsilon,
+      this.maxilon
+    );
   }
 
   /**

@@ -243,6 +243,13 @@ export default class Unfolder {
    */
   private onDelta: ((delta: Delta.Any) => void) | null = null;
 
+  /**
+   * Optional wiki fetch delegate.  When set (by Runtime.boot() via WorkerPool),
+   * queryWikipedia() is routed through the isolated wiki worker instead of
+   * running in the main thread.
+   */
+  private wikiDelegate: ((topic: string) => Promise<string | null>) | null = null;
+
   constructor(system: System | SystemRef, atomizer: Atomic.Engine) {
     this.systemRef =
       system instanceof SystemRef ? system : new SystemRef(system);
@@ -252,6 +259,11 @@ export default class Unfolder {
   /** Wire a delta sink so expand() posts through the DeltaQueue. */
   public setDeltaSink(sink: (delta: Delta.Any) => void): void {
     this.onDelta = sink;
+  }
+
+  /** Route Wikipedia fetches through an external delegate (e.g., wiki worker). */
+  public setWikiDelegate(fn: (topic: string) => Promise<string | null>): void {
+    this.wikiDelegate = fn;
   }
 
   /**
@@ -352,10 +364,43 @@ export default class Unfolder {
   }
 
   /**
-   * Synchronously ingests pre-fetched text into the manifold.
+   * Ingests text into the manifold sentence-by-sentence.
+   *
+   * Each sentence is a separate ingestSequence call so it forms its own
+   * PartLayer chain.  Crucially, each sentence's atoms are tagged with an
+   * incremental posZ offset (sentence 0 → +0, sentence 1 → +1, ...) on top
+   * of whatever factDisplacementZ the caller adds later.
+   *
+   * This gives the expanded content a causal Z-axis structure: the Mapper's
+   * geodesic naturally traverses sentences in layer order, producing a
+   * coherent step-by-step sequence rather than a word-salad blob.
    */
   public ingestContent(text: string, system?: System): Uint32Array {
-    return this.atomizer.ingestSequence(text, system ?? this.systemRef.current);
+    const sys = system ?? this.systemRef.current;
+    // Cap at 30 sentences: enough for a detailed answer without flooding the manifold.
+    const sentences = text
+      .replace(/\s+/g, " ")
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 8)
+      .slice(0, 30);
+
+    if (sentences.length <= 1) {
+      return this.atomizer.ingestSequence(text, sys);
+    }
+
+    const allIds: number[] = [];
+    for (let s = 0; s < sentences.length; s++) {
+      const ids = this.atomizer.ingestSequence(sentences[s], sys);
+      // Tag atoms with their sentence index via posZ so the geodesic can
+      // traverse sentences in causal order rather than random blob order.
+      for (const id of ids) {
+        sys.posZ[id] += s; // sentence 0 at +0, sentence 1 at +1, etc.
+        sys.update(id);
+        allIds.push(id);
+      }
+    }
+    return new Uint32Array(allIds);
   }
 
   /**
@@ -367,15 +412,23 @@ export default class Unfolder {
 
   /** Fetches encyclopedic context from Wikipedia with a hard timeout. */
   private async queryWikipedia(topic: string): Promise<string | null> {
+    // If a wiki worker is wired, delegate to it (isolated heap, no main-thread GC).
+    if (this.wikiDelegate) {
+      try {
+        return await this.wikiDelegate(topic);
+      } catch {
+        return null;
+      }
+    }
+
+    // Fallback: fetch in-process (used in tests / standalone mode).
+    const CHAR_CAP = 6000;
     try {
-      const extract = await withTimeout(
-        wiki
-          .page(topic)
-          .then(p => p.summary())
-          .then(s => s.extract),
+      const content = await withTimeout(
+        wiki.page(topic).then(p => p.content()),
         topic
       );
-      return extract.replace(/\n/g, " ").trim() || null;
+      return content.slice(0, CHAR_CAP).replace(/\n+/g, " ").trim() || null;
     } catch (e) {
       if (e instanceof UnfolderTimeoutError) {
         metrics.increment("dream.rejected_timeout");

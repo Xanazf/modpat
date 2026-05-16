@@ -19,12 +19,12 @@
     "en-dictionary": "^2.0.3",
     "ring-buffer-ts": "^1.2.0",
     "typescript": "^6.0.3",
-    "wikipedia": "^2.4.2"
+    "wikipedia": "^2.5.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.12",
-    "@types/node": "^25.6.0",
-    "@webgpu/types": "^0.1.69",
-    "tsx": "^4.21.0"
+    "@biomejs/biome": "^2.4.15",
+    "@types/node": "^25.8.0",
+    "@webgpu/types": "^0.1.70",
+    "tsx": "^4.22.0"
   }
 }

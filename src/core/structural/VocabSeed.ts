@@ -16,7 +16,8 @@
  */
 
 import fs from "node:fs";
-import type { DictionaryExpander } from "@core_s/Unfolder";
+import type { DictionaryExpander, DictionaryExpansion } from "@core_s/Unfolder";
+import type { WorkerPool } from "@core_s/WorkerPool";
 import type Store from "@core_s/Memory";
 
 export interface SeedProgress {
@@ -86,18 +87,23 @@ export class VocabSeedWorker {
       batchSize?: number;
       intervalMs?: number;
       onProgress?: (p: SeedProgress) => void;
+      pool?: WorkerPool;
     } = {}
   ): void {
     if (this._running || this.isDone) return;
     this._running = true;
-    const { batchSize = 20, intervalMs = 150, onProgress } = opts;
+    // Conservative defaults: 5 words per 1 s keeps DB pressure low enough
+    // for the GC to reclaim prepared-statement and result objects between ticks.
+    // At this rate the full 400k-word vocabulary takes ~22 hours — intentional,
+    // the seeder is a background enrichment task, not a one-shot loader.
+    const { batchSize = 5, intervalMs = 1000, onProgress, pool } = opts;
 
     const tick = () => {
       if (!this._running || this.isDone) {
         this._running = false;
         return;
       }
-      this._processBatch(system, atomizer, store, dict, batchSize)
+      this._processBatch(system, atomizer, store, dict, batchSize, pool)
         .then(() => {
           onProgress?.(this.snapshot());
           this._timer = setTimeout(tick, intervalMs);
@@ -124,13 +130,51 @@ export class VocabSeedWorker {
     atomizer: Atomic.Engine,
     store: Store,
     dict: DictionaryExpander,
-    batchSize: number
+    batchSize: number,
+    pool?: WorkerPool
   ): Promise<void> {
     const end = Math.min(this.cursor + batchSize, this.words.length);
 
     for (let i = this.cursor; i < end; i++) {
+      // Yield to the event loop between every word so the GC can reclaim
+      // the prepared-statement and result objects from the previous word's
+      // DB operations before the next batch of allocations begins.
+      await new Promise<void>(r => setTimeout(r, 0));
+
       const word = this.words[i];
-      const result = await dict.expand(word, system, atomizer, store);
+
+      // When a seed worker is available, offload the heavy WordNet Map
+      // allocations to the worker heap; the main thread only does DB writes.
+      let result: DictionaryExpansion;
+      if (pool) {
+        result = await pool.lookupWord(word);
+        // Replicate the manifold ingestion that DictionaryExpander.expand() does.
+        if (result.found) {
+          const norm = word.replace(/_/g, " ");
+          const seen = new Set<string>();
+          for (const def of result.definitions.slice(0, 3)) {
+            const fact = `${norm} is ${def.split(" ").slice(0, 8).join(" ")}`;
+            if (!seen.has(fact)) {
+              seen.add(fact);
+              const ids = atomizer.ingestSequence(fact, system);
+              await store.crystallizeProof(ids, ids, 0.8);
+            }
+          }
+          for (const syn of result.synonyms.slice(0, 6)) {
+            for (const [a, b] of [[norm, syn], [syn, norm]] as const) {
+              const fact = `${a} is ${b}`;
+              if (!seen.has(fact)) {
+                seen.add(fact);
+                const ids = atomizer.ingestSequence(fact, system);
+                await store.crystallizeProof(ids, ids, 0.9);
+              }
+            }
+          }
+        }
+      } else {
+        result = await dict.expand(word, system, atomizer, store);
+      }
+
       this._processed++;
 
       if (!result.found || result.synonyms.length < 3) continue;

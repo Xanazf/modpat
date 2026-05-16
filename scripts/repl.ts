@@ -163,8 +163,9 @@ async function init(): Promise<void> {
         `Vocab seeder armed ${gray(`(${seeder.total.toLocaleString()} words)`)}`
       );
       seeder.start(system, atomizer, store, unfolder.dictionary, {
-        batchSize: 20,
-        intervalMs: 150,
+        batchSize: 5,
+        intervalMs: 1000,
+        pool: runtime.workers ?? undefined,
         onProgress: p => {
           if (p.processed % 1000 === 0) {
             const pct = ((p.processed / p.total) * 100).toFixed(1);
@@ -194,27 +195,41 @@ async function init(): Promise<void> {
   // The gap represents a gravitational bond with no known inferential basis;
   // investigating it may either confirm the connection or split the constellation.
   const GAP_SCAN_INTERVAL_MS = 30_000;
-  const runGapScan = () => {
-    const idx = buildManifoldIndex(system);
-    const cs = constellations(system, { minSize: 3, index: idx });
-    if (cs.length === 0) return;
-    const gaps = constellationGaps(system, cs.slice(0, 15), atomizer, {
-      maxPerConstellation: 1,
-      minMassRatio: 0.05,
-    });
-    const queue = inference.getInquiryQueue();
-    for (const g of gaps.slice(0, 2)) {
-      const topic = g.labelA;
-      const query = `What is the relationship between ${g.labelA} and ${g.labelB}?`;
-      queue.enqueue(topic, query);
-    }
+  const runGapScan = async () => {
+    try {
+      type ScanRow = { labelA: string; labelB: string };
+      let rows: ScanRow[] = [];
+
+      if (runtime.workers) {
+        const cs = await runtime.workers.computeConstellations(system.length);
+        const filtered = cs.filter(g => g.members.length >= 3).slice(0, 15);
+        if (filtered.length === 0) return;
+        const rawGaps = await runtime.workers.computeGaps(filtered, system.length);
+        rows = rawGaps.slice(0, 2).map(g => ({
+          labelA: atomizer.resolveScope(system.scope[g.atomA]) ?? "?",
+          labelB: atomizer.resolveScope(system.scope[g.atomB]) ?? "?",
+        }));
+      } else {
+        const idx = buildManifoldIndex(system);
+        const cs = constellations(system, { minSize: 3, index: idx });
+        if (cs.length === 0) return;
+        const gaps = constellationGaps(system, cs.slice(0, 15), atomizer, {
+          maxPerConstellation: 1,
+          minMassRatio: 0.05,
+        });
+        rows = gaps.slice(0, 2).map(g => ({ labelA: g.labelA, labelB: g.labelB }));
+      }
+
+      const queue = inference.getInquiryQueue();
+      for (const r of rows) {
+        const query = `What is the relationship between ${r.labelA} and ${r.labelB}?`;
+        queue.enqueue(r.labelA, query);
+      }
+    } catch {}
   };
   const scheduleGapScan = () => {
     setTimeout(() => {
-      try {
-        runGapScan();
-      } catch {}
-      scheduleGapScan();
+      runGapScan().finally(scheduleGapScan);
     }, GAP_SCAN_INTERVAL_MS);
   };
   scheduleGapScan();
@@ -703,8 +718,17 @@ async function handleCommand(raw: string): Promise<void> {
       const n = parseInt(args[0] ?? "10", 10);
       const count = Number.isFinite(n) && n > 0 ? n : 10;
       process.stdout.write(gray(`  Computing constellations…\n`));
-      const idx = buildManifoldIndex(system);
-      const groups = constellations(system, { minSize: 2, index: idx });
+
+      let groups: import("@core_s/ManifoldMetrics").Constellation[];
+      if (runtime.workers) {
+        groups = await runtime.workers.computeConstellations(system.length);
+        // Filter by minSize in main thread (worker returns all).
+        groups = groups.filter(g => g.members.length >= 2);
+      } else {
+        const idx = buildManifoldIndex(system);
+        groups = constellations(system, { minSize: 2, index: idx });
+      }
+
       if (groups.length === 0) {
         process.stdout.write(
           `  ${gray("No constellations detected yet.")}\n\n`
@@ -762,29 +786,50 @@ async function handleCommand(raw: string): Promise<void> {
       const n = parseInt(args[0] ?? "8", 10);
       const count = Number.isFinite(n) && n > 0 ? n : 8;
       process.stdout.write(gray(`  Scanning constellation gaps…\n`));
-      const idx = buildManifoldIndex(system);
-      const cs = constellations(system, { minSize: 3, index: idx });
-      const gaps = constellationGaps(system, cs.slice(0, 20), atomizer, {
-        maxPerConstellation: 2,
-        minMassRatio: 0.05,
-      });
-      if (gaps.length === 0) {
+
+      type GapRow = { labelA: string; labelB: string; distance: number; starLabel: string };
+      let gapRows: GapRow[] = [];
+
+      if (runtime.workers) {
+        const cs = await runtime.workers.computeConstellations(system.length);
+        const filtered = cs.filter(g => g.members.length >= 3).slice(0, 20);
+        const rawGaps = await runtime.workers.computeGaps(filtered, system.length);
+        gapRows = rawGaps.map(g => {
+          const c = filtered[g.constellationIdx];
+          const labelA = atomizer.resolveScope(system.scope[g.atomA]) ?? "?";
+          const labelB = atomizer.resolveScope(system.scope[g.atomB]) ?? "?";
+          const starLabel = c ? (atomizer.resolveScope(system.scope[c.star]) ?? "?") : "?";
+          return { labelA, labelB, distance: g.distance, starLabel };
+        });
+      } else {
+        const idx = buildManifoldIndex(system);
+        const cs = constellations(system, { minSize: 3, index: idx });
+        const gaps = constellationGaps(system, cs.slice(0, 20), atomizer, {
+          maxPerConstellation: 2,
+          minMassRatio: 0.05,
+        });
+        gapRows = gaps.map(g => ({
+          labelA: g.labelA,
+          labelB: g.labelB,
+          distance: g.distance,
+          starLabel: atomizer.resolveScope(system.scope[g.constellation.star]) ?? "?",
+        }));
+      }
+
+      if (gapRows.length === 0) {
         process.stdout.write(
           `  ${gray("No significant constellation gaps detected.")}\n\n`
         );
         break;
       }
       process.stdout.write(
-        `\n  ${bold(`Top ${Math.min(count, gaps.length)} constellation gaps`)} ` +
+        `\n  ${bold(`Top ${Math.min(count, gapRows.length)} constellation gaps`)} ` +
           `${gray(`(curiosity targets)`)}\n`
       );
-      for (const g of gaps.slice(0, count)) {
-        const starLabel = atomizer
-          .decodeSequence(new Uint32Array([g.constellation.star]), system)
-          .trim();
+      for (const g of gapRows.slice(0, count)) {
         process.stdout.write(
           `    ${red("?")} ${cyan(g.labelA.padEnd(14))} ↔ ${cyan(g.labelB.padEnd(14))}` +
-            `  ${gray(`dist=${g.distance.toFixed(1)}`)}  ${gray(`[★${starLabel}]`)}\n`
+            `  ${gray(`dist=${g.distance.toFixed(1)}`)}  ${gray(`[★${g.starLabel}]`)}\n`
         );
       }
       process.stdout.write("\n");
