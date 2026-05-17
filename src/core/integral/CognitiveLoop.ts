@@ -32,6 +32,12 @@ export class CognitiveLoop {
   private _intentIds = new Set<number>();
   private _tagMap = new Map<number, IntentTag>();
   private _tickCount = 0;
+  /**
+   * Consecutive failure count per intent ID.  Selection score is divided by
+   * (1 + failures²) so a persistently-failing intent backs off exponentially
+   * and stops starving every other intent in the queue.  Reset to 0 on success.
+   */
+  private _failureCount = new Map<number, number>();
 
   constructor(private readonly runtime: Runtime) {}
 
@@ -89,6 +95,7 @@ export class CognitiveLoop {
       if (!system.isAllocated(id) || system.mass[id] <= 0) {
         this._intentIds.delete(id);
         this._tagMap.delete(id);
+        this._failureCount.delete(id);
       }
     }
 
@@ -99,11 +106,17 @@ export class CognitiveLoop {
 
     if (this._intentIds.size === 0) return;
 
-    // 2. SELECT - highest urgency: mass × posW (temporal freshness)
+    // 2. SELECT - highest urgency: mass × posW, penalised by consecutive
+    // failures.  Score is divided by (1 + failures²) so an intent that fails
+    // K times in a row needs 2× the urgency of a fresh intent after 1 failure,
+    // 5× after 2, 10× after 3, etc.  This prevents a single broken intent
+    // (e.g., Wikipedia is down) from occupying every tick indefinitely.
     let bestId = -1;
     let bestScore = -Infinity;
     for (const id of this._intentIds) {
-      const score = system.mass[id] * system.posW[id];
+      const failures = this._failureCount.get(id) ?? 0;
+      const rawScore = system.mass[id] * system.posW[id];
+      const score = rawScore / (1 + failures * failures);
       if (score > bestScore) {
         bestScore = score;
         bestId = id;
@@ -176,8 +189,10 @@ export class CognitiveLoop {
     // 4. REINFORCE or DECAY
     if (success) {
       decayIntent(system, bestId, 0.5); // acted on, reduce urgency
+      this._failureCount.delete(bestId); // reset backoff on success
     } else {
-      decayIntent(system, bestId, 0.9); // softer decay on failure
+      decayIntent(system, bestId, 0.9); // softer mass decay on failure
+      this._failureCount.set(bestId, (this._failureCount.get(bestId) ?? 0) + 1);
     }
   }
 

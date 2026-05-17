@@ -105,6 +105,8 @@ declare namespace Root {
     // Temporal freshness
     /** Sets posW = AGE_FRESHNESS for every precept that carries this scope. */
     refreshConceptAge(scope: number): void;
+    /** Sets posW = AGE_FRESHNESS for exactly the supplied precept IDs only. */
+    refreshConceptAgeForIds(ids: ArrayLike<number>): void;
     /** Applies thermodynamic decay and posW freshness fade over deltaTime (ms). */
     decay(deltaTime: number): void;
   }

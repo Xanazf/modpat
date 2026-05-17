@@ -16,13 +16,13 @@ export interface ListenerOptions {
   contextScopes?: Set<number>;
 }
 
-/** Output of Listener.processQuestion — text plus the diagnostics that produced it. */
+/** Output of Listener.processQuestion - text plus the diagnostics that produced it. */
 export interface ListenerResult {
   /** Human-readable answer text. */
   text: string;
   /**
    * Diagnostics captured under the same slot lock as the answer. Race-free
-   * across concurrent producers — prefer over Resolver.lastDiagnostics.
+   * across concurrent producers - prefer over Resolver.lastDiagnostics.
    */
   diagnostics: ResolverDiagnostics | null;
 }
@@ -215,24 +215,49 @@ class Listener {
       this.store.abstractSequence(queryQuanta);
     this.lastSignature = questionSignature;
 
-    // Phase 0: Vault cache lookup - moved here from Resolver so the Resolver is
-    // a pure physics engine.  Uses queryQuanta (the topological query WITHOUT the
-    // Sink "|-") because crystallization also uses that same sequence as the key.
+    // Phase 0: Vault cache lookup.
+    //
+    // The Resolver crystallises proofs with a Sink "|-" at the end of the
+    // input sequence (signature "VAR_0 is |-"), so we must query with the same
+    // shape.  The previous implementation queried with bare "topologicalQuery"
+    // (signature "VAR_0 is") which never matched Resolver-derived entries.
+    //
+    // To avoid polluting the ring buffer we reuse the already-ingested sink
+    // token instead of calling ingestSequence on the augmented string.
     {
-      const cached = await this.store.checkInterferencePattern(queryQuanta);
-      if (cached && cached.ids.length > 0) {
-        const decoded = this.atomizer
-          .decodeSequence(cached.ids, this.system)
-          .trim();
-        if (decoded && decoded !== "unknown") {
-          metrics.increment("resolution.phase0.hit");
-          this.resolver.reinforceVaultHit(queryQuanta, cached.ids);
-          const response =
-            wasIdentityQuery && topologicalQuery.trim() === "i am"
-              ? `i am ${decoded}`
-              : decoded;
-          this.respond(response);
-          return wrap(response);
+      const sinkScope = this.atomizer.getSymbolScope("|-", false);
+      let phase0Hit = false;
+      if (sinkScope > 0) {
+        const sinkSet = this.system.getIdsByScope(sinkScope);
+        // Find an allocated Sink-class precept to use as the key suffix.
+        let sinkId = -1;
+        for (const sid of sinkSet) {
+          if (
+            this.system.isAllocated(sid) &&
+            this.system.operatorClass[sid] === OperatorClass.Sink
+          ) {
+            sinkId = sid;
+            break;
+          }
+        }
+        if (sinkId !== -1) {
+          const queryWithSink = new Uint32Array([...queryQuanta, sinkId]);
+          const cached = await this.store.checkInterferencePattern(queryWithSink);
+          if (cached && cached.ids.length > 0) {
+            const decoded = this.atomizer
+              .decodeSequence(cached.ids, this.system)
+              .trim();
+            if (decoded && decoded !== "unknown") {
+              metrics.increment("resolution.phase0.hit");
+              this.resolver.reinforceVaultHit(queryWithSink, cached.ids);
+              const response =
+                wasIdentityQuery && topologicalQuery.trim() === "i am"
+                  ? `i am ${decoded}`
+                  : decoded;
+              this.respond(response);
+                  return wrap(response);
+            }
+          }
         }
       }
     }

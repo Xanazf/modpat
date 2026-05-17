@@ -92,6 +92,7 @@ export class LiveInference {
   private systemRef: SystemRef;
   private store: Store;
   private unfolder: Unfolder;
+  private readonly atomizer: Atomic.Engine;
   private resolver: Resolver;
   private listener: Listener;
   private talker: Talker;
@@ -116,6 +117,7 @@ export class LiveInference {
       system instanceof SystemRef
         ? system
         : new SystemRef(system as Root.ManifoldView);
+    this.atomizer = atomizer;
     this.store = store;
     this.resolver = resolver;
     this.unfolder = unfolder || new Unfolder(this.systemRef, atomizer);
@@ -286,15 +288,14 @@ export class LiveInference {
     // follow-up questions ("what color is it?") can resolve "it" to the subject.
     const topic = extractTopic(statement);
     if (topic) {
-      // Pick the most recent working-memory scope as the best-guess subject
-      // scope for the new conclusion. Avoids reading the racy
-      // Resolver.contextScopes mirror.
-      const recent = this.workingMemory.contextScopes();
-      const topicScope = recent.length > 0 ? recent[recent.length - 1] : 0;
+      // Resolve the topic's actual scope so the Resolver's context warm-start
+      // seeds the right manifold region on follow-up questions. Use false to
+      // avoid creating a new scope if the topic wasn't ingested.
+      const topicScope = this.atomizer.getSymbolScope(topic, false);
       this.workingMemory.push({
         query: statement,
         conclusion: topic,
-        conclusionScope: topicScope,
+        conclusionScope: topicScope > 0 ? topicScope : 0,
         conclusionId: 0,
         explanation: null,
       });
@@ -406,7 +407,7 @@ export class Runtime {
   private _tickIntervalMs = 0;
   private _lifecycleCtx: DatabaseContext | null = null;
   /**
-   * Background tasks kicked off in boot() — inquiry-queue hydration and the
+   * Background tasks kicked off in boot() - inquiry-queue hydration and the
    * syllogism seed. dispose() awaits this before closing the store so a
    * fast-path dispose never races their DuckDB prepare() calls.
    */
@@ -648,11 +649,19 @@ export class Runtime {
 
     // Autonomous learner cycle - runs independently of user input.
     const learnerMs = opts.learnerIntervalMs ?? 10_000;
+    let _learnerCycles = 0;
     this._learnerTimer = setInterval(() => {
       this.inference
         .getLearner()
         .runCycle(5)
         .catch(e => logger.warn("[LEARNER TIMER]", e));
+      // Periodic vault cull: decay usage counts and delete zero-energy entries.
+      // Runs every 6th learner cycle (~60 s by default) so the vault ranking
+      // doesn't drift without user interaction - the per-processIntent cull
+      // only fires when a user is actively talking.
+      if (++_learnerCycles % 6 === 0) {
+        this.store.cullWeakWaveForms().catch(e => logger.warn("[VAULT CULL]", e));
+      }
     }, learnerMs);
 
     // Start the Cognitive Daemon.
@@ -718,7 +727,7 @@ export class Runtime {
    * Idempotent: templates already present (by signature) are skipped.
    *
    * @param cancelled Predicate polled between awaits. When it returns true,
-   *                  the seeder exits cleanly without further DuckDB writes —
+   *                  the seeder exits cleanly without further DuckDB writes -
    *                  used so dispose() can stop seeding before closing the
    *                  store rather than swallowing "connection disconnected".
    */
@@ -754,7 +763,7 @@ export class Runtime {
           `[SYLLOGISM SEED] seeded: "${premiseText}" → "${conclusionText}"`
         );
       } catch (e) {
-        // Suppress noise if we're already tearing down — those errors are
+        // Suppress noise if we're already tearing down - those errors are
         // expected ("connection disconnected") and not actionable.
         if (cancelled()) return;
         logger.warn("[SYLLOGISM SEED] failed for template:", premiseText, e);
@@ -803,8 +812,10 @@ export class Runtime {
 
       // Clear seen set at the start of each scan so pairs can be re-evaluated
       // after enough time has passed for new structure to emerge.
-      this._gapSeen.clear();
-
+      // Do NOT clear _gapSeen here. The set persists across scans so each
+      // gap pair is only enqueued once per session - the previous clear caused
+      // the same top-2 pairs to be re-enqueued every 30 s, flooding the
+      // InquiryQueue and CognitiveLoop with identical intents.
       for (const r of rows) {
         const key = `${r.labelA}:${r.labelB}`;
         if (this._gapSeen.has(key)) continue;

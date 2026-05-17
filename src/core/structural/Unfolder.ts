@@ -422,10 +422,13 @@ export default class Unfolder {
 
       for (const seq of seqs) {
         const ids = this.atomizer.ingestSequence(seq, sys);
-        // Tag atoms with their sentence index via posZ so the geodesic can
-        // traverse sentences in causal order rather than random blob order.
+        // Tag each atom's posZ so Math.floor(posZ) == sentence index s.
+        // The atomizer sets posZ = depth (a small float from inheritance).
+        // Using "+= s" made floor(depth + s) unstable when depth ≥ 1.
+        // Instead: set the INTEGER part to s and keep the FRACTIONAL depth so
+        // atoms in the same sentence always group under the same floor key.
         for (const id of ids) {
-          sys.posZ[id] += s; // sentence 0 at +0, sentence 1 at +1, etc.
+          sys.posZ[id] = s + (sys.posZ[id] % 1);
           sys.update(id);
           allIds.push(id);
         }

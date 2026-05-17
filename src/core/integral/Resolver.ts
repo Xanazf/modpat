@@ -190,7 +190,7 @@ export default class Resolver implements Resolution.Engine {
   /**
    * Sink strength of the most recent completed resolveSequence call.
    *
-   * Race-prone with concurrent callers — this is a "most-recent-globally"
+   * Race-prone with concurrent callers - this is a "most-recent-globally"
    * view, useful for sequential test inspection. Concurrent producers should
    * read the value returned from their own call instead (see ResolveResult).
    */
@@ -304,10 +304,11 @@ export default class Resolver implements Resolution.Engine {
       if (m <= 0) continue;
       this.system.mass[id] = Math.min(m * BOOST, CAP);
       this.system.update(id);
-      // Refresh temporal freshness: this concept just participated in a proven
-      // inference - it should stay warm in the forward-energy seeding.
-      this.system.refreshConceptAge(this.system.scope[id]);
     }
+    // Refresh temporal freshness for exactly the atoms that participated -
+    // refreshConceptAge refreshes every precept sharing the same scope, which
+    // collapses posW to 1.0 for unrelated stopwords that share common scopes.
+    this.system.refreshConceptAgeForIds(ids);
   }
 
   public async dispose(): Promise<void> {
@@ -346,7 +347,7 @@ export default class Resolver implements Resolution.Engine {
    * scope appears here get a warm-start energy bonus in the forward pass.
    *
    * Deprecated for concurrent callers: this instance field is racy across
-   * overlapping resolveSequence calls. Pass `opts.contextScopes` instead — it
+   * overlapping resolveSequence calls. Pass `opts.contextScopes` instead - it
    * takes precedence over this field and is isolated to the call.
    */
   public contextScopes: Set<number> = new Set();
@@ -362,7 +363,7 @@ export default class Resolver implements Resolution.Engine {
    * Same as resolveSequence but returns a per-call snapshot of diagnostics,
    * sink strength, discovered operators, and bridge candidates alongside the
    * resolved ids. Use this when the caller needs diagnostics race-free across
-   * overlapping resolveSequence calls — reading the instance-level `last*`
+   * overlapping resolveSequence calls - reading the instance-level `last*`
    * mirror fields after `await resolveSequence` is racy under concurrent load.
    */
   public async resolveSequenceCaptured(
@@ -380,7 +381,7 @@ export default class Resolver implements Resolution.Engine {
 
   /**
    * Per-call output snapshot taken before the slot is released. Concurrent
-   * callers each get their own capture — the instance-level `last*` mirror
+   * callers each get their own capture - the instance-level `last*` mirror
    * fields are also updated for sequential back-compat, but they are racy
    * across overlapping calls.
    */
@@ -413,7 +414,7 @@ export default class Resolver implements Resolution.Engine {
     }
 
     // Acquire a per-call workspace. Until release(), all scratch buffer and
-    // diagnostic writes are isolated to this slot — concurrent callers get
+    // diagnostic writes are isolated to this slot - concurrent callers get
     // their own slots. The pool back-pressures if more than DEFAULT_POOL_SIZE
     // calls are in flight at once.
     const slot = await this.slotPool.acquire();
@@ -430,7 +431,7 @@ export default class Resolver implements Resolution.Engine {
       };
       // Mirror onto the "most recent globally" fields for sequential
       // test/test-harness inspection. Concurrent callers should use the
-      // returned capture instead — these mirrors race across overlapping calls.
+      // returned capture instead - these mirrors race across overlapping calls.
       this.lastSinkStrength = capture.sinkStrength;
       this.lastDiagnostics = capture.diagnostics;
       this.lastDiscoveredOperators = capture.discoveredOperators;

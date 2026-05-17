@@ -10,11 +10,11 @@
  *
  * A slot owns three categories of per-call state:
  *   1. Scratch buffers (T, W, E_total, E_curr, E_new, T_next, T_back,
- *      T_back_next, backwardEnergy, directScopes, resultIds) — written and
+ *      T_back_next, backwardEnergy, directScopes, resultIds) - written and
  *      then immediately read inside one resolveSequence call.
- *   2. Output state (diagnostics, sinkStrength, discoveredOperators) — written
+ *   2. Output state (diagnostics, sinkStrength, discoveredOperators) - written
  *      at the end of resolveSequence and read by the caller after await.
- *   3. Input state (contextScopes, probeMode) — passed in by the caller and
+ *   3. Input state (contextScopes, probeMode) - passed in by the caller and
  *      read during the call.
  *
  * One slot per concurrent call. The pool hands out slots and reclaims them on

@@ -1,4 +1,4 @@
-import type { SystemRef } from "@core_i/System";
+import { OperatorClass, type SystemRef } from "@core_i/System";
 import { shiftPerspective } from "@core_s/Identity";
 import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
@@ -62,7 +62,49 @@ class Talker {
       const { signature } = this.store.abstractSequence(quanta);
       this.lastSignature = signature;
 
+      // Self-loop: keeps the Learner's sampleForChallenge JOIN working (it
+      // joins raw_facts.signature ↔ wave_forms.signature on this shape).
       await this.store.crystallizeProof(quanta, quanta, 1.0);
+
+      // SVO split crystallization: adds a (subject+op+sink → object) entry
+      // whose signature matches what Resolver and Listener Phase 0a use, so
+      // a subsequent "what is X?" query finds the answer from the vault without
+      // needing a full physics pass.
+      //
+      // Example: "fire is hot" → crystallize([fire, is, |-], [hot], 1.0).
+      // Signature "VAR_0 is |-" matches Resolver Phase 0 and Listener Phase 0a.
+      {
+        const sinkScope = this.atomizer.getSymbolScope("|-", false);
+        const sinkCandidates =
+          sinkScope > 0 ? [...this.system.getIdsByScope(sinkScope)] : [];
+        const sinkId = sinkCandidates.find(
+          id =>
+            this.system.isAllocated(id) &&
+            this.system.operatorClass[id] === OperatorClass.Sink
+        );
+        if (sinkId !== undefined) {
+          // Find the first operator that splits subject from object.
+          let opIdx = -1;
+          for (let i = 0; i < quanta.length; i++) {
+            const cls = this.system.operatorClass[quanta[i]];
+            if (
+              cls === OperatorClass.IdentityShift ||
+              cls === OperatorClass.Action
+            ) {
+              opIdx = i;
+              break;
+            }
+          }
+          if (opIdx > 0 && opIdx < quanta.length - 1) {
+            const probeIds = new Uint32Array([
+              ...quanta.subarray(0, opIdx + 1),
+              sinkId,
+            ]);
+            const objectIds = quanta.subarray(opIdx + 1);
+            await this.store.crystallizeProof(probeIds, objectIds, 1.0);
+          }
+        }
+      }
 
       try {
         const stmt = await this.store.connection.prepare(

@@ -918,6 +918,21 @@ class System implements Root.ManifoldView {
     }
   }
 
+  /**
+   * Refreshes temporal freshness (posW) for the given specific precept IDs
+   * only.  Use this instead of refreshConceptAge when the caller knows exactly
+   * which atoms participated - it avoids refreshing every precept that shares
+   * the same scope (which includes unrelated stopword precepts).
+   */
+  public refreshConceptAgeForIds(ids: ArrayLike<number>): void {
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (!this.isAllocated(id)) continue;
+      this.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
+      this.update(id);
+    }
+  }
+
   /** Returns the buffer layout descriptor for worker reconstruction. */
   public getLayout(): ManifoldLayout {
     return computeManifoldLayout(

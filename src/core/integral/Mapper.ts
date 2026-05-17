@@ -760,16 +760,21 @@ class Mapper implements Mapping.Engine {
     for (let i = 0; i <= steps; i++) {
       let bestId = -1,
         minDiff = Infinity;
-      for (let j = 0; j < this.system.length; j++) {
-        // Prevent path from snapping to past memory queries globally (excluding exact target)
-        if (j < preExpandLength && j !== targetId) continue;
 
+      // When an expansion was performed, only the freshly-added atoms
+      // (index >= preExpandLength) and the explicit targetId are candidates.
+      // Skipping old atoms turns the inner loop from O(N_total) to
+      // O(N_expanded + 1) without changing correctness.
+      const loopStart = preExpandLength > 0 ? preExpandLength : 0;
+
+      // Cost evaluation kernel - shared between main loop and targetId probe.
+      const evalJ = (j: number): void => {
         const dx = this.system.posX[j] - px[i],
           dy = this.system.posY[j] - py[i],
           dz = this.system.posZ[j] - pe[i],
           dw = this.system.posW[j] - pa[i];
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-        let totalDiff = distSq + dw * dw * 1000000.0; // Massive context snapping penalty
+        let totalDiff = distSq + dw * dw * 1000000.0; // temporal snapping penalty
 
         const layerJ = Math.floor(
           this.system.posZ[j] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
@@ -780,7 +785,7 @@ class Mapper implements Mapping.Engine {
         // in each fact (posZ layer) and heavily penalize reading backward.
         const maxPosY = maxPosYByLayer.get(layerJ) ?? -Infinity;
         if (this.system.posY[j] < maxPosY) {
-          totalDiff += 1000000.0; // Extreme penalty for backwards syntax
+          totalDiff += 1000000.0; // extreme penalty for backwards syntax
         }
 
         if (totalDiff < minDiff) {
@@ -796,6 +801,16 @@ class Mapper implements Mapping.Engine {
             bestId = j;
           }
         }
+      };
+
+      for (let j = loopStart; j < this.system.length; j++) {
+        evalJ(j);
+      }
+
+      // Always evaluate targetId even when it falls below preExpandLength -
+      // it is the explicit geodesic endpoint and must remain reachable.
+      if (targetId >= 0 && targetId < loopStart) {
+        evalJ(targetId);
       }
       if (
         bestId !== -1 &&

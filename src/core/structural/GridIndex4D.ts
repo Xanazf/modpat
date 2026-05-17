@@ -85,7 +85,10 @@ export class GridIndex4D {
               }
             }
           }
-    return bestId;
+    // Final bounds check: reject the candidate if it falls outside the
+    // requested radius. Without this the function returns whatever distant
+    // node it found in sparse cells, violating the radius contract.
+    return bestD2 <= radius * radius ? bestId : -1;
   }
 
   /**
