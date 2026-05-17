@@ -171,9 +171,10 @@ export class LiveInference {
         await this.store.adjustUsageCount(this.last_signature, 0);
       }
       // O6 fix: detect corrective form "no, X is Y" and ingest the correction.
-      // Pattern: negative prefix + comma/space + a declarative statement.
+      // Requires a comma or semicolon separator so bare negations like
+      // "no that is wrong" don't accidentally get ingested as facts.
       const correctionMatch = query.match(
-        /^(?:no|incorrect|wrong|false)[,.\s]+(.+)$/i
+        /^(?:no|incorrect|wrong|false)[,;]\s*(.+)$/i
       );
       if (correctionMatch) {
         const correction = correctionMatch[1].trim();
@@ -660,7 +661,9 @@ export class Runtime {
       // doesn't drift without user interaction - the per-processIntent cull
       // only fires when a user is actively talking.
       if (++_learnerCycles % 6 === 0) {
-        this.store.cullWeakWaveForms().catch(e => logger.warn("[VAULT CULL]", e));
+        this.store
+          .cullWeakWaveForms()
+          .catch(e => logger.warn("[VAULT CULL]", e));
       }
     }, learnerMs);
 

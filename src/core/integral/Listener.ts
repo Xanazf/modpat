@@ -242,7 +242,8 @@ class Listener {
         }
         if (sinkId !== -1) {
           const queryWithSink = new Uint32Array([...queryQuanta, sinkId]);
-          const cached = await this.store.checkInterferencePattern(queryWithSink);
+          const cached =
+            await this.store.checkInterferencePattern(queryWithSink);
           if (cached && cached.ids.length > 0) {
             const decoded = this.atomizer
               .decodeSequence(cached.ids, this.system)
@@ -255,7 +256,7 @@ class Listener {
                   ? `i am ${decoded}`
                   : decoded;
               this.respond(response);
-                  return wrap(response);
+              return wrap(response);
             }
           }
         }

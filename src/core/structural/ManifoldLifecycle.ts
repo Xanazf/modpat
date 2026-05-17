@@ -592,10 +592,36 @@ export class ManifoldLifecycle {
         const root = sys.mass[i] > sys.mass[j] ? i : j;
         const satellite = root === i ? j : i;
 
-        // Gently shift satellite towards root in Matter dimension (Gravity)
-        // Attenuation factor (scaled to seconds to prevent oscillation at high FPS)
+        // Exact-match fusion: nodes that are effectively co-located AND share
+        // the same scope are duplicates - absorb the satellite into the root.
+        // This handles atoms that were placed at identical coordinates (e.g.
+        // by two ingestion passes for the same fact) and would never converge
+        // through the gentle pull alone (pull magnitude is proportional to
+        // distance, so coincident nodes never move).
+        const FUSION_DIST_SQ = ORBIT_RADIUS_SQ * 0.01;
+        if (distSq <= FUSION_DIST_SQ && sys.scope[i] === sys.scope[j]) {
+          sys.mass[root] += sys.mass[satellite];
+          sys.depth[root] += sys.depth[satellite]; // accumulate, not max
+          sys.update(root, "exact_match_fusion");
+          sys.freeLocation(satellite, "exact_match_fusion");
+          break; // satellite is freed; move on to the next i
+        }
+
+        // Gently pull satellite toward root across all relevant dimensions.
+        // Pull is scaled to elapsed-time seconds so the rate is independent
+        // of tick frequency.
         const pull = 0.1 * (dt / 1000);
+
+        // Matter (posX) - primary gravitational attraction.
         sys.posX[satellite] += (sys.posX[root] - sys.posX[satellite]) * pull;
+
+        // Age axis (posW) - temporal resonance alignment.
+        sys.posW[satellite] += (sys.posW[root] - sys.posW[satellite]) * pull;
+
+        // NOTE: scope is NOT blended here. Scope is a discrete concept-identity
+        // tag used as a key in the scopeIndex Map; writing a float interpolation
+        // to scope[] silently removes the atom from the scope index, making it
+        // invisible to all scope-indexed lookups and corrupting inference.
 
         // Update the satellite to reflect coordinate shifts.
         sys.update(satellite, "orbital_clustering");

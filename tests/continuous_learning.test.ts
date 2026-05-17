@@ -41,10 +41,14 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 1: Low-mass high-entropy node is pruned on tick", async () => {
       const sys = manager.getActiveSystem();
       const VACUUM_THRESHOLD = DOPAT_CONFIG.DRIFT_THRESHOLD * 0.001;
+      const PRECEPT_SCALE = DOPAT_CONFIG.PHYSICS.PRECEPT_SCALE;
 
-      // Mass just below vacuum threshold, entropyRate = time/scope = 200/1 = 200 > CRITICAL_ENTROPY (100)
+      // Mass just below vacuum threshold.
+      // entropyRate = time / PRECEPT_SCALE - requires time > 100 * PRECEPT_SCALE
+      // to cross CRITICAL_ENTROPY = 100.  The old comment used time/scope=200/1;
+      // after the scope-refactor entropyRate uses the fixed PRECEPT_SCALE constant.
       const id = sys.createLocation(VACUUM_THRESHOLD * 0.9, 1.0, "test_forget");
-      sys.time[id] = 200.0;
+      sys.time[id] = PRECEPT_SCALE * 101; // entropyRate ≈ 101 > CRITICAL_ENTROPY (100)
       sys.update(id);
 
       assert.ok(sys.isAllocated(id), "Node should be allocated before tick");
@@ -99,14 +103,14 @@ export async function executeContinuousLearningSuite() {
       );
     });
 
-    await it("Phase 2: Orbital clustering blends scope and corrects posW (Age axis)", async () => {
+    await it("Phase 2: Orbital clustering pulls posX and posW toward root", async () => {
       const sys = manager.getActiveSystem();
 
       const rootId = sys.createLocation(200.0, 10.0, "orbit_root");
       const satId = sys.createLocation(50.0, 20.0, "orbit_satellite");
       sys.operatorClass[rootId] = 0;
       sys.operatorClass[satId] = 0;
-      // Place within ORBIT_RADIUS_SQ = 0.5 but outside exact-match radius (distSq > 0.0001)
+      // Place within ORBIT_RADIUS_SQ = 0.5 but outside exact-match radius (distSq > 0.005)
       sys.posX[rootId] = 0;
       sys.posY[rootId] = 0;
       sys.posZ[rootId] = 0;
@@ -118,38 +122,38 @@ export async function executeContinuousLearningSuite() {
       sys.update(rootId);
       sys.update(satId);
 
-      const initScopeSat = sys.scope[satId];
+      const initPosXSat = sys.posX[satId];
       const initPosWSat = sys.posW[satId];
-      const rootScope = sys.scope[rootId];
+      const rootPosX = sys.posX[rootId];
       const rootPosW = sys.posW[rootId];
 
-      let scopeBlended = false;
+      let posXPulled = false;
       let posWCorrected = false;
 
       for (let i = 0; i < 1000; i++) {
         manager.tick(1.1);
         if (!sys.isAllocated(satId)) break;
         if (
-          Math.abs(sys.scope[satId] - rootScope) <
-          Math.abs(initScopeSat - rootScope)
+          Math.abs(sys.posX[satId] - rootPosX) <
+          Math.abs(initPosXSat - rootPosX)
         )
-          scopeBlended = true;
+          posXPulled = true;
         if (
           Math.abs(sys.posW[satId] - rootPosW) <
           Math.abs(initPosWSat - rootPosW)
         )
           posWCorrected = true;
-        if (scopeBlended && posWCorrected) break;
+        if (posXPulled && posWCorrected) break;
       }
       await manager.waitForStability();
 
-      assert.ok(
-        scopeBlended,
-        "Satellite scope should converge toward root (harmonic resonance)"
-      );
+      // Scope is a discrete identity tag keyed in scopeIndex - blending it as
+      // a float would corrupt the scope index and break inference. Only the
+      // continuous spatial coordinates (posX, posW) are pulled toward the root.
+      assert.ok(posXPulled, "Satellite posX should be pulled toward root");
       assert.ok(
         posWCorrected,
-        "Satellite posW (Age axis) should converge toward root - fixed missing 4th dimension"
+        "Satellite posW (Age axis) should converge toward root"
       );
       assert.ok(
         sys.isAllocated(rootId) && sys.isAllocated(satId),
