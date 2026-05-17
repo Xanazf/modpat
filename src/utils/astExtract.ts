@@ -48,7 +48,7 @@ export interface AstExtractOptions {
   includeCallSites?: boolean;
 }
 
-//  helpers 
+//  helpers
 
 function norm(s: string): string {
   return s.replace(/\s+/g, " ").toLowerCase().trim();
@@ -63,7 +63,7 @@ function typeText(node: ts.TypeNode | undefined, sf: ts.SourceFile): string {
   return norm(node.getText(sf));
 }
 
-//  Stage A - TypeScript compiler API 
+//  Stage A - TypeScript compiler API
 
 function extractViaTypeScript(
   sourceText: string,
@@ -281,7 +281,7 @@ function extractViaTypeScript(
   visit(sf);
 }
 
-//  Stage B - abstract-syntax-tree (ESTree walk) 
+//  Stage B - abstract-syntax-tree (ESTree walk)
 // Used for call-site extraction only (imports are handled in Stage A to avoid
 // TypeScript's import-elision on transpilation).
 // Works on JS produced by ts.transpileModule() - no TS-specific syntax.
@@ -375,7 +375,7 @@ function extractViaEsTree(
   }
 }
 
-//  Public API 
+//  Public API
 
 /**
  * Extract AstTriple records from TypeScript or JavaScript source text.

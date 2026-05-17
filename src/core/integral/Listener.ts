@@ -1,6 +1,7 @@
 import type SemanticAtomizer from "@atomics/SemanticAtomizer"; // kept for resolveScope, which is on Atomic.Engine
 import { DOPAT_CONFIG } from "@config";
 import type Resolver from "@core_i/Resolver";
+import type { ResolverDiagnostics } from "@core_i/Resolver";
 import { OperatorClass, type SystemRef } from "@core_i/System";
 import { isIdentityQueryAboutSelf, shiftPerspective } from "@core_s/Identity";
 import type Store from "@core_s/Memory";
@@ -8,6 +9,23 @@ import { metrics } from "@core_s/Metrics";
 import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
 import nlp from "compromise";
+
+/** Per-call inputs to Listener.processQuestion. */
+export interface ListenerOptions {
+  /** Forwarded to Resolver as opts.contextScopes - working-memory warm start. */
+  contextScopes?: Set<number>;
+}
+
+/** Output of Listener.processQuestion — text plus the diagnostics that produced it. */
+export interface ListenerResult {
+  /** Human-readable answer text. */
+  text: string;
+  /**
+   * Diagnostics captured under the same slot lock as the answer. Race-free
+   * across concurrent producers — prefer over Resolver.lastDiagnostics.
+   */
+  diagnostics: ResolverDiagnostics | null;
+}
 
 const BIGRAM_VOCABULARY = new Set([
   "machine_learning",
@@ -85,8 +103,18 @@ class Listener {
     this._respond = respond ?? (msg => logger.log(`[LiveInference]: ${msg}`));
   }
 
-  public async processQuestion(query: string): Promise<string> {
+  public async processQuestion(
+    query: string,
+    opts: ListenerOptions = {}
+  ): Promise<ListenerResult> {
     const sanitizedQuery = query.replace(/\?$/, "").trim();
+    const ctxScopes = opts.contextScopes;
+    /** Diagnostics from the most recent resolver call - returned to the caller. */
+    let lastDiag: ResolverDiagnostics | null = null;
+    const wrap = (text: string): ListenerResult => ({
+      text,
+      diagnostics: lastDiag,
+    });
 
     // Perspective shift: rewrite second-person input to first-person before the
     // manifold sees it.  "who are you?" → "i am", "your X" → "my X", etc.
@@ -101,15 +129,18 @@ class Listener {
         syntheticQuery,
         this.system
       );
-      const synthesisPath =
-        await this.resolver.resolveSequence(syntheticQuanta);
+      const synthCap = await this.resolver.resolveSequenceCaptured(
+        syntheticQuanta,
+        { contextScopes: ctxScopes }
+      );
+      lastDiag = synthCap.diagnostics;
       const synthesisResult = this.atomizer
-        .decodeSequence(synthesisPath, this.system)
+        .decodeSequence(synthCap.ids, this.system)
         .trim();
       if (synthesisResult && synthesisResult !== "unknown") {
         metrics.increment("resolution.code_synthesis.hit");
         this.respond(`[Code Synthesis]: ${synthesisResult}`);
-        return synthesisResult;
+        return wrap(synthesisResult);
       }
     }
 
@@ -201,12 +232,16 @@ class Listener {
               ? `i am ${decoded}`
               : decoded;
           this.respond(response);
-          return response;
+          return wrap(response);
         }
       }
     }
 
-    const derivationPath = await this.resolver.resolveSequence(queryQuanta);
+    const phase1Cap = await this.resolver.resolveSequenceCaptured(queryQuanta, {
+      contextScopes: ctxScopes,
+    });
+    lastDiag = phase1Cap.diagnostics;
+    const derivationPath = phase1Cap.ids;
     const inferredMeaning = this.atomizer
       .decodeSequence(derivationPath, this.system)
       .replace(/\s+/g, " ")
@@ -240,7 +275,7 @@ class Listener {
           : inferredMeaning;
 
       this.respond(response);
-      return response;
+      return wrap(response);
     }
 
     if (attractionCenter) {
@@ -280,11 +315,16 @@ class Listener {
             const isExpl = Boolean(
               query.toLowerCase().match(/^(how|why|who|what)/)
             );
-            return this.resolveThroughSystem(
+            const phase2 = await this.resolveThroughSystem(
               topologicalQuery,
               bestFact,
-              isExpl
+              isExpl,
+              ctxScopes
             );
+            // Stitch the phase-2 diagnostics into our local capture chain so
+            // the caller sees the same race-free view of the final pass.
+            lastDiag = phase2.diagnostics ?? lastDiag;
+            return wrap(phase2.text);
           }
         }
       } catch (e) {
@@ -296,7 +336,7 @@ class Listener {
       metrics.increment("resolution.miss");
       const fallback = "unknown";
       this.respond(fallback);
-      return fallback;
+      return wrap(fallback);
     }
 
     logger.debug(`[Unfolder] Expanding logical void for: ${attractionCenter}`);
@@ -336,6 +376,7 @@ class Listener {
     const coherentResult = await this.resolver.resolveCoherent(queryQuanta, {
       maxIterations: 3,
     });
+    lastDiag = coherentResult.diagnostics ?? lastDiag;
     const reInferredMeaning = this.atomizer
       .decodeSequence(coherentResult.ids, this.system)
       .replace(/\s+/g, " ")
@@ -351,13 +392,13 @@ class Listener {
     ) {
       metrics.increment("resolution.phase4.hit");
       this.respond(reInferredMeaning);
-      return reInferredMeaning;
+      return wrap(reInferredMeaning);
     }
 
     if (postExpandLength <= preExpandLength) {
       metrics.increment("resolution.miss");
       this.respond("unknown");
-      return "unknown";
+      return wrap("unknown");
     }
 
     // Phase 5: Geodesic plan through sentence-layered expanded content.
@@ -382,7 +423,7 @@ class Listener {
         if (tripleAnswer) {
           metrics.increment("resolution.phase5.triple_hit");
           this.respond(tripleAnswer);
-          return tripleAnswer;
+          return wrap(tripleAnswer);
         }
       }
 
@@ -430,14 +471,14 @@ class Listener {
         if (plan) {
           metrics.increment("resolution.phase5.hit");
           this.respond(plan);
-          return plan;
+          return wrap(plan);
         }
       }
     }
 
     metrics.increment("resolution.miss");
     this.respond("unknown");
-    return "unknown";
+    return wrap("unknown");
   }
 
   /**
@@ -582,12 +623,21 @@ class Listener {
   private async resolveThroughSystem(
     query: string,
     fact: string,
-    isExplanatoryQuery: boolean = false
-  ): Promise<string> {
+    isExplanatoryQuery: boolean = false,
+    contextScopes?: Set<number>
+  ): Promise<ListenerResult> {
     const contextQuanta = this.atomizer.ingestSequence(fact, this.system);
 
     const queryQuanta = this.atomizer.ingestSequence(query, this.system);
-    const derivationPath = await this.resolver.resolveSequence(queryQuanta);
+    const cap = await this.resolver.resolveSequenceCaptured(queryQuanta, {
+      contextScopes,
+    });
+    let lastDiag: ResolverDiagnostics | null = cap.diagnostics;
+    const wrap = (text: string): ListenerResult => ({
+      text,
+      diagnostics: lastDiag,
+    });
+    const derivationPath = cap.ids;
     const inferredMeaning = this.atomizer
       .decodeSequence(derivationPath, this.system)
       .replace(/\s+/g, " ")
@@ -687,7 +737,7 @@ class Listener {
             this.atomizer
           );
           this.respond(`[Geodesic]: ${answerString}`);
-          return answerString;
+          return wrap(answerString);
         }
       }
     }
@@ -709,11 +759,11 @@ class Listener {
       inferredMeaning === "unknown"
     ) {
       this.respond(fact);
-      return fact;
+      return wrap(fact);
     }
 
     this.respond(inferredMeaning);
-    return inferredMeaning;
+    return wrap(inferredMeaning);
   }
 
   private respond(response: string): void {

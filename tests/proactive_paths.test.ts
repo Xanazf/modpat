@@ -20,7 +20,7 @@ import Runtime from "@core_i/Runtime";
 
 export async function runProactivePathTests() {
   await describe("Proactive Paths - CognitiveLoop + InquiryQueue + Gap Scanner", async () => {
-    //  InquiryQueue persistence 
+    //  InquiryQueue persistence
 
     await it("InquiryQueue enqueues and persists items", async () => {
       const env = await TestHarness.getEnvironment("base");
@@ -62,7 +62,7 @@ export async function runProactivePathTests() {
       await TestHarness.disposeEnvironment(env);
     });
 
-    //  Intent precept spawning 
+    //  Intent precept spawning
 
     await it("spawnIntent creates a precept with OperatorClass.Intent", async () => {
       const env = await TestHarness.getEnvironment("base");
@@ -128,7 +128,7 @@ export async function runProactivePathTests() {
       await TestHarness.disposeEnvironment(env);
     });
 
-    //  CognitiveLoop wiring 
+    //  CognitiveLoop wiring
 
     await it("CognitiveLoop registers and senses Intent precepts", async () => {
       const rt = await Runtime.boot({
@@ -176,7 +176,7 @@ export async function runProactivePathTests() {
       await rt.dispose();
     });
 
-    //  dreamCycle multi-zone (S10 fix) 
+    //  dreamCycle multi-zone (S10 fix)
 
     await it("DREAM_ZONES_PER_CYCLE config is > 1", async () => {
       const { DOPAT_CONFIG } = await import("@config");
@@ -184,7 +184,7 @@ export async function runProactivePathTests() {
       assert.ok(zones > 1, `DREAM_ZONES_PER_CYCLE should be > 1, got ${zones}`);
     });
 
-    //  Corrective feedback O6 
+    //  Corrective feedback O6
 
     await it("corrective feedback 'no, X is Y' ingests the correction", async () => {
       const rt = await Runtime.boot({
@@ -231,7 +231,7 @@ export async function runProactivePathTests() {
       await rt.dispose();
     });
 
-    //  monitorThreats batching (S8 fix) 
+    //  monitorThreats batching (S8 fix)
 
     await it("monitorThreats uses cursor-based batching", async () => {
       const { ManifoldLifecycle } = await import("@core_s/ManifoldLifecycle");

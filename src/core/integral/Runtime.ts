@@ -218,13 +218,15 @@ export class LiveInference {
     // Reference resolution: "it", "this" → most recent conclusion from working memory.
     const resolvedQuery = this.workingMemory.resolveReferences(query);
 
-    // Context seeding: tell the Resolver which scopes are "warm" from recent turns.
-    this.resolver.contextScopes = new Set(this.workingMemory.contextScopes());
+    // Context seeding: pass scopes through opts so they isolate to this call
+    // rather than racing on a shared instance field.
+    const ctxScopes = new Set(this.workingMemory.contextScopes());
 
-    const result = await this.listener.processQuestion(resolvedQuery);
+    const { text: result, diagnostics: diag } =
+      await this.listener.processQuestion(resolvedQuery, {
+        contextScopes: ctxScopes,
+      });
     this.last_signature = this.listener.lastSignature;
-
-    const diag = this.resolver.lastDiagnostics;
 
     if (
       !result ||
@@ -269,8 +271,8 @@ export class LiveInference {
       });
     }
 
-    // Clear context scopes - next turn will rebuild from updated working memory.
-    this.resolver.contextScopes = new Set();
+    // contextScopes are scoped to the listener call via opts, so there is
+    // nothing to clear here - the next turn will rebuild them locally.
 
     return result;
   }
@@ -284,11 +286,11 @@ export class LiveInference {
     // follow-up questions ("what color is it?") can resolve "it" to the subject.
     const topic = extractTopic(statement);
     if (topic) {
-      const sys = this.systemRef.current;
-      const topicScope =
-        this.resolver.contextScopes.size === 0
-          ? 0
-          : [...this.resolver.contextScopes][0]; // best guess at the topic scope
+      // Pick the most recent working-memory scope as the best-guess subject
+      // scope for the new conclusion. Avoids reading the racy
+      // Resolver.contextScopes mirror.
+      const recent = this.workingMemory.contextScopes();
+      const topicScope = recent.length > 0 ? recent[recent.length - 1] : 0;
       this.workingMemory.push({
         query: statement,
         conclusion: topic,
@@ -403,6 +405,23 @@ export class Runtime {
   private _gapSeen = new Set<string>();
   private _tickIntervalMs = 0;
   private _lifecycleCtx: DatabaseContext | null = null;
+  /**
+   * Background tasks kicked off in boot() — inquiry-queue hydration and the
+   * syllogism seed. dispose() awaits this before closing the store so a
+   * fast-path dispose never races their DuckDB prepare() calls.
+   */
+  private _bootBackground: Promise<void> = Promise.resolve();
+  /** Set true once dispose() begins so any in-flight boot task can early-out. */
+  private _disposed = false;
+
+  /**
+   * Resolves when both fire-and-forget boot tasks (inquiry-queue restore and
+   * syllogism seed) have settled. Callers that need a fully-warm Runtime can
+   * `await rt.ready` after boot returns.
+   */
+  get ready(): Promise<void> {
+    return this._bootBackground;
+  }
 
   private constructor(fields: {
     system: System;
@@ -566,16 +585,34 @@ export class Runtime {
       });
     }
 
-    // Restore any unresolved inquiries from the previous session.
-    store
-      .loadInquiryQueue()
-      .then(items => rt.inference.getInquiryQueue().populate(items))
-      .catch(e => logger.warn("[INQUIRY LOAD]", e));
-
-    // Seed canonical syllogism templates so Phase 0b vault recall handles them
+    // Restore any unresolved inquiries from the previous session, and seed
+    // canonical syllogism templates so Phase 0b vault recall handles them
     // before falling through to the hard-coded NLP rules in Phase 1.
-    Runtime._seedSyllogisms(store, atomizer, system).catch(e =>
-      logger.warn("[SYLLOGISM SEED]", e)
+    //
+    // Both run in the background, but the combined promise is stored on the
+    // Runtime so dispose() can await them before closing the store. Without
+    // this, a fast dispose() races their DuckDB prepare() calls and emits
+    // "connection disconnected" warnings.
+    const restoreInquiries = store
+      .loadInquiryQueue()
+      .then(items => {
+        if (!rt._disposed) rt.inference.getInquiryQueue().populate(items);
+      })
+      .catch(e => {
+        if (!rt._disposed) logger.warn("[INQUIRY LOAD]", e);
+      });
+
+    const seedTemplates = Runtime._seedSyllogisms(
+      store,
+      atomizer,
+      system,
+      () => rt._disposed
+    ).catch(e => {
+      if (!rt._disposed) logger.warn("[SYLLOGISM SEED]", e);
+    });
+
+    rt._bootBackground = Promise.all([restoreInquiries, seedTemplates]).then(
+      () => undefined
     );
 
     return rt;
@@ -679,11 +716,17 @@ export class Runtime {
    * Seeds canonical logical syllogism templates into the vault at high energy
    * so Phase 0b vault recall handles them before the hard-coded Phase 1 NLP rules.
    * Idempotent: templates already present (by signature) are skipped.
+   *
+   * @param cancelled Predicate polled between awaits. When it returns true,
+   *                  the seeder exits cleanly without further DuckDB writes —
+   *                  used so dispose() can stop seeding before closing the
+   *                  store rather than swallowing "connection disconnected".
    */
   private static async _seedSyllogisms(
     store: Store,
     atomizer: Atomic.Engine,
-    system: System
+    system: System,
+    cancelled: () => boolean = () => false
   ): Promise<void> {
     // Template definitions: [premise text, conclusion text, energy]
     // Energy 5.0 is well above normal vault entries (~1.0) so they rank first.
@@ -699,9 +742,11 @@ export class Runtime {
     ];
 
     for (const [premiseText, conclusionText, energy] of templates) {
+      if (cancelled()) return;
       try {
         const premiseIds = atomizer.ingestSequence(premiseText, system);
         const hit = await store.checkInterferencePattern(premiseIds);
+        if (cancelled()) return;
         if (hit) continue; // already seeded
         const conclusionIds = atomizer.ingestSequence(conclusionText, system);
         await store.crystallizeProof(premiseIds, conclusionIds, energy);
@@ -709,6 +754,9 @@ export class Runtime {
           `[SYLLOGISM SEED] seeded: "${premiseText}" → "${conclusionText}"`
         );
       } catch (e) {
+        // Suppress noise if we're already tearing down — those errors are
+        // expected ("connection disconnected") and not actionable.
+        if (cancelled()) return;
         logger.warn("[SYLLOGISM SEED] failed for template:", premiseText, e);
       }
     }
@@ -777,7 +825,14 @@ export class Runtime {
 
   /** Releases GPU resources, stops the tick, closes database connections, and terminates workers. */
   async dispose(): Promise<void> {
+    // Flag boot-background tasks (syllogism seed, inquiry-queue restore) to
+    // bail out at their next checkpoint so they don't reach a closed store.
+    this._disposed = true;
     this.stopTick();
+    // Drain any in-flight boot-background work before closing the store.
+    // Their per-step cancellation check sees _disposed and exits cleanly;
+    // we still await so a fast dispose() doesn't race the DuckDB prepare().
+    await this._bootBackground.catch(() => {});
     await this.resolver.dispose();
     await this.store.close();
     if (this._lifecycleCtx) await this._lifecycleCtx.close();

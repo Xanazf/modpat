@@ -7,7 +7,31 @@ import nlp from "compromise";
 import { GridIndex4D } from "../structural/GridIndex4D";
 import { type CodePattern, Synthesizer } from "./Coder";
 import Mapper from "./Mapper";
+import { ResolverSlot, ResolverSlotPool } from "./ResolverSlot";
 import System, { OperatorClass, SlotType, SystemRef } from "./System";
+
+/**
+ * Per-call inputs to resolveSequence / resolveCoherent / probeSequence.
+ *
+ * Threading these through the call instead of via instance fields is what
+ * makes the engine safe when CognitiveLoop, Learner, dream cycle and user
+ * input call the same Resolver concurrently. Callers that don't set them get
+ * the existing instance-level defaults.
+ */
+export interface ResolveOptions {
+  /**
+   * Scopes from the caller's working memory. Tokens in the sequence whose
+   * scope appears here receive a warm-start energy bonus in the forward
+   * propagation pass (Phase 2).
+   */
+  contextScopes?: Set<number>;
+  /**
+   * When true, resolveSequence skips Phase 0 (vault recall) and Phase 1
+   * (NLP-derived rules). Used by Learner.challenge to verify that the
+   * physics alone can reproduce the answer.
+   */
+  probeMode?: boolean;
+}
 
 /**
  * Result returned by resolveCoherent: the best answer found, a coherence score,
@@ -38,6 +62,12 @@ export interface CoherentResult {
    *  - "exhausted" - max iterations reached without crossing threshold
    */
   diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
+  /**
+   * Diagnostics from the iteration whose answer was chosen as the best. Callers
+   * should prefer this over Resolver.lastDiagnostics: the latter is overwritten
+   * by any concurrent resolveSequence call and races with overlapping producers.
+   */
+  diagnostics: ResolverDiagnostics | null;
 }
 
 /**
@@ -133,28 +163,15 @@ export default class Resolver implements Resolution.Engine {
 
   /** Maximum capacity for the pre-allocated resolution buffers. */
   private static MAX_SEQUENCE_LENGTH = 1024;
-  /** T_buffer: Stores the current energy vibration (resonance) of each node. */
-  private T_buffer: Float64Array;
-  /** W_buffer: The Transfer Matrix defining resonance between nodes. */
-  private W_buffer: Float64Array;
-  /** Accumulated resonance (reachability) across all steps. */
-  private E_total_buffer: Float64Array;
-  /** Current resonance snapshot for iterative propagation. */
-  private E_curr_buffer: Float64Array;
-  /** Buffer for calculating the next state of the resonance matrix. */
-  private E_new_buffer: Float64Array;
-  /** Buffer for temporal vibration updates. */
-  private T_next_buffer: Float64Array;
-  /** Backward resonance energy vector - energy propagating from goal toward premises. */
-  private T_back_buffer: Float64Array;
-  /** Scratch buffer for the backward propagation step. */
-  private T_back_next_buffer: Float64Array;
-  /** Accumulated backward energy per node across all backward propagation steps. */
-  private backwardEnergyBuffer: Float64Array;
-  /** Temporary storage for identified direct logical scopes. */
-  private directScopesBuffer: Float64Array;
-  /** Result buffer for the final inferred quantum sequence. */
-  private resultIdsBuffer: Uint32Array;
+  /**
+   * Default pool size: max concurrent resolveSequence calls before back-pressure
+   * starts queueing acquires. Sized to cover every concurrent producer the
+   * Runtime starts by default (user input + CognitiveLoop + Learner.runCycle +
+   * InquiryQueue drain + gap scanner + dream cycle) plus headroom.
+   */
+  private static DEFAULT_POOL_SIZE = 8;
+  /** Per-call workspace pool. Replaces the previous singleton scratch buffers. */
+  private readonly slotPool: ResolverSlotPool;
   /** 4D spatial index reused across fuzzy-centroid lookups; rebuilt when system length changes. */
   private readonly spatialIndex = new GridIndex4D();
   private lastIndexedLength = -1;
@@ -170,14 +187,24 @@ export default class Resolver implements Resolution.Engine {
     { cls: OperatorClass; count: number }
   >();
 
-  /** Sink strength of the winning target node from the most recent resolveSequence call. */
+  /**
+   * Sink strength of the most recent completed resolveSequence call.
+   *
+   * Race-prone with concurrent callers — this is a "most-recent-globally"
+   * view, useful for sequential test inspection. Concurrent producers should
+   * read the value returned from their own call instead (see ResolveResult).
+   */
   public lastSinkStrength = 0;
-  /** Full diagnostic snapshot from the most recent resolveSequence physics run. */
+  /**
+   * Full diagnostic snapshot from the most recent completed resolveSequence
+   * call. See lastSinkStrength for concurrency caveat.
+   */
   public lastDiagnostics: ResolverDiagnostics | null = null;
-  /** Operators discovered via resonance-peak analysis during the most recent resolveSequence call. */
+  /**
+   * Operators discovered via resonance-peak analysis during the most recent
+   * completed resolveSequence call. See lastSinkStrength for concurrency caveat.
+   */
   public lastDiscoveredOperators: DiscoveredOperator[] = [];
-  /** When true, resolveSequence skips Phase 0 (vault) and Phase 1 (NLP derivation). */
-  private probeMode = false;
 
   /**
    * Initializes the Resolver and pre-allocates scratchpad memory for DOD performance.
@@ -198,18 +225,10 @@ export default class Resolver implements Resolution.Engine {
     this.mapper = new Mapper(this.systemRef);
     this.synthesizer = new Synthesizer();
 
-    const maxN = Resolver.MAX_SEQUENCE_LENGTH;
-    this.T_buffer = new Float64Array(maxN);
-    this.W_buffer = new Float64Array(maxN * maxN);
-    this.E_total_buffer = new Float64Array(maxN * maxN);
-    this.E_curr_buffer = new Float64Array(maxN * maxN);
-    this.E_new_buffer = new Float64Array(maxN * maxN);
-    this.T_next_buffer = new Float64Array(maxN);
-    this.T_back_buffer = new Float64Array(maxN);
-    this.T_back_next_buffer = new Float64Array(maxN);
-    this.backwardEnergyBuffer = new Float64Array(maxN);
-    this.directScopesBuffer = new Float64Array(maxN);
-    this.resultIdsBuffer = new Uint32Array(maxN);
+    this.slotPool = new ResolverSlotPool(
+      Resolver.DEFAULT_POOL_SIZE,
+      Resolver.MAX_SEQUENCE_LENGTH
+    );
 
     // Initialize GPU offloading if configured.
     if (DOPAT_CONFIG.USE_GPU) {
@@ -306,13 +325,11 @@ export default class Resolver implements Resolution.Engine {
    * @param sequenceIds The input sequence of quantum IDs (should end with a Sink token).
    * @returns The physics-derived conclusion sequence.
    */
-  public async probeSequence(sequenceIds: Uint32Array): Promise<Uint32Array> {
-    this.probeMode = true;
-    try {
-      return await this.resolveSequence(sequenceIds);
-    } finally {
-      this.probeMode = false;
-    }
+  public async probeSequence(
+    sequenceIds: Uint32Array,
+    opts: ResolveOptions = {}
+  ): Promise<Uint32Array> {
+    return this.resolveSequence(sequenceIds, { ...opts, probeMode: true });
   }
 
   /**
@@ -325,17 +342,68 @@ export default class Resolver implements Resolution.Engine {
    * @returns The resolved sequence representing the conclusion.
    */
   /**
-   * Optional set of scopes from working memory - any token in the current sequence
-   * whose scope appears here gets a warm-start energy bonus in the forward pass,
-   * making recently-established concepts naturally "louder" in the resonance.
+   * Set of scopes from working memory.  Tokens in the current sequence whose
+   * scope appears here get a warm-start energy bonus in the forward pass.
+   *
+   * Deprecated for concurrent callers: this instance field is racy across
+   * overlapping resolveSequence calls. Pass `opts.contextScopes` instead — it
+   * takes precedence over this field and is isolated to the call.
    */
   public contextScopes: Set<number> = new Set();
 
-  public async resolveSequence(sequenceIds: Uint32Array): Promise<Uint32Array> {
+  public async resolveSequence(
+    sequenceIds: Uint32Array,
+    opts: ResolveOptions = {}
+  ): Promise<Uint32Array> {
+    return (await this._resolveCapturing(sequenceIds, opts)).ids;
+  }
+
+  /**
+   * Same as resolveSequence but returns a per-call snapshot of diagnostics,
+   * sink strength, discovered operators, and bridge candidates alongside the
+   * resolved ids. Use this when the caller needs diagnostics race-free across
+   * overlapping resolveSequence calls — reading the instance-level `last*`
+   * mirror fields after `await resolveSequence` is racy under concurrent load.
+   */
+  public async resolveSequenceCaptured(
+    sequenceIds: Uint32Array,
+    opts: ResolveOptions = {}
+  ): Promise<{
+    ids: Uint32Array;
+    diagnostics: ResolverDiagnostics | null;
+    sinkStrength: number;
+    discoveredOperators: DiscoveredOperator[];
+    bridgeCandidates: BridgeCandidate[];
+  }> {
+    return this._resolveCapturing(sequenceIds, opts);
+  }
+
+  /**
+   * Per-call output snapshot taken before the slot is released. Concurrent
+   * callers each get their own capture — the instance-level `last*` mirror
+   * fields are also updated for sequential back-compat, but they are racy
+   * across overlapping calls.
+   */
+  private async _resolveCapturing(
+    sequenceIds: Uint32Array,
+    opts: ResolveOptions
+  ): Promise<{
+    ids: Uint32Array;
+    diagnostics: ResolverDiagnostics | null;
+    sinkStrength: number;
+    discoveredOperators: DiscoveredOperator[];
+    bridgeCandidates: BridgeCandidate[];
+  }> {
     const N = sequenceIds.length;
-    if (N === 0) return new Uint32Array(0);
-    this.lastSinkStrength = 0;
-    this.lastDiagnostics = null;
+    if (N === 0) {
+      return {
+        ids: new Uint32Array(0),
+        diagnostics: null,
+        sinkStrength: 0,
+        discoveredOperators: [],
+        bridgeCandidates: [],
+      };
+    }
 
     // Ensure sequence fits within our pre-allocated DOD scratchpad.
     if (N > Resolver.MAX_SEQUENCE_LENGTH) {
@@ -343,6 +411,47 @@ export default class Resolver implements Resolution.Engine {
         `Sequence length ${N} exceeds max DOD buffer capacity ${Resolver.MAX_SEQUENCE_LENGTH}`
       );
     }
+
+    // Acquire a per-call workspace. Until release(), all scratch buffer and
+    // diagnostic writes are isolated to this slot — concurrent callers get
+    // their own slots. The pool back-pressures if more than DEFAULT_POOL_SIZE
+    // calls are in flight at once.
+    const slot = await this.slotPool.acquire();
+    slot.contextScopes = opts.contextScopes ?? this.contextScopes;
+    slot.probeMode = opts.probeMode ?? false;
+    try {
+      const ids = await this._resolveSequenceWithSlot(sequenceIds, slot);
+      const capture = {
+        ids,
+        diagnostics: slot.diagnostics,
+        sinkStrength: slot.sinkStrength,
+        discoveredOperators: slot.discoveredOperators,
+        bridgeCandidates: slot.bridgeCandidates,
+      };
+      // Mirror onto the "most recent globally" fields for sequential
+      // test/test-harness inspection. Concurrent callers should use the
+      // returned capture instead — these mirrors race across overlapping calls.
+      this.lastSinkStrength = capture.sinkStrength;
+      this.lastDiagnostics = capture.diagnostics;
+      this.lastDiscoveredOperators = capture.discoveredOperators;
+      return capture;
+    } finally {
+      this.slotPool.release(slot);
+    }
+  }
+
+  /**
+   * Runs the full Phase 0..7 pipeline against the supplied slot. All scratch
+   * buffer access goes through `slot.*` instead of `this.*` so concurrent
+   * callers cannot trample each other's intermediate state.
+   */
+  private async _resolveSequenceWithSlot(
+    sequenceIds: Uint32Array,
+    slot: ResolverSlot
+  ): Promise<Uint32Array> {
+    const N = sequenceIds.length;
+    slot.sinkStrength = 0;
+    slot.diagnostics = null;
 
     // Phase 0: Handle semantic queries (e.g., "The sky is" or "The sky is |-").
     // These are open-ended questions that require lookup or memory resonance.
@@ -384,7 +493,7 @@ export default class Resolver implements Resolution.Engine {
 
       if (result.length > 0) {
         // Crystallize only in normal mode - probe mode is read-only.
-        if (!this.probeMode && this.store) {
+        if (!slot.probeMode && this.store) {
           await this.store.crystallizeProof(sequenceIds, result, 1.0);
           // Boost masses: a freshly derived and crystallized inference also
           // reinforces its atoms so the path becomes more prominent over time.
@@ -398,23 +507,23 @@ export default class Resolver implements Resolution.Engine {
     }
 
     // Phase 1: Semantic Derivation - vault check first, NLP rules as fallback.
-    const derivation = this.probeMode
+    const derivation = slot.probeMode
       ? null
       : await this.resolveSemanticDerivation(sequenceIds);
     if (derivation) return derivation;
 
     // Phase 2: Physics Simulation (Resolution Matrix).
     // Initialize the energy vibration vector.
-    const energyVibration = this.T_buffer.subarray(0, N);
+    const energyVibration = slot.T_buffer.subarray(0, N);
     energyVibration.fill(0);
     if (N > 0) energyVibration[0] = 1.0; // Seed the system with initial resonance energy.
 
     // Working-memory warm start: tokens whose scope appears in recent conclusions
     // get bonus energy so established context naturally amplifies in the forward wave.
-    if (this.contextScopes.size > 0) {
+    if (slot.contextScopes.size > 0) {
       const CONTEXT_WEIGHT = 0.35;
       for (let i = 1; i < N; i++) {
-        if (this.contextScopes.has(this.system.scope[sequenceIds[i]])) {
+        if (slot.contextScopes.has(this.system.scope[sequenceIds[i]])) {
           energyVibration[i] = Math.max(energyVibration[i], CONTEXT_WEIGHT);
         }
       }
@@ -436,7 +545,7 @@ export default class Resolver implements Resolution.Engine {
     }
 
     // Initialize the Transfer Matrix (W) defining the conductivity of logic.
-    const transferMatrix = this.W_buffer.subarray(0, N * N);
+    const transferMatrix = slot.W_buffer.subarray(0, N * N);
     transferMatrix.fill(0);
 
     let sinkNodeIdx = -1;
@@ -553,8 +662,8 @@ export default class Resolver implements Resolution.Engine {
 
     // Phase 3: Compute Accumulated Resonance Matrix (Reachability).
     // Iteratively propagate energy through the matrix to find long-range resonances.
-    const accumulatedResonance = this.E_total_buffer.subarray(0, N * N);
-    const currentResonance = this.E_curr_buffer.subarray(0, N * N);
+    const accumulatedResonance = slot.E_total_buffer.subarray(0, N * N);
+    const currentResonance = slot.E_curr_buffer.subarray(0, N * N);
     accumulatedResonance.set(transferMatrix);
     currentResonance.set(transferMatrix);
 
@@ -593,7 +702,7 @@ export default class Resolver implements Resolution.Engine {
         step < DOPAT_CONFIG.resolver.PROPAGATION_ITERS;
         step++
       ) {
-        const nextResonance = this.E_new_buffer.subarray(0, N * N);
+        const nextResonance = slot.E_new_buffer.subarray(0, N * N);
         nextResonance.fill(0);
         for (let i = 0; i < N; i++) {
           for (let j = 0; j < N; j++) {
@@ -621,7 +730,7 @@ export default class Resolver implements Resolution.Engine {
     // Scan tokens still classified as None and check whether their resonance topology
     // (outbound vs incoming energy distribution) betrays operator-like behaviour.
     // Discoveries update operatorClass and mass in the manifold for future resolutions.
-    this.lastDiscoveredOperators = this.discoverOperatorsByResonance(
+    slot.discoveredOperators = this.discoverOperatorsByResonance(
       sequenceIds,
       N,
       accumulatedResonance
@@ -641,9 +750,9 @@ export default class Resolver implements Resolution.Engine {
     //
     // Missing links are the system's natural question targets: "to reach this
     // conclusion I need to understand X - can you help?"
-    const T_back = this.T_back_buffer.subarray(0, N);
-    const T_back_nx = this.T_back_next_buffer.subarray(0, N);
-    const backwardEnergy = this.backwardEnergyBuffer.subarray(0, N);
+    const T_back = slot.T_back_buffer.subarray(0, N);
+    const T_back_nx = slot.T_back_next_buffer.subarray(0, N);
+    const backwardEnergy = slot.backwardEnergyBuffer.subarray(0, N);
     T_back.fill(0);
     T_back_nx.fill(0);
     backwardEnergy.fill(0);
@@ -749,8 +858,9 @@ export default class Resolver implements Resolution.Engine {
     }
 
     // Capture diagnostics for grounding tests and verbose mode.
-    this.lastSinkStrength = Math.max(0, maxNetEnergy);
-    this.lastDiagnostics = {
+    slot.sinkStrength = Math.max(0, maxNetEnergy);
+    slot.bridgeCandidates = bridgeCandidates;
+    slot.diagnostics = {
       N,
       tokenLabels: Array.from(sequenceIds).map(id =>
         this.atomizer.decodeSequence(new Uint32Array([id]), this.system).trim()
@@ -765,7 +875,7 @@ export default class Resolver implements Resolution.Engine {
         .slice(0, 5),
       selectedTargetIdx: targetNodeIdx,
       maxNetEnergy,
-      discoveredOperators: this.lastDiscoveredOperators,
+      discoveredOperators: slot.discoveredOperators,
       bridgeCandidates,
     };
 
@@ -808,7 +918,7 @@ export default class Resolver implements Resolution.Engine {
           }
         }
         if (negatedConclusionId !== -1) {
-          this.lastSinkStrength = Math.abs(minStrength);
+          slot.sinkStrength = Math.abs(minStrength);
           return new Uint32Array([inversionTokenId, negatedConclusionId]);
         }
       }
@@ -829,7 +939,7 @@ export default class Resolver implements Resolution.Engine {
     // Identify the indirect source that bridged the logical gap to the target.
     let sourceNodeIdx = -1;
     let directScopesCount = 0;
-    const directScopes = this.directScopesBuffer.subarray(0, N);
+    const directScopes = slot.directScopesBuffer.subarray(0, N);
 
     // Track scopes that already have a direct connection to the target.
     for (let k = 0; k < N; k++) {
@@ -866,7 +976,7 @@ export default class Resolver implements Resolution.Engine {
 
     // Phase 6: Construct the inferred output quanta.
     let resultCount = 0;
-    const resultIds = this.resultIdsBuffer.subarray(0, N);
+    const resultIds = slot.resultIdsBuffer.subarray(0, N);
 
     // Helper to preserve logical modifiers (like "all", "every") in the output.
     const pushWithModifiers = (index: number) => {
@@ -900,7 +1010,7 @@ export default class Resolver implements Resolution.Engine {
 
     // Phase 7: Waveform Collapse (Simulated final state).
     // Collapses the vibrating system into its final discrete state.
-    const T_next = this.T_next_buffer.subarray(0, N);
+    const T_next = slot.T_next_buffer.subarray(0, N);
     for (let tick = 0; tick < N; tick++) {
       T_next.set(energyVibration);
       for (let i = 0; i < N; i++) {
@@ -1178,23 +1288,26 @@ export default class Resolver implements Resolution.Engine {
 
     const learned: string[] = [];
     let bestIds: Uint32Array = new Uint32Array(0);
+    let bestDiag: ResolverDiagnostics | null = null;
     let bestCoherence = 0;
     let staleSince = 0; // consecutive iterations with no coherence improvement
     let finalDiagnosis: CoherentResult["diagnosis"] = "exhausted";
     let iter = 0;
 
     for (; iter < maxIter; iter++) {
-      // One resolution pass.
-      const ids = inProbe
-        ? await this.probeSequence(sequenceIds)
-        : await this.resolveSequence(sequenceIds);
-
-      const diag = this.lastDiagnostics;
+      // One resolution pass. The capturing helper snapshots diagnostics under
+      // the slot lock, so concurrent callers cannot trample what we read here.
+      const capture = await this._resolveCapturing(sequenceIds, {
+        probeMode: inProbe,
+      });
+      const ids = capture.ids;
+      const diag = capture.diagnostics;
       const coherence = this.measureCoherence(diag);
 
       if (coherence > bestCoherence) {
         bestCoherence = coherence;
         bestIds = ids;
+        bestDiag = diag;
         staleSince = 0;
       } else {
         staleSince++;
@@ -1282,6 +1395,7 @@ export default class Resolver implements Resolution.Engine {
       iterations: iter,
       learned,
       diagnosis: finalDiagnosis,
+      diagnostics: bestDiag,
     };
   }
 

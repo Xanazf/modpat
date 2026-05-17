@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { DOPAT_CONFIG } from "@config";
 import type Resolver from "@core_i/Resolver";
+import type { ResolverDiagnostics } from "@core_i/Resolver";
 import { OperatorClass, type SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
@@ -69,6 +70,12 @@ export class Learner {
   private store: Store;
   private unfolder: Unfolder;
   private _lastProbeIds: Uint32Array | null = null;
+  /**
+   * Diagnostics captured from the most recent challenge()'s coherence run.
+   * Stored as a local-to-Learner cache so crystallizeLearnedPath does not need
+   * to read the racy Resolver.lastDiagnostics mirror.
+   */
+  private _lastDiagnostics: ResolverDiagnostics | null = null;
 
   constructor(
     systemRef: SystemRef,
@@ -113,6 +120,9 @@ export class Learner {
       probeMode: true,
       maxIterations: 3,
     });
+    // Cache the diagnostics captured by resolveCoherent so downstream callers
+    // (crystallizeLearnedPath) don't have to read the racy resolver mirror.
+    this._lastDiagnostics = coherentResult.diagnostics;
 
     const reproduced = this.atomizer
       .decodeSequence(coherentResult.ids, this.system)
@@ -137,7 +147,7 @@ export class Learner {
     const factWords = new Set(candidate.factText.toLowerCase().split(/\s+/));
     const hasGeneralizationSignal =
       success &&
-      (this.resolver.lastDiagnostics?.bridgeCandidates ?? []).some(
+      (coherentResult.diagnostics?.bridgeCandidates ?? []).some(
         b =>
           !b.isMissingLink &&
           b.bridgeScore > 0.05 &&
@@ -297,7 +307,9 @@ export class Learner {
     candidate: Memory.ChallengeCandidate,
     energy: number = 1.5
   ): Promise<void> {
-    const diag = this.resolver.lastDiagnostics;
+    // Read the Learner-local cache instead of the racy Resolver.lastDiagnostics
+    // mirror. Set by challenge() right after resolveCoherent returned.
+    const diag = this._lastDiagnostics;
     if (!diag || diag.sinkCandidates.length === 0) return;
 
     const probeText = buildProbeText(candidate.factText);
