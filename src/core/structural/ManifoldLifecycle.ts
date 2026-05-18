@@ -1,5 +1,5 @@
 import { DOPAT_CONFIG } from "@config";
-import type System from "@core_i/System";
+import System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import { OperatorClass, SystemRef } from "@core_i/System";
 import { DeltaQueue } from "@core_s/DeltaQueue";
@@ -334,10 +334,22 @@ export class ManifoldLifecycle {
         `[ManifoldLifecycle] Detected ${corruptedIds.length} corrupted precepts. Initiating self-healing...`
       );
       this.isHydrating = true;
-      this.stabilityPromise = this.activeSystem
+      const newSystem = new System();
+      const newAllocator = new TMRFreeList();
+      newSystem.setAllocator(newAllocator);
+      newAllocator.setInterruptHandler((reason, values) => {
+        this.triggerInterrupt(`TMR quarantine [self-healed]: ${reason}`).catch(err => {
+          console.error(`[ManifoldLifecycle] TMR interrupt error:`, err);
+        });
+      });
+
+      this.stabilityPromise = newSystem
         .hydrate(this.persistence)
         .then(() => {
           console.log(`[ManifoldLifecycle] Self-healing complete.`);
+          this.activeSystem = newSystem;
+          this.activeAllocator = newAllocator;
+          this.systemRef.swap(newSystem);
         })
         .finally(() => {
           this.isHydrating = false;
@@ -359,21 +371,24 @@ export class ManifoldLifecycle {
     console.error(
       `[ManifoldLifecycle] CRITICAL INTERRUPT: ${reason}. Switching to Emergency Manifold!`
     );
-    this.activeSystem = this.emergencySystem;
-    this.activeAllocator = this.emergencyAllocator;
-    // Atomically redirect all SystemRef holders to the emergency system.
-    this.systemRef.swap(this.emergencySystem);
 
     // Attempt to hydrate emergency system from persistence to prevent operating on stale/empty state
     if (this.isHydrating) return this.stabilityPromise || Promise.resolve();
 
     this.isHydrating = true;
-    this.stabilityPromise = this.activeSystem
+    const targetSystem = this.activeSystem === this.primarySystem ? this.emergencySystem : this.primarySystem;
+    const targetAllocator = this.activeSystem === this.primarySystem ? this.emergencyAllocator : this.primaryAllocator;
+
+    this.stabilityPromise = targetSystem
       .hydrate(this.persistence)
       .then(() => {
         console.log(
           `[ManifoldLifecycle] Emergency Manifold hydrated successfully.`
         );
+        this.activeSystem = targetSystem;
+        this.activeAllocator = targetAllocator;
+        // Atomically redirect all SystemRef holders to the emergency system.
+        this.systemRef.swap(targetSystem);
       })
       .catch(err => {
         console.error(
@@ -443,7 +458,8 @@ export class ManifoldLifecycle {
     }
 
     const sys = this.activeSystem;
-    const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
+    const pressure =
+      (sys.length - this.activeAllocator.length) / DOPAT_CONFIG.MAX_PRECEPTS;
     if (pressure > 0.5) {
       metrics.increment("dream.rejected_pressure");
       return;
@@ -534,7 +550,8 @@ export class ManifoldLifecycle {
 
   private consolidationRoutine(dt: number): void {
     const sys = this.activeSystem;
-    const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
+    const activeNodes = sys.length - this.activeAllocator.length;
+    const pressure = activeNodes / DOPAT_CONFIG.MAX_PRECEPTS;
 
     const ORBIT_RADIUS_SQ = DOPAT_CONFIG.mapper.ORBIT_RADIUS_SQ;
     const orbitRadius = Math.sqrt(ORBIT_RADIUS_SQ);

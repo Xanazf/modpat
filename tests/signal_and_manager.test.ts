@@ -144,7 +144,7 @@ export async function executeSignalManagerSuite() {
       env.system.decayRate[threatId] = 100.0;
 
       logger.log("  [Manager] Monitoring manifold for critical interrupts...");
-      manager.monitorThreats();
+      await manager.monitorThreats();
 
       assert.strictEqual(
         manager.getActiveSystem(),

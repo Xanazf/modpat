@@ -69,13 +69,6 @@ export class Learner {
   private resolver: Resolver;
   private store: Store;
   private unfolder: Unfolder;
-  private _lastProbeIds: Uint32Array | null = null;
-  /**
-   * Diagnostics captured from the most recent challenge()'s coherence run.
-   * Stored as a local-to-Learner cache so crystallizeLearnedPath does not need
-   * to read the racy Resolver.lastDiagnostics mirror.
-   */
-  private _lastDiagnostics: ResolverDiagnostics | null = null;
 
   constructor(
     systemRef: SystemRef,
@@ -110,19 +103,17 @@ export class Learner {
         coherence: 0,
         learned: [],
         hasGeneralizationSignal: false,
+        diagnostics: null,
+        probeIds: new Uint32Array(0),
       };
     }
 
     const probeIds = this.atomizer.ingestSequence(probeText, this.system);
-    this._lastProbeIds = probeIds;
 
     const coherentResult = await this.resolver.resolveCoherent(probeIds, {
       probeMode: true,
       maxIterations: 3,
     });
-    // Cache the diagnostics captured by resolveCoherent so downstream callers
-    // (crystallizeLearnedPath) don't have to read the racy resolver mirror.
-    this._lastDiagnostics = coherentResult.diagnostics;
 
     const reproduced = this.atomizer
       .decodeSequence(coherentResult.ids, this.system)
@@ -170,6 +161,8 @@ export class Learner {
       coherence: coherentResult.coherence,
       learned: coherentResult.learned,
       hasGeneralizationSignal,
+      diagnostics: coherentResult.diagnostics,
+      probeIds,
     };
   }
 
@@ -196,6 +189,7 @@ export class Learner {
       let repCount = candidate.reproductionCount;
 
       const result1 = await this.challenge(candidate);
+      let bestResult = result1;
       if (result1.success && !existingHashes.has(result1.contextHash)) {
         repCount++;
         existingHashes.add(result1.contextHash);
@@ -222,6 +216,7 @@ export class Learner {
             expandedTopic = topic;
             report.expandedTopics.push(topic);
             const result2 = await this.challenge(candidate);
+            if (result2.success) bestResult = result2;
             if (result2.success && !existingHashes.has(result2.contextHash)) {
               repCount++;
               existingHashes.add(result2.contextHash);
@@ -252,6 +247,7 @@ export class Learner {
         );
         if (noiseExpanded) {
           const result3 = await this.challenge(candidate);
+          if (result3.success) bestResult = result3;
           if (result3.success && !existingHashes.has(result3.contextHash)) {
             repCount++;
             existingHashes.add(result3.contextHash);
@@ -286,6 +282,8 @@ export class Learner {
           // robust the reproduction, the higher the vault confidence.
           await this.crystallizeLearnedPath(
             candidate,
+            bestResult.diagnostics,
+            bestResult.probeIds,
             newState === 3 ? 2.0 : 1.5
           );
         }
@@ -305,19 +303,17 @@ export class Learner {
 
   private async crystallizeLearnedPath(
     candidate: Memory.ChallengeCandidate,
+    diagnostics: any,
+    probeIds: Uint32Array,
     energy: number = 1.5
   ): Promise<void> {
-    // Read the Learner-local cache instead of the racy Resolver.lastDiagnostics
-    // mirror. Set by challenge() right after resolveCoherent returned.
-    const diag = this._lastDiagnostics;
+    const diag = diagnostics;
     if (!diag || diag.sinkCandidates.length === 0) return;
 
     const probeText = buildProbeText(candidate.factText);
     if (!probeText) return;
 
-    const inputIds =
-      this._lastProbeIds ??
-      this.atomizer.ingestSequence(probeText, this.system);
+    const inputIds = probeIds;
     const best = diag.sinkCandidates[0];
     const outputIds = new Uint32Array([best.id]);
 

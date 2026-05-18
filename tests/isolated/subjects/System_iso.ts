@@ -815,6 +815,15 @@ class System implements Root.ManifoldView {
     }
   }
 
+  public refreshConceptAgeForIds(ids: ArrayLike<number>): void {
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (!this.isAllocated(id)) continue;
+      this.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
+      this.update(id);
+    }
+  }
+
   /**
    * Creates a reactive signal (get/set pair) for a specific physical property of a precept.
    * Signals are cached to allow efficient reactivity in the heat field.

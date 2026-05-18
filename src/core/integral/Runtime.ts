@@ -843,6 +843,7 @@ export class Runtime {
     // bail out at their next checkpoint so they don't reach a closed store.
     this._disposed = true;
     this.stopTick();
+    this.astSeeder?.pause();
     // Drain any in-flight boot-background work before closing the store.
     // Their per-step cancellation check sees _disposed and exits cleanly;
     // we still await so a fast dispose() doesn't race the DuckDB prepare().

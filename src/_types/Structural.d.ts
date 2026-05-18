@@ -101,6 +101,10 @@ declare namespace Memory {
      * stepping stone from a different domain (generalization signal).
      */
     hasGeneralizationSignal: boolean;
+    /** The diagnostics from the coherent result. */
+    diagnostics: any;
+    /** The input probe ids. */
+    probeIds: Uint32Array;
   }
 
   interface ValidationReport {

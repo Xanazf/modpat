@@ -210,6 +210,12 @@ export class WorkerPool {
   }
 
   async dispose(): Promise<void> {
+    const err = new Error("WorkerPool disposed");
+    this._rejectAll(this.manifoldPending, err);
+    this._rejectAll(this.wikiPending, err);
+    this._rejectAll(this.seedPending, err);
+    this._rejectAll(this.astPending, err);
+
     await Promise.all([
       this.manifoldWorker.terminate(),
       this.wikiWorker.terminate(),

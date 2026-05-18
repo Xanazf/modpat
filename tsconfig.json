@@ -28,6 +28,7 @@
     "types": ["@webgpu/types", "node", "@duckdb/node-api"],
 
     "paths": {
+      "@root/*": ["./*"],
       "@src/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
       "@core_i/*": ["./src/core/integral/*"],
@@ -38,5 +39,5 @@
     }
   },
   "include": ["**/*.ts"],
-  "exclude": ["./scratchpad/*"]
+  "exclude": ["./scripts/dev/scratchpad/*"]
 }
