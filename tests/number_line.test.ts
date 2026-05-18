@@ -74,15 +74,12 @@ export async function executeNumberLineSuite() {
     // We log and investigate - no assertion failure on "unknown".
     // -------------------------------------------------------------------------
     await describe("Novel derivation (non-failing)", async () => {
-      await it(
-        "after 10 → 11? (beyond seeded range, non-failing)",
-        async () => {
-          const result = (await ask("what is after 10?")).trim();
-          logger.log(
-            `  ↳ after 10 → "${result}"  ${result === "11" ? "✓ generalised!" : "(expected 11 - beyond seeded range)"}`
-          );
-        }
-      );
+      await it("after 10 → 11? (beyond seeded range, non-failing)", async () => {
+        const result = (await ask("what is after 10?")).trim();
+        logger.log(
+          `  ↳ after 10 → "${result}"  ${result === "11" ? "✓ generalised!" : "(expected 11 - beyond seeded range)"}`
+        );
+      });
     });
 
     await rt.dispose();
