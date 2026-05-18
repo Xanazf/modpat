@@ -36,6 +36,14 @@ export default class SemanticAtomizer
     "equals",
     "plus",
     "minus",
+    "times",
+    "divided",
+    // Symbol forms - checked against the raw token before canonical normalisation.
+    "=",
+    "+",
+    "-",
+    "*",
+    "/",
   ]);
 
   /**
@@ -241,16 +249,41 @@ export default class SemanticAtomizer
       system.decayRate[id] = decay;
 
       // Finalize 4D Coordinates.
-      const words = text
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(w => !["the", "a", "an"].includes(w));
-      if (words.length > 0) {
-        let avgPosX = 0;
-        for (const word of words) avgPosX += this.loader.getScope(word);
-        system.posX[id] = avgPosX / words.length;
+      // Use the canonical label (scope-resolved) for the UMAP lookup so that
+      // symbol forms ("=", "+") and their word equivalents ("equals", "plus")
+      // land at the same posX.  Without this, the stored probe centroid for
+      // "1+1=2" (which uses "=") would differ from the query centroid for
+      // "1+1 equals" (which uses "equals"), causing the vault spatial check to fail.
+      const canonicalLabel =
+        this.resolveScope(this.getSymbolScope(norm)) ?? norm;
+
+      // Numeric literals get posX proportional to their value (scaled by 2)
+      // so the manifold encodes number magnitude geometrically.
+      //
+      // Scale = 2 ensures adjacent integers (e.g. 1 vs 2) produce a centroid
+      // difference of 0.5 across 4 content tokens - safely above the vault
+      // spatial threshold (0.1 squared) so "1+1=2" and "1+2=3" are never
+      // conflated.  Commutative pairs (1+2 vs 2+1) get the same centroid
+      // naturally since their posX values sum identically.
+      //
+      // posW (Age) is also set proportionally: value × 0.1, clamped to ≥ 0.1
+      // so 0 → 0.1, 1 → 0.1, …, 10 → 1.0.  This maps the number line onto
+      // the temporal axis ("time mechanic"), giving the Mapper a gradient to
+      // follow when traversing ordinal succession chains.
+      if (/^\d+(\.\d+)?$/.test(canonicalLabel)) {
+        system.posX[id] = parseFloat(canonicalLabel) * 2;
+        system.posW[id] = Math.max(0.1, parseFloat(canonicalLabel) * 0.1);
       } else {
-        system.posX[id] = this.loader.getScope(text);
+        const words = canonicalLabel
+          .split(/\s+/)
+          .filter(w => !["the", "a", "an"].includes(w));
+        if (words.length > 0) {
+          let avgPosX = 0;
+          for (const word of words) avgPosX += this.loader.getScope(word);
+          system.posX[id] = avgPosX / words.length;
+        } else {
+          system.posX[id] = this.loader.getScope(canonicalLabel);
+        }
       }
 
       system.update(id);

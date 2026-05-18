@@ -15,7 +15,7 @@ import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { CognitiveLoop } from "@core_i/CognitiveLoop";
 import Resolver from "@core_i/Resolver";
-import System, { SystemRef } from "@core_i/System";
+import System, { classifyOperatorToken, OperatorClass, SystemRef } from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { SelfConcept } from "@core_s/Identity";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
@@ -242,12 +242,15 @@ export class LiveInference {
         diag?.bridgeCandidates.filter(c => c.isMissingLink) ?? [];
       if (missingLinks.length > 0) {
         for (const link of missingLinks.slice(0, 2)) {
+          // Operators are structurally known - enqueuing "plus" as an unknown
+          // causes the inquiry system to resolve it against unrelated context.
+          if (classifyOperatorToken(link.label) !== OperatorClass.None) continue;
           this.inquiryQueue.enqueue(link.label, resolvedQuery);
           this.onUnknown?.(link.label);
         }
       } else {
         const topic = extractTopic(resolvedQuery);
-        if (topic) {
+        if (topic && classifyOperatorToken(topic) === OperatorClass.None) {
           this.inquiryQueue.enqueue(topic, resolvedQuery);
           this.onUnknown?.(topic);
         }
@@ -284,6 +287,23 @@ export class LiveInference {
     const result = await this.talker.processCommand(statement);
     this.last_signature = this.talker.lastSignature;
     this.inquiryQueue.checkForAnswers(statement);
+
+    // Route any detected unknowns into the inquiry system.
+    for (const q of this.talker.lastClarifyingQuestions) {
+      const topic = q.replace(/^what is (.+)\?$/i, "$1").trim();
+      if (!topic) continue;
+      // Placeholder unknowns skip the dict/wiki pipeline - looking up "[]" in a
+      // dictionary would always fail.  Load-bearing semantic unknowns go through
+      // the normal pipeline so the system tries to self-resolve first.
+      const isPlaceholder =
+        /^\[\]$|^\[\??\]$|^\?$|^_+$|^__\w*__$/.test(topic);
+      if (isPlaceholder) {
+        this.inquiryQueue.enqueueImmediate(topic, q);
+      } else {
+        this.inquiryQueue.enqueue(topic, q);
+      }
+      this.onUnknown?.(topic);
+    }
 
     // Established facts are conclusions too: push the topic to working memory so
     // follow-up questions ("what color is it?") can resolve "it" to the subject.
@@ -751,7 +771,60 @@ export class Runtime {
       ["A implies B not B |-", "not A", 5.0],
       // Existence: A was created in D |- A did not exist before D
       ["A was created in D |-", "A did not exist before D", 5.0],
+      // After-transitivity: A after B; B after C |- A after C
+      // Enables ordinal chaining along the number line:
+      //   "2 after 1" + "1 after 0" → "2 after 0"
+      ["A after B B after C |-", "A after C", 5.0],
     ];
+
+    // -- Number line topology -------------------------------------------------
+    //
+    // Crystallises "after N is |-" → "N+1" for N = 0..9 so that the query
+    // "what is after N?" resolves via a direct Phase 0 vault lookup:
+    //   Listener builds topologicalQuery = "after N is"
+    //   Phase 0 probe = [after, N, is, sink]
+    //   Vault match → "N+1"
+    //
+    // Energy 5.0: ordinal axioms are as certain as arithmetic axioms.
+    for (let n = 0; n <= 9; n++) {
+      templates.push([`after ${n} is |-`, `${n + 1}`, 5.0]);
+    }
+
+    // -- Arithmetic axioms ----------------------------------------------------
+    //
+    // Successor chain: "N plus 1 equals N+1" for N = 0..30.
+    // Covers all intermediate steps produced by the bridge facts below -
+    // the furthest bridge result is (20+9-1)+1 = 29+1, so n=29 is needed.
+    // Energy 5.0: mathematical axioms that must not be overridden.
+    for (let n = 0; n <= 30; n++) {
+      templates.push([`${n} plus 1 equals |-`, `${n + 1}`, 5.0]);
+    }
+
+    // Bridge facts: "A plus B equals (A+B−1) plus 1".
+    // Combined with the successor chain, enables one-level derivation:
+    //   "6+6  →  11+1  →  12"  (bridge → successor → answer)
+    //   "12+3 →  14+1  →  15"  (two-digit bridge → successor → answer)
+    //
+    // Range:
+    //   A = 1..9  (single-digit first operand)  - covers sums 11..18
+    //   A = 10..20 (two-digit first operand)    - covers sums 12..29
+    // Both orderings seeded so B+A queries hit identically.
+    //
+    // Energy 2.0: below normal training (3.0) so explicit teaching overrides.
+    for (let a = 1; a <= 20; a++) {
+      // For single-digit a: start b at a to avoid seeding both a+b and b+a twice.
+      // For two-digit a: always start b at 1 (b is always single-digit here).
+      const bStart = a <= 9 ? a : 1;
+      for (let b = bStart; b <= 9; b++) {
+        const sum = a + b;
+        if (sum <= 10) continue;
+        const intermediate = `${sum - 1} plus 1`;
+        templates.push([`${a} plus ${b} equals |-`, intermediate, 2.0]);
+        if (a !== b) {
+          templates.push([`${b} plus ${a} equals |-`, intermediate, 2.0]);
+        }
+      }
+    }
 
     for (const [premiseText, conclusionText, energy] of templates) {
       if (cancelled()) return;

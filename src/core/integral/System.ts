@@ -77,6 +77,8 @@ export enum OperatorClass {
   SyntaxAnchor = 9,
   /** Proactive curiosity signal spawned by motivation sources (CognitiveLoop). */
   Intent = 10,
+  /** Binary arithmetic operators (+, -, *, /, plus, minus, times, divided). */
+  Arithmetic = 11,
 }
 
 /**
@@ -88,7 +90,29 @@ export enum OperatorClass {
 function classifyOperatorToken(token: string): OperatorClass {
   const norm = token.trim().toLowerCase();
 
-  // TypeScript Physicalized Code Synthesis: check syntax attractors first.
+  // Arithmetic operators and identity binding symbols must be classified
+  // before the SYNTAX_ATTRACTORS guard because "+", "-", "*", "/", "=" all
+  // appear in STRUCTURES (needed for code synthesis landmark detection) and
+  // would otherwise be silently promoted to SyntaxAnchor, preventing the
+  // SVO split from firing on statements like "1+1=2".
+  switch (norm) {
+    case "+":
+    case "-":
+    case "*":
+    case "/":
+    case "%":
+    case "plus":
+    case "minus":
+    case "times":
+    case "multiplied":
+    case "divided":
+      return OperatorClass.Arithmetic;
+    case "equals":
+    case "=":
+      return OperatorClass.IdentityShift;
+  }
+
+  // TypeScript Physicalized Code Synthesis: check syntax attractors.
   if (
     SYNTAX_ATTRACTORS.KEYWORDS.has(norm) ||
     SYNTAX_ATTRACTORS.STRUCTURES.has(norm)
@@ -110,6 +134,8 @@ function classifyOperatorToken(token: string): OperatorClass {
     case "was":
     case "were":
     case "can":
+    case "after":  // ordinal succession - encodes the number-line "next" relation
+    case "before": // ordinal precedence
       return OperatorClass.IdentityShift;
     case "&&":
     case "and":

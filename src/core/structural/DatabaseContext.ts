@@ -87,6 +87,9 @@ export class DatabaseContext {
       this.connection.disconnectSync();
       this.connection = undefined;
     }
-    this.instance = undefined;
+    if (this.instance) {
+      this.instance.closeSync();
+      this.instance = undefined;
+    }
   }
 }

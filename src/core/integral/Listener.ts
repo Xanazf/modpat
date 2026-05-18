@@ -145,15 +145,31 @@ class Listener {
     }
 
     let topologicalQuery = shifted;
-    const whatIsMatch = shifted.match(/what is (.*)/i);
+    const whatIsMatch = shifted.match(/what(?:'?s|\s+is)\s+(.*)/i);
     const whatWasMatch = shifted.match(/what was (.*)/i);
     const whoIsMatch = shifted.match(/who is (.*)/i);
     const whoWasMatch = shifted.match(/who was (.*)/i);
 
     let attractionCenter = "";
+    let isArithmeticQuery = false;
+    let isOrdinalQuery = false;
     if (whatIsMatch) {
       attractionCenter = whatIsMatch[1];
-      topologicalQuery = `${attractionCenter} is`;
+      // Arithmetic expressions use "equals" as the binding operator, not "is".
+      // "1 + 1 is" would never match vault entries crystallised from "1 + 1 equals 2".
+      isArithmeticQuery =
+        /\d[\d\s]*([+\-*\/]|plus|minus|times|divided)[\d\s]*\d/i.test(
+          attractionCenter.trim()
+        );
+      // Ordinal queries: "after N" / "before N" - probes are crystallised as
+      // "after N is |-" so topologicalQuery "after N is" is already correct.
+      // We flag them to skip the Unfolder on Phase 0 miss (same as arithmetic).
+      isOrdinalQuery =
+        !isArithmeticQuery &&
+        /^(after|before)\s+\d+/i.test(attractionCenter.trim());
+      topologicalQuery = isArithmeticQuery
+        ? `${attractionCenter} equals`
+        : `${attractionCenter} is`;
     } else if (whatWasMatch) {
       attractionCenter = whatWasMatch[1];
       topologicalQuery = `${attractionCenter} was`;
@@ -245,9 +261,39 @@ class Listener {
           const cached =
             await this.store.checkInterferencePattern(queryWithSink);
           if (cached && cached.ids.length > 0) {
-            const decoded = this.atomizer
+            let decoded = this.atomizer
               .decodeSequence(cached.ids, this.system)
               .trim();
+
+            // One-level arithmetic chain resolution.
+            //
+            // A seeded bridge returns an intermediate expression like "11 plus 1"
+            // rather than the final digit.  Resolve it one level deeper so the
+            // caller receives "12" instead of "11 plus 1":
+            //   "6+6"  →(bridge)→  "11 plus 1"  →(successor)→  "12"
+            //
+            // This is the counting-chain mechanism: the bridge encodes the
+            // regrouping step ("6+6 is the same as 11+1") and the successor
+            // table encodes the final count.
+            if (
+              isArithmeticQuery &&
+              /^\d+\s+\S+\s+\d+/.test(decoded)
+            ) {
+              const midQuanta = this.atomizer.ingestSequence(
+                `${decoded} equals`,
+                this.system
+              );
+              const midWithSink = new Uint32Array([...midQuanta, sinkId]);
+              const midCached =
+                await this.store.checkInterferencePattern(midWithSink);
+              if (midCached && midCached.ids.length > 0) {
+                const resolved = this.atomizer
+                  .decodeSequence(midCached.ids, this.system)
+                  .trim();
+                if (/^\d+(\.\d+)?$/.test(resolved)) decoded = resolved;
+              }
+            }
+
             if (decoded && decoded !== "unknown") {
               metrics.increment("resolution.phase0.hit");
               this.resolver.reinforceVaultHit(queryWithSink, cached.ids);
@@ -261,6 +307,15 @@ class Listener {
           }
         }
       }
+    }
+
+    // Arithmetic / ordinal queries that missed Phase 0 have no answer the
+    // Resolver can derive.  The void-expansion path would call the Unfolder,
+    // which hangs on a network fetch for inputs like "4+3" or "after 3".
+    if (isArithmeticQuery || isOrdinalQuery) {
+      metrics.increment("resolution.miss");
+      this.respond("unknown");
+      return wrap("unknown");
     }
 
     const phase1Cap = await this.resolver.resolveSequenceCaptured(queryQuanta, {
@@ -279,14 +334,20 @@ class Listener {
     const isExplanatory = query.toLowerCase().match(/^(how|why|who|what)/);
     const isTooBrief = inferredMeaning.split(" ").length <= 1;
 
-    const normalizedTopQuery = topologicalQuery
+    // Decode queryQuanta to get the canonical form (arithmetic symbols already
+    // normalised to words) rather than using the raw topologicalQuery string
+    // which still contains "+" / "=" and strips differently under [^a-z0-9].
+    const decodedTopQuery = this.atomizer
+      .decodeSequence(queryQuanta, this.system)
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
-    const normalizedInferred = inferredMeaning.replace(/[^a-z0-9]/g, "");
+    const normalizedInferred = inferredMeaning
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
 
     if (
       inferredMeaning &&
-      normalizedInferred !== normalizedTopQuery &&
+      normalizedInferred !== decodedTopQuery &&
       inferredMeaning !== "unknown" &&
       (!isExplanatory || !isTooBrief)
     ) {
@@ -304,7 +365,7 @@ class Listener {
       return wrap(response);
     }
 
-    if (attractionCenter) {
+    if (attractionCenter && !isArithmeticQuery) {
       try {
         const stmt = await this.store.connection.prepare(
           `SELECT fact FROM raw_facts WHERE fact LIKE ? ORDER BY confidence DESC LIMIT 100`
@@ -365,6 +426,35 @@ class Listener {
       return wrap(fallback);
     }
 
+    // Don't expand tokens that have no useful Wikipedia/dictionary content:
+    // pure numbers, arithmetic expressions ("4+3"), single arithmetic symbols,
+    // or classified operators.  Arithmetic expressions are deterministic facts,
+    // not topics - the Unfolder would hang on a Wikipedia fetch for "4+3".
+    const isUnfoldable = (() => {
+      const ac = attractionCenter.trim();
+      if (/^\d+(\.\d+)?$/.test(ac)) return false; // pure number
+      if (isArithmeticQuery) return false; // arithmetic expression like "4+3"
+      if (isOrdinalQuery) return false; // ordinal query like "after 3"
+      if (/^[+\-*/=<>!%^&|]+$/.test(ac)) return false; // symbol-only
+      const acScope = this.atomizer.getSymbolScope(ac, false);
+      if (acScope > 0) {
+        for (const id of this.system.getIdsByScope(acScope)) {
+          if (
+            this.system.isAllocated(id) &&
+            this.system.operatorClass[id] !== OperatorClass.None
+          )
+            return false; // already-classified operator
+        }
+      }
+      return true;
+    })();
+
+    if (!isUnfoldable) {
+      metrics.increment("resolution.miss");
+      this.respond("unknown");
+      return wrap("unknown");
+    }
+
     logger.debug(`[Unfolder] Expanding logical void for: ${attractionCenter}`);
 
     const voidScope = this.atomizer.getSymbolScope("void", false);
@@ -411,7 +501,7 @@ class Listener {
 
     if (
       reInferredMeaning &&
-      normalizedReInferred !== normalizedTopQuery &&
+      normalizedReInferred !== decodedTopQuery &&
       reInferredMeaning !== "unknown" &&
       (coherentResult.diagnosis === "coherent" ||
         coherentResult.diagnosis === "weak")

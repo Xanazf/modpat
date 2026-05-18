@@ -10,6 +10,20 @@ import { SYSTEM_CONFIG } from "@src/config";
  * The canonical form is "i" so that decoding a self-scope precept always returns
  * a recognisable, human-readable token.
  */
+/**
+ * Arithmetic symbols are normalised to their English word equivalents so that
+ * "1 + 1 = 2" and "1 plus 1 equals 2" produce identical scope sequences and
+ * therefore identical vault signatures.  Without this, the two forms would
+ * live in completely separate manifold regions and never cross-resolve.
+ */
+const ARITHMETIC_CANONICAL = new Map<string, string>([
+  ["+", "plus"],
+  ["-", "minus"],
+  ["*", "times"],
+  ["/", "divided"],
+  ["=", "equals"],
+]);
+
 const PRONOUN_CANONICAL = new Map<string, string>([
   // First person - canonical self
   ["i", "i"],
@@ -82,7 +96,8 @@ export abstract class BaseAtomizer {
    */
   public getSymbolScope(symbol: string, _isOperator?: boolean): number {
     const norm = symbol.toLowerCase().trim();
-    const canonical = PRONOUN_CANONICAL.get(norm) ?? norm;
+    const canonical =
+      PRONOUN_CANONICAL.get(norm) ?? ARITHMETIC_CANONICAL.get(norm) ?? norm;
     return this.getSymbolIdx(canonical);
   }
 

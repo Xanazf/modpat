@@ -206,16 +206,22 @@ export default class Store implements Memory.Vault {
       y = 0,
       z = 0,
       w = 0;
-    const count = ids.length;
-    if (count === 0) return [0, 0, 0, 0];
-
-    for (let i = 0; i < count; i++) {
+    // Exclude Sink-class tokens from the centroid: they are structural
+    // terminators ("|-") whose posY and posW drift across sessions as
+    // ManifoldLifecycle merges or reassigns Sink precepts.  Including them
+    // makes the anchor unstable - a merged Sink at a different sequence
+    // position silently breaks future Phase-0 lookups.
+    let count = 0;
+    for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
+      if (this.system.operatorClass[id] === OperatorClass.Sink) continue;
       x += this.system.posX[id];
       y += this.system.posY[id];
       z += this.system.posZ[id];
       w += this.system.posW[id];
+      count++;
     }
+    if (count === 0) return [0, 0, 0, 0];
     return [x / count, y / count, z / count, w / count];
   }
 
@@ -269,15 +275,27 @@ export default class Store implements Memory.Vault {
         .decodeSequence(new Uint32Array([id]), this.system)
         .trim();
 
-      // If it has OperatorClass.None, it is a variable/atom.
-      // Otherwise, it is an operator with fixed logical mass.
-      if (this.system.operatorClass[id] === OperatorClass.None) {
+      // If it has OperatorClass.None, it is a variable/atom - UNLESS it is a
+      // numeric literal, in which case it is stored as its literal value.
+      // This makes arithmetic signatures exact: "1 plus 2 equals |-" is a
+      // distinct key from "2 plus 2 equals |-", removing the dependence on
+      // spatial centroid proximity for arithmetic vault lookup.  Non-numeric
+      // atoms continue to use VAR_N abstraction so logical templates like
+      // "VAR_0 is VAR_1 |-" remain general.
+      const isNumericLiteral =
+        this.system.operatorClass[id] === OperatorClass.None &&
+        /^\d+(\.\d+)?$/.test(symbol);
+
+      if (isNumericLiteral) {
+        // Numeric literals: store as-is - exact arithmetic matching.
+        signatureTokens.push(symbol);
+      } else if (this.system.operatorClass[id] === OperatorClass.None) {
         if (!varMap.has(scope)) {
           varMap.set(scope, nextVarId++);
         }
         signatureTokens.push(`VAR_${varMap.get(scope)}`);
       } else {
-        // Operators retain their physical identity in the topology
+        // Operators retain their physical identity in the topology.
         signatureTokens.push(symbol);
       }
     }
@@ -370,23 +388,38 @@ export default class Store implements Memory.Vault {
     }
 
     if (existingEnergy !== null) {
-      // Only write back if the new proof carries higher confidence
-      if (energy > existingEnergy) {
-        const upd = await this._connection.prepare(`
-          UPDATE wave_forms SET net_energy = ?
-          WHERE signature = ?
-            AND ABS(anchor_x - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
-            AND ABS(anchor_y - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
-        `);
-        try {
-          upd.bindDouble(1, energy);
-          upd.bindVarchar(2, signature);
-          upd.bindDouble(3, ax);
-          upd.bindDouble(4, ay);
-          await upd.run();
-        } finally {
-          upd.destroySync();
-        }
+      // Always refresh the spatial anchor so that entries crystallised before a
+      // posX normalisation change (e.g. "+" → UMAP(0) vs "plus" → UMAP(real))
+      // get their centroid updated to the current canonical values.  Without
+      // this, a stale anchor causes every subsequent query to miss the threshold.
+      const upd = await this._connection.prepare(`
+        UPDATE wave_forms
+        SET net_energy = ?,
+            target_pattern = ?,
+            anchor_x = ?, anchor_y = ?, anchor_z = ?, anchor_w = ?,
+            grid_x = ?, grid_y = ?, grid_z = ?, grid_w = ?
+        WHERE signature = ?
+          AND ABS(anchor_x - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
+          AND ABS(anchor_y - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
+      `);
+      try {
+        const newEnergy = Math.max(energy, existingEnergy);
+        upd.bindDouble(1, newEnergy);
+        upd.bindVarchar(2, targetPattern);
+        upd.bindDouble(3, ax);
+        upd.bindDouble(4, ay);
+        upd.bindDouble(5, az);
+        upd.bindDouble(6, aw);
+        upd.bindInteger(7, this.gridKey(ax));
+        upd.bindInteger(8, this.gridKey(ay));
+        upd.bindInteger(9, this.gridKey(az));
+        upd.bindInteger(10, this.gridKey(aw));
+        upd.bindVarchar(11, signature);
+        upd.bindDouble(12, ax);
+        upd.bindDouble(13, ay);
+        await upd.run();
+      } finally {
+        upd.destroySync();
       }
       metrics.increment("vault.dedup_skip");
       return;
@@ -446,13 +479,16 @@ export default class Store implements Memory.Vault {
 
     // Grid-window spatial resonance query: coarse bucket filter reduces candidates from
     // O(rows_per_signature) to O(1) before the exact squared-distance fine filter.
+    // posW (temporal freshness) is intentionally excluded from the grid filter:
+    // it decays every tick, so using it as a grid key causes stored entries to
+    // drift outside the search window even when their XYZ coordinates are stable.
+    // posW is still included in the resonance distance to maintain precision.
     const R = Math.ceil(
       DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD / DOPAT_CONFIG.memory.GRID_CELL
     );
     const gx = this.gridKey(qx),
       gy = this.gridKey(qy),
-      gz = this.gridKey(qz),
-      gw = this.gridKey(qw);
+      gz = this.gridKey(qz);
 
     const uw = DOPAT_CONFIG.memory.USAGE_WEIGHT;
     const stmt = await this._connection.prepare(`
@@ -465,7 +501,6 @@ export default class Store implements Memory.Vault {
         AND (grid_x IS NULL OR grid_x BETWEEN ? AND ?)
         AND (grid_y IS NULL OR grid_y BETWEEN ? AND ?)
         AND (grid_z IS NULL OR grid_z BETWEEN ? AND ?)
-        AND (grid_w IS NULL OR grid_w BETWEEN ? AND ?)
       ORDER BY resonance ASC, combined_score DESC
       LIMIT 1
     `);
@@ -481,8 +516,6 @@ export default class Store implements Memory.Vault {
       stmt.bindInteger(9, gy + R);
       stmt.bindInteger(10, gz - R);
       stmt.bindInteger(11, gz + R);
-      stmt.bindInteger(12, gw - R);
-      stmt.bindInteger(13, gw + R);
 
       const res = await stmt.runAndReadAll();
       const rows = res.getRows();
@@ -932,6 +965,9 @@ export default class Store implements Memory.Vault {
   public async close(): Promise<void> {
     if (this._connection) {
       this._connection.disconnectSync();
+    }
+    if (this.instance) {
+      this.instance.closeSync();
     }
   }
 }

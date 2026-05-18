@@ -178,6 +178,7 @@ async function init(): Promise<void> {
         },
       });
     }
+    seeder.pause();
   });
 
   if (self) {
@@ -200,7 +201,7 @@ function tick(msg: string) {
 }
 
 function warn(msg: string) {
-  process.stdout.write(`  ${yellow("⚠")} ${msg}\n`);
+  process.stdout.write(`  ${yellow("!")} ${msg}\n`);
 }
 
 // Stats bar

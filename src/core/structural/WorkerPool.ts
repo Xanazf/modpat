@@ -71,6 +71,7 @@ export class WorkerPool {
       execArgv: TSX_EXECARGV,
       workerData: { buffer, layout },
     });
+    this.manifoldWorker.unref();
     this.manifoldWorker.on(
       "message",
       (msg: { id: number; result?: any; error?: string }) => {
@@ -88,6 +89,7 @@ export class WorkerPool {
     this.wikiWorker = new Worker(workerPath("wiki.worker.ts"), {
       execArgv: TSX_EXECARGV,
     });
+    this.wikiWorker.unref();
     this.wikiWorker.on(
       "message",
       (msg: { id: number; result?: string | null; error?: string }) => {
@@ -103,6 +105,7 @@ export class WorkerPool {
     this.astWorker = new Worker(workerPath("ast.worker.ts"), {
       execArgv: TSX_EXECARGV,
     });
+    this.astWorker.unref();
     this.astWorker.on("message", (msg: any) => {
       if (msg.ready) {
         this.astReady = true;
@@ -121,6 +124,7 @@ export class WorkerPool {
     this.seedWorker = new Worker(workerPath("seed.worker.ts"), {
       execArgv: TSX_EXECARGV,
     });
+    this.seedWorker.unref();
     this.seedWorker.on("message", (msg: any) => {
       if (msg.ready) {
         this.seedReady = true;

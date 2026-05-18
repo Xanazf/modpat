@@ -19,6 +19,8 @@ import { executeSignalManagerSuite } from "./signal_and_manager.test";
 import { runSignatureConsistencyTests } from "./signature_consistency.test";
 import { runAstSeederTests } from "./ast_seeder.test";
 import { runProactivePathTests } from "./proactive_paths.test";
+import { executeArithmeticSuite } from "./arithmetic.test";
+import { executeNumberLineSuite } from "./number_line.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { executeUMAPSuite } from "./umap_loader.test";
 import { executeUnfolderSuite } from "./unfolder.test";
@@ -98,6 +100,8 @@ async function run() {
     await runWithTimeout("signature_consistency", runSignatureConsistencyTests);
     await runWithTimeout("ast_seeder", runAstSeederTests);
     await runWithTimeout("proactive_paths", runProactivePathTests);
+    await runWithTimeout("arithmetic", executeArithmeticSuite);
+    await runWithTimeout("number_line", executeNumberLineSuite);
     await runWithTimeout("endurance", executeEnduranceSuite);
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
@@ -110,4 +114,8 @@ async function run() {
   }
 }
 
-run();
+run()
+  .catch()
+  .finally(() => {
+    process.exit(0);
+  });

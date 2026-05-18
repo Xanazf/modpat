@@ -409,6 +409,27 @@ export class InquiryQueue {
     this.onEnqueue?.(id);
   }
 
+  /**
+   * Immediately escalates a topic to `ask_user` status, bypassing the
+   * dict/wiki resolution pipeline.  Use this for syntactically obvious
+   * placeholders (`[]`, `?`, `_`) where lookup would never succeed.
+   */
+  public enqueueImmediate(topic: string, originalQuery: string): void {
+    const id = topic.toLowerCase().trim();
+    if (!id || this.items.has(id)) return;
+    this.items.set(id, {
+      id,
+      topic: id,
+      originalQuery,
+      status: "ask_user",
+      addedAt: Date.now(),
+      attempts: 0,
+    });
+    logger.debug(`[INQUIRY] immediate escalation "${id}"`);
+    this._persist();
+    this.onEnqueue?.(id);
+  }
+
   public resolve(topic: string): void {
     const item = this.items.get(topic.toLowerCase().trim());
     if (item) {
