@@ -28,6 +28,7 @@ import Store from "@core_s/Memory";
 import { SystemPersistence } from "@core_s/Persistence";
 import Unfolder from "@core_s/Unfolder";
 import { WorkerPool } from "@core_s/WorkerPool";
+import { AstSeedWorker, type AstSeedOptions } from "@core_s/AstSeedWorker";
 import { IntentTag, spawnIntent } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
 import { extractTopic } from "@utils/topicExtraction";
@@ -166,11 +167,25 @@ export class LiveInference {
       if (this.last_signature) {
         await this.store.adjustEnergy(this.last_signature, -0.5);
         await this.store.adjustUsageCount(this.last_signature, 0);
-        const response =
-          "Feedback acknowledged. Structural confidence reduced.";
-        this.respond(response);
-        return response;
       }
+      // O6 fix: detect corrective form "no, X is Y" and ingest the correction.
+      // Pattern: negative prefix + comma/space + a declarative statement.
+      const correctionMatch = query.match(
+        /^(?:no|incorrect|wrong|false)[,.\s]+(.+)$/i
+      );
+      if (correctionMatch) {
+        const correction = correctionMatch[1].trim();
+        if (correction.length > 3) {
+          // Ingest the correction as a command - this crystallizes the right answer.
+          const correctionResponse = await this.processCommand(correction);
+          const response = `Feedback acknowledged. Correction ingested: "${correction}"`;
+          this.respond(response);
+          return response;
+        }
+      }
+      const response = "Feedback acknowledged. Structural confidence reduced.";
+      this.respond(response);
+      return response;
     }
     if (/^(yes|correct|right|true)\b/i.test(query)) {
       if (this.last_signature) {
@@ -327,6 +342,15 @@ export interface RuntimeOptions {
    */
   noWorkers?: boolean;
   /**
+   * Root paths to scan for TypeScript/JavaScript source files.
+   * When set, an AstSeedWorker is created and started automatically if the
+   * manifold is fresh (system.length < 100 precepts at boot).
+   * Pass `noWorkers: false` (the default) to offload parsing to ast.worker.
+   */
+  astSeedPaths?: string[];
+  /** Options forwarded to AstSeedWorker.start(). */
+  astSeedOptions?: AstSeedOptions;
+  /**
    * Interval in ms for the autonomous learner cycle (default: 10 000).
    * The learner samples low-confidence vault facts and promotes them through
    * the challenge loop independently of user input.
@@ -369,6 +393,8 @@ export class Runtime {
 
   /** CognitiveLoop - the autonomous motivation daemon. Active when lifecycle is on. */
   public cognitiveLoop: CognitiveLoop | null = null;
+  /** AstSeedWorker - background codebase topology builder. Null unless astSeedPaths was set. */
+  public astSeeder: AstSeedWorker | null = null;
 
   private _tickTimer: ReturnType<typeof setInterval> | null = null;
   private _learnerTimer: ReturnType<typeof setInterval> | null = null;
@@ -518,6 +544,18 @@ export class Runtime {
       rt.inference.onUnknown = (topic: string) => {
         rt.cognitiveLoop!.spawnAndRegister(topic, 3.0, IntentTag.USER_UNKNOWN);
       };
+    }
+
+    // Wire the AST seeder if root paths were specified.
+    if (opts.astSeedPaths?.length) {
+      rt.astSeeder = new AstSeedWorker(opts.astSeedPaths);
+      // Auto-start on a fresh manifold (nothing seeded yet).
+      if (system.length < 100) {
+        rt.astSeeder.start(system, atomizer, store, {
+          ...opts.astSeedOptions,
+          pool: workers ?? undefined,
+        });
+      }
     }
 
     if (!opts.noTick) {

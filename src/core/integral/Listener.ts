@@ -32,13 +32,23 @@ const BIGRAM_VOCABULARY = new Set([
   "language_model",
 ]);
 
-const CODE_INTENT_PATTERNS = [
-  /\b(write|generate|create|implement|show me how to|how (?:do|would) (?:i|you))\b/i,
-  /\b(function|method|class|code|snippet|example)\b/i,
-];
+const CODE_ACTION_PATTERN =
+  /\b(write|generate|create|implement|show me how to|how (?:do|would) (?:i|you))\b/i;
+const CODE_NOUN_PATTERN =
+  /\b(function|method|class|code|snippet|example|algorithm|sort|fibonacci|factorial|binary|search|tree|graph|linked.?list|queue|stack|hash.?map)\b/i;
+const WH_QUESTION_PATTERN =
+  /^(what|who|where|when|why|how\s+is|how\s+are|how\s+does)\b/i;
 
+// I7 fix: accept queries with a code action verb (regardless of noun), or a code noun
+// when the query is NOT a WH-question and NOT a physics sink query (contains "|-").
+// Original `every()` required both verb AND noun - too strict for "write a fibonacci".
 export function isCodeIntent(query: string): boolean {
-  return CODE_INTENT_PATTERNS.every(p => p.test(query));
+  // Physics sink queries ("X |-") are always routed through the Resolver, not code synthesis.
+  if (query.includes("|-")) return false;
+  if (CODE_ACTION_PATTERN.test(query)) return true;
+  return (
+    CODE_NOUN_PATTERN.test(query) && !WH_QUESTION_PATTERN.test(query.trim())
+  );
 }
 
 /**

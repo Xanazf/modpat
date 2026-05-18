@@ -754,6 +754,9 @@ class System implements Root.ManifoldView {
     this.intensity[id] = Math.min((d / s) * physicalScale, this.maxilon);
 
     // Update integrity checksum.
+    // M2 note: CRC-32 here dominates decay() cost. The right fix requires splitting
+    // update() into _updateDerived + _updateChecksum so decay() can call only derived
+    // property recalculation in the inner loop and batch checksums after. Deferred.
     this.checksum[id] = this.calculateChecksum(id);
 
     // Push Ring Buffer Update

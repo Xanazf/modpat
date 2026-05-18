@@ -1,4 +1,3 @@
-import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
@@ -211,8 +210,6 @@ export class ManifoldLifecycle {
   private systemRef: SystemRef;
   /** Persistence layer for snapshotting and hydrating the manifold. */
   private persistence: SystemPersistence;
-  /** The atomizer for ingestion processing. */
-  private atomizer: SpectralAtomizer;
   /** The currently active logical universe. */
   private activeSystem: System;
 
@@ -233,6 +230,10 @@ export class ManifoldLifecycle {
   );
   /** Guard preventing concurrent dream cycles. */
   private isDreaming: boolean = false;
+  /** Cursor for batched monitorThreats scan - advances each tick so a full sweep
+   *  spans multiple ticks rather than blocking the event loop for O(N). */
+  private _threatCursor = 0;
+  private static readonly THREAT_BATCH = 5_000;
   /** External knowledge expansion engine for Phase 4 (Subconscious Void Expansion). */
   private unfolder: Unfolder | null = null;
 
@@ -253,7 +254,6 @@ export class ManifoldLifecycle {
     this.persistence = persistence;
     this.activeSystem = primary;
     this.systemRef = new SystemRef(primary);
-    this.atomizer = new SpectralAtomizer();
     this.activeAllocator = this.primaryAllocator;
 
     // Wire TMR allocators into each system's allocation path.
@@ -397,16 +397,23 @@ export class ManifoldLifecycle {
    */
   public async monitorThreats(): Promise<void> {
     const sys = this.activeSystem;
-    for (let i = 0; i < sys.length; i++) {
-      // Very high mass + high decay rate = anomaly/threat
+    // S8 fix: scan one batch per tick instead of all N precepts.
+    // The cursor wraps around so a full sweep completes over multiple ticks.
+    const batchEnd = Math.min(
+      this._threatCursor + ManifoldLifecycle.THREAT_BATCH,
+      sys.length
+    );
+    for (let i = this._threatCursor; i < batchEnd; i++) {
       if (
         Math.abs(sys.mass[i]) > sys.c ** 2 * 1000.0 &&
         sys.decayRate[i] > 50.0
       ) {
         await this.triggerInterrupt("High-mass anomaly detected");
-        break;
+        this._threatCursor = 0; // reset so next sweep starts fresh
+        return;
       }
     }
+    this._threatCursor = batchEnd >= sys.length ? 0 : batchEnd;
   }
 
   /**
@@ -484,7 +491,17 @@ export class ManifoldLifecycle {
         }
         if (!nearAnchor) continue;
 
-        const token = this.unfolder.resolveScope(sys.scope[i]);
+        // S11 fix: walk the PartLayer chain from this atom to collect
+        // up to 3 consecutive tokens, reconstructing multi-word concepts
+        // (e.g. "neural network") instead of returning a single token.
+        const tokenParts: string[] = [];
+        let cur = i;
+        for (let hop = 0; hop < 3 && cur !== 0 && sys.isAllocated(cur); hop++) {
+          const part = this.unfolder.resolveScope(sys.scope[cur]);
+          if (part && part.length > 1) tokenParts.push(part);
+          cur = sys.PartLayer[cur] ?? 0;
+        }
+        const token = tokenParts.join(" ").trim();
         if (!token || token.length <= 2) continue;
 
         const content = await this.unfolder.fetchContent(token);
@@ -513,6 +530,8 @@ export class ManifoldLifecycle {
    * sampled node queries only nearby cells (O(1) per sample at moderate density)
    * instead of scanning the full manifold (previously O(N) per sample → O(sweeps×N)).
    */
+  private _consolidationCursor = 0;
+
   private consolidationRoutine(dt: number): void {
     const sys = this.activeSystem;
     const pressure = sys.length / DOPAT_CONFIG.MAX_PRECEPTS;
@@ -540,8 +559,14 @@ export class ManifoldLifecycle {
         ? DOPAT_CONFIG.structural.CONSOLIDATION_ITERS_PER_TICK[1]
         : DOPAT_CONFIG.structural.CONSOLIDATION_ITERS_PER_TICK[0];
 
+    // S9 fix: use a cursor so consecutive ticks walk the semantic atom list
+    // sequentially instead of picking random targets that may repeat.
+    if (this._consolidationCursor >= semanticIds.length)
+      this._consolidationCursor = 0;
+
     for (let k = 0; k < sweeps; k++) {
-      const i = semanticIds[Math.floor(Math.random() * semanticIds.length)];
+      const i = semanticIds[this._consolidationCursor % semanticIds.length];
+      this._consolidationCursor++;
 
       // Query only the local grid neighbourhood instead of the full manifold.
       const candidates = grid.candidatesInRadius(

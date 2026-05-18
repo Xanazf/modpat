@@ -140,6 +140,10 @@ declare namespace Memory {
     ): Promise<void>;
     saveInquiryQueue(items: InquiryItem[]): Promise<void>;
     loadInquiryQueue(): Promise<InquiryItem[]>;
+    findContradictingFacts(
+      subject: string,
+      predicate: string
+    ): Promise<string[]>;
 
     sampleForChallenge(limit: number): Promise<ChallengeCandidate[]>;
     updateKnowledgeState(

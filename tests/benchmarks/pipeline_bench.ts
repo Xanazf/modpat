@@ -82,7 +82,7 @@ async function run(): Promise<void> {
   console.log(
     `${"n".padStart(6)}  ${"query".padStart(38)}  ${"p50".padStart(8)}  ${"p95".padStart(8)}`
   );
-  console.log("─".repeat(70));
+  console.log("".repeat(70));
 
   for (const n of CORPUS_SIZES) {
     const { system, atomizer, store, resolver } = await buildFixture(n);

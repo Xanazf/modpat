@@ -16,6 +16,17 @@ import type { ManifoldLayout } from "@core_i/System";
 import type { Constellation } from "@core_s/ManifoldMetrics";
 import type { DictionaryExpansion } from "@core_s/Unfolder";
 import type { RawGap } from "@core_s/workers/manifold.worker";
+import type { AstTriple, AstExtractOptions } from "@utils/astExtract";
+
+export interface AstWorkerOpts {
+  callDepthLimit?: number;
+  includeCallSites?: boolean;
+}
+
+export interface AstResult {
+  triples: AstTriple[];
+  filePath: string;
+}
 
 type Resolver<T> = { resolve: (v: T) => void; reject: (e: Error) => void };
 
@@ -37,12 +48,16 @@ export class WorkerPool {
   private manifoldWorker: Worker;
   private wikiWorker: Worker;
   private seedWorker: Worker;
+  private astWorker: Worker;
 
   private manifoldPending = new Map<number, Resolver<any>>();
   private wikiPending = new Map<number, Resolver<string | null>>();
   private seedPending = new Map<number, Resolver<DictionaryExpansion>>();
+  private astPending = new Map<number, Resolver<AstResult>>();
   private seedReady = false;
   private seedQueue: Array<() => void> = [];
+  private astReady = false;
+  private astQueue: Array<() => void> = [];
 
   private nextId = 1;
   private _buffer: SharedArrayBuffer;
@@ -84,6 +99,24 @@ export class WorkerPool {
       }
     );
     this.wikiWorker.on("error", err => this._rejectAll(this.wikiPending, err));
+
+    this.astWorker = new Worker(workerPath("ast.worker.ts"), {
+      execArgv: TSX_EXECARGV,
+    });
+    this.astWorker.on("message", (msg: any) => {
+      if (msg.ready) {
+        this.astReady = true;
+        for (const fn of this.astQueue) fn();
+        this.astQueue = [];
+        return;
+      }
+      const pending = this.astPending.get(msg.id);
+      if (!pending) return;
+      this.astPending.delete(msg.id);
+      if (msg.error) pending.reject(new Error(msg.error));
+      else pending.resolve({ triples: msg.triples ?? [], filePath: "" });
+    });
+    this.astWorker.on("error", err => this._rejectAll(this.astPending, err));
 
     this.seedWorker = new Worker(workerPath("seed.worker.ts"), {
       execArgv: TSX_EXECARGV,
@@ -164,11 +197,24 @@ export class WorkerPool {
     });
   }
 
+  // AST parse task (TypeScript compiler API, isolated heap)
+
+  parseAstFile(filePath: string, opts: AstWorkerOpts = {}): Promise<AstResult> {
+    const id = this._id();
+    return new Promise((resolve, reject) => {
+      this.astPending.set(id, { resolve, reject });
+      const send = () => this.astWorker.postMessage({ id, filePath, opts });
+      if (this.astReady) send();
+      else this.astQueue.push(send);
+    });
+  }
+
   async dispose(): Promise<void> {
     await Promise.all([
       this.manifoldWorker.terminate(),
       this.wikiWorker.terminate(),
       this.seedWorker.terminate(),
+      this.astWorker.terminate(),
     ]);
   }
 }

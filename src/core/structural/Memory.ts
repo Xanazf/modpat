@@ -773,6 +773,32 @@ export default class Store implements Memory.Vault {
   }
 
   /**
+   * Returns all raw_facts that share the same subject and predicate prefix but
+   * have a different object - i.e. facts that would contradict a new assertion.
+   * Used by AstSeedWorker before crystallizing high-energy triples so stale
+   * signatures (e.g. old return types after a refactor) get penalized.
+   */
+  public async findContradictingFacts(
+    subject: string,
+    predicate: string
+  ): Promise<string[]> {
+    const prefix = `${subject.toLowerCase()} ${predicate.toLowerCase()} `;
+    const stmt = await this._connection.prepare(
+      `SELECT fact FROM raw_facts WHERE fact LIKE ? LIMIT 20`
+    );
+    try {
+      stmt.bindVarchar(1, `${prefix}%`);
+      const res = await stmt.runAndReadAll();
+      return res
+        .getRows()
+        .map(row => String(row[0] ?? ""))
+        .filter(Boolean);
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /**
    * Checks whether the exact fact string exists in the persistent vault.
    * Used by the contradiction detector as a pre-ingestion check that does not
    * create any manifold precepts.

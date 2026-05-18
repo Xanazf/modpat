@@ -270,14 +270,6 @@ export default class SemanticAtomizer
    * @param tags NLP tags for the term.
    * @returns A string identifier for the entity type.
    */
-  private getEntityType(tags: string[]): string {
-    if (tags.includes("Person")) return "Person";
-    if (tags.includes("Date") || tags.includes("Value")) return "Date";
-    if (tags.includes("Place")) return "Place";
-    if (tags.includes("Organization")) return "Organization";
-    return "Noun";
-  }
-
   /**
    * Ingests an abstract code pattern template into the manifold and sets slotType
    * on each VAR_N precept so the Mapper can perceive slot roles during path relaxation.

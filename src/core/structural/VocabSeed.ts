@@ -71,7 +71,11 @@ export class VocabSeedWorker {
     // Keep only plain lowercase English words (3+ chars, letters only).
     // Filters out punctuation tokens, numbers, proper nouns starting with
     // uppercase, and the trailing <unk> sentinel.
-    this.words = raw.map(w => w.trim()).filter(w => /^[a-z]{3,}$/.test(w));
+    // S16 fix: admit hyphenated forms, contractions, and mixed-case proper nouns
+    // that exist in the GloVe dictionary, not just plain lowercase words.
+    this.words = raw
+      .map(w => w.trim())
+      .filter(w => /^[a-zA-Z][a-zA-Z\-']{2,}$/.test(w) && w !== "<unk>");
   }
 
   /**
@@ -152,25 +156,24 @@ export class VocabSeedWorker {
         if (result.found) {
           const norm = word.replace(/_/g, " ");
           const seen = new Set<string>();
+          // G7 fix (pool path): crystallize word→def and word→syn as distinct
+          // input/output pairs instead of self-loops.
+          const wordIds = atomizer.ingestSequence(norm, system);
           for (const def of result.definitions.slice(0, 3)) {
-            const fact = `${norm} is ${def.split(" ").slice(0, 8).join(" ")}`;
-            if (!seen.has(fact)) {
-              seen.add(fact);
-              const ids = atomizer.ingestSequence(fact, system);
-              await store.crystallizeProof(ids, ids, 0.8);
+            const defText = def.split(" ").slice(0, 8).join(" ");
+            const key = `${norm}>${defText}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              const defIds = atomizer.ingestSequence(defText, system);
+              await store.crystallizeProof(wordIds, defIds, 0.8);
             }
           }
           for (const syn of result.synonyms.slice(0, 6)) {
-            for (const [a, b] of [
-              [norm, syn],
-              [syn, norm],
-            ] as const) {
-              const fact = `${a} is ${b}`;
-              if (!seen.has(fact)) {
-                seen.add(fact);
-                const ids = atomizer.ingestSequence(fact, system);
-                await store.crystallizeProof(ids, ids, 0.9);
-              }
+            const key = `${norm}>${syn}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              const synIds = atomizer.ingestSequence(syn, system);
+              await store.crystallizeProof(wordIds, synIds, 0.9);
             }
           }
         }

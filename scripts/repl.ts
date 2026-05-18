@@ -32,6 +32,7 @@ import {
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
 import { VocabSeedWorker } from "@core_s/VocabSeed";
+import { AstSeedWorker } from "@core_s/AstSeedWorker";
 import { SpectralVisualizer } from "@utils/SpectralVisualizer";
 
 // ANSI helpers
@@ -103,6 +104,7 @@ let self: SelfConcept | null = null;
 const viz = new SpectralVisualizer();
 
 let seeder: VocabSeedWorker | null = null;
+let astSeeder: AstSeedWorker | null = null;
 
 let verbose = false;
 let atomMode: "semantic" | "base" | "spectral" = "semantic";
@@ -396,7 +398,9 @@ async function handleCommand(raw: string): Promise<void> {
           `  ${cyan(":learn")} ${gray("[n]")}         run n self-test cycles (default 10)\n` +
           `  ${cyan(":knowledge")}         show knowledge state breakdown (Heard/Remembered/Learned)\n` +
           `  ${cyan(":challenge")} ${gray("<q>")}     probe a query without vault recall\n` +
-          `  ${cyan(":seed")} ${gray("[pause|resume]")}  vocab seeder status / control\n` +
+          `  ${cyan(":seed")} ${gray("[pause|resume]")}         vocab seeder status / control\n` +
+          `  ${cyan(":seed ast")} ${gray("<path> [--stop]")}   seed codebase AST triples from <path>\n` +
+          `  ${cyan(":seed status")}                show status of all active seeders\n` +
           `  ${cyan(":orbit")} ${gray("<word>")}        orbital info for a specific atom\n` +
           `  ${cyan(":constellations")} ${gray("[n]")}  show top n constellations (default 10)\n` +
           `  ${cyan(":memory")}            working memory - what has been established\n` +
@@ -581,15 +585,95 @@ async function handleCommand(raw: string): Promise<void> {
     }
 
     case "seed": {
-      if (!seeder) {
-        warn("Seeder not yet initialised - WordNet may still be loading.");
+      const sub = args[0]?.toLowerCase();
+
+      // :seed ast <path> [--stop]
+      if (sub === "ast") {
+        const seedPath = args[1] ?? ".";
+        const stop = args.includes("--stop");
+        if (stop) {
+          astSeeder?.pause();
+          process.stdout.write(`  ${yellow("⏸")} AST seeder paused.\n\n`);
+        } else {
+          if (!astSeeder || astSeeder.isDone) {
+            astSeeder = new AstSeedWorker([seedPath]);
+            process.stdout.write(
+              `  ${green("✓")} AST seeder created: ${cyan(seedPath)} ` +
+                `${gray(`(${astSeeder.total} files)`)}\n\n`
+            );
+          }
+          astSeeder.start(system, atomizer, store, {
+            batchSize: 3,
+            intervalMs: 300,
+            pool: runtime.workers ?? undefined,
+            onProgress: p => {
+              if (p.processed % 10 === 0 || p.done) {
+                const pct =
+                  p.total > 0
+                    ? ((p.processed / p.total) * 100).toFixed(1)
+                    : "0.0";
+                tick(
+                  `AST seed: ${pct}% - ${p.triples.toLocaleString()} triples crystallized`
+                );
+              }
+            },
+          });
+          process.stdout.write(`  ${green("▶")} AST seeder running...\n\n`);
+        }
         break;
       }
-      const sub = args[0]?.toLowerCase();
-      if (sub === "pause") {
+
+      // :seed status
+      if (sub === "status") {
+        if (seeder) {
+          const p = seeder.snapshot();
+          const pct =
+            p.total > 0 ? ((p.processed / p.total) * 100).toFixed(1) : "0.0";
+          const status = p.done
+            ? cyan("complete")
+            : p.running
+              ? green("running")
+              : yellow("paused");
+          process.stdout.write(
+            `\n  ${bold("Vocab seeder")}  ${status}\n` +
+              `    words: ${p.processed.toLocaleString()} / ${p.total.toLocaleString()} (${pct}%)\n` +
+              `    constellations formed: ${green(p.matured.toLocaleString())}\n`
+          );
+        }
+        if (astSeeder) {
+          const p = astSeeder.snapshot();
+          const pct =
+            p.total > 0 ? ((p.processed / p.total) * 100).toFixed(1) : "0.0";
+          const status = p.done
+            ? cyan("complete")
+            : p.running
+              ? green("running")
+              : yellow("paused");
+          process.stdout.write(
+            `\n  ${bold("AST seeder")}   ${status}\n` +
+              `    files: ${p.processed.toLocaleString()} / ${p.total.toLocaleString()} (${pct}%)\n` +
+              `    triples crystallized: ${green(p.triples.toLocaleString())}\n`
+          );
+        }
+        if (!seeder && !astSeeder) warn("No seeders active.");
+        process.stdout.write("\n");
+        break;
+      }
+
+      // :seed [pause|resume] - vocab seeder (original behavior)
+      if (!seeder) {
+        warn(
+          "Vocab seeder not yet initialised - WordNet may still be loading."
+        );
+        break;
+      }
+      if (sub === "pause" || (sub === "vocab" && args[1] === "pause")) {
         seeder.pause();
-        process.stdout.write(`  ${yellow("⏸")} Seeder paused.\n\n`);
-      } else if (sub === "resume") {
+        process.stdout.write(`  ${yellow("⏸")} Vocab seeder paused.\n\n`);
+      } else if (
+        sub === "resume" ||
+        (sub === "vocab" && args[1] === "resume")
+      ) {
         seeder.start(system, atomizer, store, unfolder.dictionary, {
           batchSize: 20,
           intervalMs: 150,
@@ -602,7 +686,7 @@ async function handleCommand(raw: string): Promise<void> {
             }
           },
         });
-        process.stdout.write(`  ${green("▶")} Seeder resumed.\n\n`);
+        process.stdout.write(`  ${green("▶")} Vocab seeder resumed.\n\n`);
       } else {
         const p = seeder.snapshot();
         const pct =

@@ -1179,6 +1179,7 @@ export default class Resolver implements Resolution.Engine {
     const learned: string[] = [];
     let bestIds: Uint32Array = new Uint32Array(0);
     let bestCoherence = 0;
+    let staleSince = 0; // consecutive iterations with no coherence improvement
     let finalDiagnosis: CoherentResult["diagnosis"] = "exhausted";
     let iter = 0;
 
@@ -1194,12 +1195,21 @@ export default class Resolver implements Resolution.Engine {
       if (coherence > bestCoherence) {
         bestCoherence = coherence;
         bestIds = ids;
+        staleSince = 0;
+      } else {
+        staleSince++;
       }
 
       // Converged?
       if (coherence >= threshold) {
         finalDiagnosis = "coherent";
         iter++;
+        break;
+      }
+
+      // I9 early-exit: if coherence hasn't improved for 2 consecutive iterations
+      // and we haven't triggered any expansion, further passes will not help.
+      if (staleSince >= 2) {
         break;
       }
 

@@ -364,6 +364,8 @@ export default class Unfolder {
         return wikiData.trim();
       }
     }
+    // S13: log the miss so Phase 5 callers have a trace rather than silently degrading.
+    metrics.increment("unfolder.fetch_miss");
     return "";
   }
 
@@ -381,13 +383,28 @@ export default class Unfolder {
    */
   public ingestContent(text: string, system?: System): Uint32Array {
     const sys = system ?? this.systemRef.current;
-    // Cap at 30 sentences: enough for a detailed answer without flooding the manifold.
-    const sentences = text
+    // S14 fix: score sentences by information density before capping at 30.
+    // This prevents technical content (where the key fact is mid-document)
+    // from being truncated in favour of preamble sentences.
+    // Score = word count × (1 + noun/verb density heuristic).
+    const allSentences = text
       .replace(/\s+/g, " ")
       .split(/(?<=[.!?])\s+/)
       .map(s => s.trim())
-      .filter(s => s.length > 8)
-      .slice(0, 30);
+      .filter(s => s.length > 8);
+
+    const scored = allSentences.map((s, i) => {
+      const words = s.split(/\s+/);
+      // Prefer sentences with more words (information-dense).
+      let score = Math.min(words.length, 30);
+      // Boost sentences that contain predicate-like tokens (is/are/was/=).
+      if (/\b(is|are|was|were|=|:)\b/.test(s)) score += 5;
+      // Lead sentences (first 5) get a modest boost (usually topic introductions).
+      if (i < 5) score += 3;
+      return { s, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const sentences = scored.slice(0, 30).map(x => x.s);
 
     if (sentences.length <= 1) {
       return this.atomizer.ingestSequence(text, sys);

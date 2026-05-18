@@ -1,8 +1,6 @@
-// @ts-expect-error
-
 import { SYNTAX_ATTRACTORS } from "@config";
-import type System from "./System";
-import { OperatorClass } from "./System";
+import type System from "./System_iso";
+import { OperatorClass } from "./System_iso";
 
 /**
  * The Synthesizer is responsible for collapsing a logical Geodesic path

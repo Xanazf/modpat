@@ -46,7 +46,7 @@ async function run(): Promise<void> {
   console.log(
     `${"n".padStart(8)}  ${"ms/query".padStart(10)}  ${"queries".padStart(8)}`
   );
-  console.log("─".repeat(34));
+  console.log("".repeat(34));
 
   for (const n of CORPUS) {
     const system = buildFixture(n);
