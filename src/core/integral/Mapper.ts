@@ -3136,11 +3136,12 @@ class Mapper implements Mapping.Engine {
       const { answer, confidence } = skillResult;
 
       if (!answer || answer === "unknown") {
-        // Handle unknown by enqueuing inquiry
+        // Handle unknown by enqueuing inquiry and emitting a response.
         const topic = extractTopic(shifted);
         if (topic && classifyOperatorToken(topic) === OperatorClass.None) {
           this.enqueueInquiry(topic, shifted);
         }
+        this.language?.respond("unknown");
         return "unknown";
       }
 

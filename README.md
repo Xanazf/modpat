@@ -87,9 +87,22 @@ Rules and axioms are not stored as a list, but as a topography.
 
 ## System Architecture
 
-### 1. Contiguous Memory Manifold (DOPAT)
+The integral layer has exactly two conceptual residents:
 
-The core state is managed in a contiguous system buffer (DMA) for high-performance topological calculations. Every logical "precept" is stored as a physical entity within a dual-layer manifold with the following properties:
+* **System** — the world. Precepts are terrain. The topology encodes everything the system knows.
+* **Mapper** — the traveler. It observes the terrain (perception), moves through it (locomotion), and leaves trails (learning). Thinking IS movement. `mapper.process(text)` is the single entry point for all input.
+
+A thin **Language** layer sits at the boundary: it converts raw text into System precepts (ingest direction) and decodes a Mapper terminal position back into text (express direction). This is translation, not thinking.
+
+```
+Natural language → Language.ingest() → Manifold (DOPAT) → Mapper.perceive() + traverse()
+                         ↑                                          ↕
+                  Language.express() ←── Mapper.process() ──  Memory Vault (DuckDB)
+```
+
+### Contiguous Memory Manifold (DOPAT)
+
+The core state is managed in a contiguous system buffer for high-performance topological calculations. Every logical "precept" is stored as a physical entity within a dual-layer manifold with the following properties:
 
 * **Matter (Mass):** The logical importance or content density of the precept.
 * **Kind (Scope):** The structural reach or category identifier.
@@ -97,7 +110,7 @@ The core state is managed in a contiguous system buffer (DMA) for high-performan
 * **Age (Time):** The temporal state or context within the logical loom.
 * **4D Position:** Coordinates in Matter (X), Kind (Y), Energy (Z), and Age (W).
 
-### 2. Spectral Logic (Resonance Propagation)
+### Spectral Logic (Resonance Propagation)
 
 The engine models logical operations as energy vibrations propagating through a manifold. This is implemented via a Transfer Matrix (W) that defines the conductivity of logic between precepts:
 
@@ -105,29 +118,66 @@ The engine models logical operations as energy vibrations propagating through a 
 * **Destructive Interference (NOT):** Negation is modeled as a 180-degree phase shift, creating repelling potential fields.
 * **Gravitational Lensing:** Identity shifts (e.g., "is", "are") and quantifiers act as lenses that bend the logical path, allowing energy to bypass structural operators.
 
-### 3. Geodesic Pathfinding
+### Geodesic Pathfinding
 
 Deduction is performed by finding the "geodesic" (the shortest logical path) through the 4D manifold potential field.
 
 * **Iterative Relaxation:** The system uses gradient descent to move path nodes toward high-density logic attractors while maintaining path smoothness through simulated spring forces.
 * **Monotonic Age Traversal:** Paths are constrained by the Temporal Anisotropy, ensuring temporal consistency in derivations.
-* **Trap Detection:** A self-review mechanism identifies "Logic Traps"-zones of high mass but low entropy that indicate circular reasoning or semantic dead-ends.
+* **Trap Detection:** A self-review mechanism identifies "Logic Traps" — zones of high mass but low entropy that indicate circular reasoning or semantic dead-ends.
+
+### Skill Registry
+
+The Mapper has an open-ended skill registry. A **skill** is an external behaviour the Mapper can elect to invoke when a query's manifold position is attracted to a capability precept. Skills are registered at boot time and elected at query time via potential-field proximity — no routing table needed.
+
+```typescript
+// Seed a capability precept at a characteristic manifold position
+const preceptId = atomizer.getSymbolScope("SKILL:TRANSLATION", false);
+system.operatorClass[preceptId] = OperatorClass.Capability;
+
+// Register a handler
+mapper.registerSkill(preceptId, async (ctx) => {
+  const result = await translateText(ctx.query);
+  return { answer: result, confidence: 0.9 };
+});
+```
+
+As a skill is used successfully, `reinforcePath` grows the capability precept's mass, making it a stronger attractor for similar future queries — routing by physics, not code.
 
 ## Implementation Details
 
 ### Core Components
 
-* **LiveInference:** The real-time intent-routing engine. It bridges natural language with the manifold by determining if an input is an interrogation (Question) or ingestion (Command), and resolves it via memory resonance or external retrieval (Wikipedia/DuckDB).
-* **Resolver:** The primary logical engine. It executes the physics simulation of resonance propagation, utilizing a Transfer Matrix to calculate reachability and waveform collapse into a final discrete state.
-* **Mapper:** Handles the 4D pathfinding algorithms. It manages the iterative relaxation of geodesics and detects logical voids, triggering the Unfolder to expand the manifold as needed.
-* **Synthesizer:** Responsible for "collapsing" a logical geodesic path into structured TypeScript code. It performs topological serialization and syntactic cleanup to produce valid identifiers.
-* **Atomizers:** Convert natural language or external signals into atomic logical quanta, mapping them to specific coordinates in the manifold.
-* **Memory Vault:** Uses DuckDB to "crystallize" proven logical paths, allowing them to be recalled by their topological signature.
+* **Mapper** (`src/core/integral/Mapper.ts`) — the single thinker. Owns perception (resonance propagation, Phase 0–7 pipeline), locomotion (geodesic traversal via gradient descent), learning (`learnCycle`), and autonomous motivation (`startAutonomy`). The entry point for all input is `mapper.process(text)`.
+* **Language** (`src/core/integral/language/Language.ts`) — the translation boundary. `ingest(text)` tokenizes and classifies input; `ingestAssertion()` crystallizes declarative facts into the vault; `express(ids)` decodes precept sequences back to text.
+* **System** (`src/core/integral/System.ts`) — defines the DOPAT manifold, `TargetBuffer` enum (14 property buffers), `OperatorClass` enum (12 types). This is the topology schema.
+* **Skills** (`src/core/integral/skills/`) — open-ended skill registry. `Coder.ts` registers the code-synthesis handler.
+* **Synthesizer** (`src/core/integral/Coder.ts`) — collapses `Uint32Array` geodesic paths into executable TypeScript code. Used internally by the Mapper perception pipeline.
+* **Atomizers** (`src/core/structural/atomizers/`) — convert natural language or external signals into atomic logical quanta, mapping them to specific coordinates in the manifold. `SemanticAtomizer` uses 50D GloVe vectors projected to 192-dim manifold coordinates.
+* **Memory Vault** (`src/core/structural/Memory.ts`) — uses DuckDB to crystallize proven logical paths, allowing them to be recalled by their topological signature.
+* **Runtime** (`src/core/integral/Runtime.ts`) — boot/wiring only. `Runtime.boot(opts)` creates System → Atomizer → Store → Mapper → Language → Skills. Exposes `rt.mapper`, `rt.language`, `rt.store`.
 
 ### Computation
 
 * **Hardware Acceleration:** Supports both SIMD-optimized CPU execution and GPU-accelerated matrix operations via WebGPU.
 * **Self-Correction:** Implements Triple Modular Redundancy (TMR) for critical system pointers to ensure stability during intensive topological shifts.
+
+## Usage
+
+```typescript
+import Runtime from "./src/core/integral/Runtime";
+
+const rt = await Runtime.boot({ atomizer: "semantic", db: "./data/repl.db" });
+
+// Wire responses
+rt.language.setRespond(text => console.log(text));
+
+// All input goes through a single entry point
+await rt.mapper.process("the sky is blue");        // assertion
+await rt.mapper.process("What is the sky?");        // question → "blue"
+await rt.mapper.process("yes");                     // positive feedback
+await rt.mapper.process("function add(a, b) { return a + b; }");  // code ingestion
+```
 
 ## Experimental Use Cases
 

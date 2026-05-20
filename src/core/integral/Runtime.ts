@@ -70,6 +70,20 @@ function _registerDefaultSkills(
     const opts = { contextScopes: ctx.language.contextScopes() };
     const result = await mapper.perceiveCoherent(ctx.queryIds, opts);
     const decoded = ctx.atomizer.decodeSequence(result.ids, ctx.system).trim();
+
+    // Detect physics echo: when perception can't converge, the physics pass
+    // returns the input tokens as sinkCandidates. If the result IDs heavily
+    // overlap with the query IDs, there's no real answer — return "unknown"
+    // so the Mapper's inquiry path can take over (mirrors old Listener behaviour).
+    if (decoded && decoded !== "unknown" && result.ids.length > 0) {
+      const querySet = new Set(Array.from(ctx.queryIds));
+      let overlap = 0;
+      for (const id of result.ids) { if (querySet.has(id)) overlap++; }
+      if (overlap / result.ids.length > 0.5) {
+        return { answer: "unknown", confidence: 0 };
+      }
+    }
+
     return { answer: decoded || "unknown", confidence: result.coherence };
   };
   mapper.registerSkill(langId, languageHandler);
