@@ -338,9 +338,11 @@ export class ManifoldLifecycle {
       const newAllocator = new TMRFreeList();
       newSystem.setAllocator(newAllocator);
       newAllocator.setInterruptHandler((reason, values) => {
-        this.triggerInterrupt(`TMR quarantine [self-healed]: ${reason}`).catch(err => {
-          console.error(`[ManifoldLifecycle] TMR interrupt error:`, err);
-        });
+        this.triggerInterrupt(`TMR quarantine [self-healed]: ${reason}`).catch(
+          err => {
+            console.error(`[ManifoldLifecycle] TMR interrupt error:`, err);
+          }
+        );
       });
 
       this.stabilityPromise = newSystem
@@ -376,8 +378,14 @@ export class ManifoldLifecycle {
     if (this.isHydrating) return this.stabilityPromise || Promise.resolve();
 
     this.isHydrating = true;
-    const targetSystem = this.activeSystem === this.primarySystem ? this.emergencySystem : this.primarySystem;
-    const targetAllocator = this.activeSystem === this.primarySystem ? this.emergencyAllocator : this.primaryAllocator;
+    const targetSystem =
+      this.activeSystem === this.primarySystem
+        ? this.emergencySystem
+        : this.primarySystem;
+    const targetAllocator =
+      this.activeSystem === this.primarySystem
+        ? this.emergencyAllocator
+        : this.primaryAllocator;
 
     this.stabilityPromise = targetSystem
       .hydrate(this.persistence)

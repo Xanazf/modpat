@@ -43,6 +43,10 @@ declare namespace Root {
     readonly epsilon: number;
     readonly maxilon: number;
 
+    /** Monotonically-increasing system clock (seconds elapsed since boot).
+     *  Advanced by decay(). Gives the Mapper/Resolver a "now" to reason against. */
+    systemAge: number;
+
     // Updates
     update(id: number, from?: string): void;
 
@@ -103,11 +107,11 @@ declare namespace Root {
     isAllocated(id: number): boolean;
 
     // Temporal freshness
-    /** Sets posW = AGE_FRESHNESS for every precept that carries this scope. */
+    /** Re-anchors posW to systemAge for every precept that carries this scope. */
     refreshConceptAge(scope: number): void;
-    /** Sets posW = AGE_FRESHNESS for exactly the supplied precept IDs only. */
+    /** Re-anchors posW to systemAge for exactly the supplied precept IDs only. */
     refreshConceptAgeForIds(ids: ArrayLike<number>): void;
-    /** Applies thermodynamic decay and posW freshness fade over deltaTime (ms). */
+    /** Advances systemAge, decays mass, and fades posW for non-eternal precepts. */
     decay(deltaTime: number): void;
   }
 
@@ -207,13 +211,49 @@ declare namespace Mapping {
       targetId: number,
       options?: Mapping.RouteOptions
     ): Promise<Uint32Array>;
+    /** Alias for route - same locomotion, clearer name. Optional for legacy implementations. */
+    traverse?(
+      sourceId: number,
+      targetId: number,
+      options?: Mapping.RouteOptions
+    ): Promise<Uint32Array>;
+
+    // Perception (was Resolution.Engine) - optional until Mapper absorbs Resolver everywhere
+    perceive?(ids: Uint32Array, opts?: any): Promise<Uint32Array>;
+    perceiveCapturing?(ids: Uint32Array, opts?: any): Promise<any>;
+    perceiveCoherent?(ids: Uint32Array, opts?: any): Promise<any>;
+    probe?(ids: Uint32Array): Promise<Uint32Array>;
+
+    // Skills
+    registerSkill?(preceptId: number, handler: any): void;
+    electSkill?(ids: Uint32Array): number;
+    process?(text: string): Promise<string>;
+
+    // Learning
+    learnCycle?(n?: number): Promise<Memory.ValidationReport | void>;
+
+    // Motivation
+    spawnIntent?(topic: string, energy?: number, tag?: any): number | null;
+    startAutonomy?(): void;
+    stopAutonomy?(): void;
+
+    // Inquiry
+    enqueueInquiry?(topic: string, query: string): void;
+    drainInquiries?(n: number): Promise<Memory.InquiryItem[] | void>;
+    onUnknown?: (topic: string) => void;
   }
 }
 
+/**
+ * Resolution.Engine is collapsed into Mapping.Engine. A loose alias is kept
+ * here for the duration of the transition so vendored "iso" test subjects
+ * that pre-date the merge keep compiling. New code should target
+ * Mapping.Engine directly.
+ */
 declare namespace Resolution {
   interface Engine {
-    resolveSequence(sequenceIds: Uint32Array): Promise<Uint32Array>;
-    calculateGeodesic(
+    resolveSequence?(sequenceIds: Uint32Array): Promise<Uint32Array>;
+    calculateGeodesic?(
       startId: number,
       endId: number,
       steps?: number,

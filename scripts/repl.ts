@@ -16,7 +16,8 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { DOPAT_CONFIG, SYSTEM_CONFIG } from "@config";
 import type Resolver from "@core_i/Resolver";
-import Runtime, { type LiveInference } from "@core_i/Runtime";
+import Runtime from "@core_i/Runtime";
+import type Mapper from "@core_i/Mapper";
 import type System from "@core_i/System";
 import { OperatorClass } from "@core_i/System";
 import type { SelfConcept } from "@core_s/Identity";
@@ -99,7 +100,7 @@ let atomizer: Atomic.Engine;
 let resolver: Resolver;
 let store: Store;
 let unfolder: Unfolder;
-let inference: LiveInference;
+let inference: Mapper;
 let self: SelfConcept | null = null;
 const viz = new SpectralVisualizer();
 
@@ -367,7 +368,7 @@ function showVerbose(): void {
 
   // Working memory context
   const wm = inference.getWorkingMemory();
-  if (wm.size > 0) {
+  if (wm && wm.size > 0) {
     const recent = wm
       .recent(3)
       .map(
@@ -805,7 +806,7 @@ async function handleCommand(raw: string): Promise<void> {
     case "memory":
     case "mem": {
       const wm = inference.getWorkingMemory();
-      const frames = wm.recent(wm.size);
+      const frames = wm ? wm.recent(wm.size) : [];
       if (frames.length === 0) {
         process.stdout.write(`  ${gray("Working memory is empty.")}\n\n`);
         break;
@@ -892,7 +893,7 @@ async function handleCommand(raw: string): Promise<void> {
 
     case "reset": {
       system.reset();
-      inference.getWorkingMemory().clear();
+      inference.getWorkingMemory()?.clear();
       sessionIngested = 0;
       sessionQueried = 0;
       sessionDiscovered = 0;
@@ -964,7 +965,7 @@ async function handleInput(line: string): Promise<void> {
 
   if (replyText) {
     // Show explanation from working memory (populated by processQuestion)
-    const lastFrame = inference.getWorkingMemory().recent(1)[0];
+    const lastFrame = inference.getWorkingMemory()?.recent(1)[0];
     const explSuffix =
       lastFrame?.explanation && replyText.includes(lastFrame.conclusion)
         ? `  ${gray(`(${lastFrame.explanation})`)}`

@@ -3,14 +3,14 @@
  *
  * Records each resolved conclusion so subsequent turns can:
  *   1. Resolve pronouns ("it", "this" → last conclusion)
- *   2. Seed the Resolver's forward pass with recently active concepts
+ *   2. Seed the Mapper's forward pass with recently active concepts
  *   3. Build on established ground rather than starting from zero each time
  *
  * The frame limit (default 8) keeps memory bounded and aligned with the
  * manifold's own thermodynamic forgetting (old precepts decay in mass).
  */
 
-import type { BridgeCandidate } from "@core_i/Resolver";
+import type { BridgeCandidate } from "@core_i/Mapper";
 
 export interface MemoryFrame {
   query: string;
@@ -48,8 +48,8 @@ export class WorkingMemory {
   }
 
   /**
-   * Returns the manifold IDs of recent conclusions for Resolver context seeding.
-   * The Resolver gives bonus initial energy to any token in the new query whose
+   * Returns the manifold IDs of recent conclusions for Mapper context seeding.
+   * The Mapper gives bonus initial energy to any token in the new query whose
    * scope matches a recently-established conclusion.
    */
   contextSeeds(): number[] {

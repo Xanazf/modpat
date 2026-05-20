@@ -79,6 +79,8 @@ export enum OperatorClass {
   Intent = 10,
   /** Binary arithmetic operators (+, -, *, /, plus, minus, times, divided). */
   Arithmetic = 11,
+  /** Capability anchor: skill attractor that the Mapper navigates toward. */
+  Capability = 12,
 }
 
 /**
@@ -134,7 +136,7 @@ function classifyOperatorToken(token: string): OperatorClass {
     case "was":
     case "were":
     case "can":
-    case "after":  // ordinal succession - encodes the number-line "next" relation
+    case "after": // ordinal succession - encodes the number-line "next" relation
     case "before": // ordinal precedence
       return OperatorClass.IdentityShift;
     case "&&":
@@ -387,6 +389,16 @@ class System implements Root.ManifoldView {
 
   /** Maximum possible number in any context (Maxilon). */
   public readonly maxilon: number = DOPAT_CONFIG.MAXILON;
+
+  /**
+   * Monotonically-increasing system clock (seconds elapsed since boot).
+   * Advanced by decay() on every tick.  Gives the Mapper/Resolver a stable
+   * "now" reference so it can reason about before/after without being told.
+   * Numeric literals use posW = value * 0.1 (the number line); all other
+   * precepts get posW re-anchored to systemAge on each vault hit so the
+   * Resolver's freshness signal stays bounded relative to the clock.
+   */
+  public systemAge = 0.0;
 
   /** Cache for reactive property signals to prevent redundant allocations. */
   private viewCache: (Root.Signal | undefined)[] = [];
@@ -886,13 +898,21 @@ class System implements Root.ManifoldView {
     const dtSec = deltaTime / 1000;
     const VACUUM_THRESHOLD = DOPAT_CONFIG.DRIFT_THRESHOLD * 0.001;
     const CRITICAL_ENTROPY = 100.0;
-    // Freshness (posW) decays continuously across ALL allocated atoms.
+
+    // Advance the system's internal clock.
+    this.systemAge += dtSec;
+
+    // posW freshness decay factor for non-eternal precepts.
     const ageFactor = Math.exp(-DOPAT_CONFIG.PHYSICS.AGE_DECAY_RATE * dtSec);
 
     for (let i = 0; i < this.length; i++) {
       if (!this.isAllocated(i)) continue;
 
-      const rate = this.decayRate[i] || 0.01;
+      const rate = this.decayRate[i];
+
+      // Eternal precepts (decayRate === 0, e.g. numeric literals) keep their
+      // posW stable as number-line coordinates and never lose mass.
+      if (rate === 0) continue;
 
       // Age accumulates (used for entropyRate = time / PRECEPT_SCALE).
       this.time[i] += rate * dtSec;
@@ -908,20 +928,18 @@ class System implements Root.ManifoldView {
         continue;
       }
 
-      // Temporal freshness decay: posW = "how recently was this concept used?"
-      // Decays for every allocated atom so stale concepts lose their energy
-      // advantage in the Resolver's forward pass over time.
+      // Temporal freshness decay: posW fades so stale concepts lose their
+      // energy advantage in the Resolver's forward pass over time.
+      // Eternal (decayRate=0) precepts are skipped above — their posW encodes
+      // a stable coordinate (the number line) and must not drift.
       this.posW[i] = Math.max(0, this.posW[i] * ageFactor);
 
       // Spatial drift: low-mass precepts lose their positional anchor.
-      // Bug-fix: original code used raw deltaTime (ms) as seconds in the
-      // exponent, causing near-instant position erasure for large tick intervals.
       if (Math.abs(this.mass[i]) < DOPAT_CONFIG.DRIFT_THRESHOLD) {
         const driftDamping = Math.exp(-0.1 * dtSec);
         this.posX[i] *= driftDamping;
         this.posY[i] *= driftDamping;
         this.posZ[i] *= driftDamping;
-        // posW drift is already handled above; do not double-decay.
       }
 
       this.update(i, "decay");
@@ -939,8 +957,9 @@ class System implements Root.ManifoldView {
    */
   public refreshConceptAge(scope: number): void {
     for (const id of this.scopeIndex.get(scope) ?? []) {
-      this.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
-      this.update(id); // keep checksum in sync with the new posW
+      if (this.decayRate[id] === 0) continue; // eternal — number-line coordinate is stable
+      this.posW[id] = this.systemAge;
+      this.update(id);
     }
   }
 
@@ -954,7 +973,8 @@ class System implements Root.ManifoldView {
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       if (!this.isAllocated(id)) continue;
-      this.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
+      if (this.decayRate[id] === 0) continue; // eternal — number-line coordinate is stable
+      this.posW[id] = this.systemAge;
       this.update(id);
     }
   }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
-import { LiveInference } from "@core_i/Runtime";
+import { createTestMapper } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
 import Unfolder from "@core_s/Unfolder";
 import { describe, it, TestHarness } from "./utils/harness";
@@ -12,8 +12,7 @@ export async function executeE2ETest() {
     system.reset();
 
     const unfolder = new Unfolder(system, atomizer);
-    resolver.setUnfolder(unfolder);
-    const inference = new LiveInference(system, atomizer, resolver, store);
+    const inference = createTestMapper(system, atomizer, resolver, store, unfolder);
 
     // Step 1, crystallize a set of code patterns into the vault.
     const source = `
@@ -54,7 +53,7 @@ export async function executeE2ETest() {
 
     // Step 4, resolve a synthesis request using the learned patterns.
     const responses: string[] = [];
-    inference.respond = r => {
+    inference.onResponse = r => {
       responses.push(r);
     };
 
@@ -71,7 +70,11 @@ export async function executeE2ETest() {
     );
 
     await TestHarness.disposeEnvironment(env);
+    console.log("PCS E2E TEST COMPLETED SUCCESSFULLY");
   });
 }
 
 export { executeE2ETest as runPcsE2eTests };
+if (require.main === module) {
+  executeE2ETest().catch(console.error);
+}

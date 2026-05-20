@@ -238,10 +238,9 @@ export default class SemanticAtomizer
       );
 
       system.posZ[id] = depth;
-      // posW = temporal freshness: starts at maximum (1.0) for every newly
-      // ingested precept and decays via Runtime.tick().  Formerly held a
-      // context-hash + sequence-offset value, which provided no decay signal.
-      system.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
+      // posW = temporal freshness: re-anchored to systemAge so the Resolver's
+      // freshness signal stays bounded relative to the system clock.
+      system.posW[id] = system.systemAge;
 
       // Sync Matter layer content (time drives entropyRate; kept separate from posW)
       system.depth[id] = depth;
@@ -271,8 +270,14 @@ export default class SemanticAtomizer
       // the temporal axis ("time mechanic"), giving the Mapper a gradient to
       // follow when traversing ordinal succession chains.
       if (/^\d+(\.\d+)?$/.test(canonicalLabel)) {
-        system.posX[id] = parseFloat(canonicalLabel) * 2;
-        system.posW[id] = Math.max(0.1, parseFloat(canonicalLabel) * 0.1);
+        const numVal = parseFloat(canonicalLabel);
+        system.posX[id] = numVal * 2;
+        // Encode numeric value as a stable temporal coordinate on the number line.
+        // posW(n) = n * 0.1 so addition is linear: posW(a+b) = posW(a) + posW(b).
+        // decayRate=0 marks this precept as eternal — posW never drifts, and the
+        // Resolver always treats it as fully fresh regardless of systemAge.
+        system.posW[id] = numVal * 0.1;
+        system.decayRate[id] = 0;
       } else {
         const words = canonicalLabel
           .split(/\s+/)
@@ -361,7 +366,7 @@ export default class SemanticAtomizer
 
         system.posZ[id] = depth;
         system.posY[id] = i * 0.1;
-        system.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
+        system.posW[id] = system.systemAge;
         system.depth[id] = depth;
         system.update(id);
         sequenceIds[i] = id;

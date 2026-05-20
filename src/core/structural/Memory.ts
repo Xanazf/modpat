@@ -204,13 +204,21 @@ export default class Store implements Memory.Vault {
   private calculateCentroid(ids: Uint32Array): number[] {
     let x = 0,
       y = 0,
-      z = 0,
-      w = 0;
+      z = 0;
     // Exclude Sink-class tokens from the centroid: they are structural
     // terminators ("|-") whose posY and posW drift across sessions as
     // ManifoldLifecycle merges or reassigns Sink precepts.  Including them
     // makes the anchor unstable - a merged Sink at a different sequence
     // position silently breaks future Phase-0 lookups.
+    //
+    // posW is intentionally excluded from the centroid anchor.  Non-numeric
+    // operator tokens receive posW = systemAge at ingestion, so a vault entry
+    // stored at systemAge=0 has anchor_w≈0 while the same query at
+    // systemAge=100 has qw≈100 — Δw²=10000 >> VAULT_QUERY_THRESHOLD, causing
+    // every cross-time lookup to miss.  posX already encodes numeric value
+    // (value * 2) with a wider spread than posW (value * 0.1), so no
+    // discriminating power is lost.  The W dimension of the grid key was
+    // already excluded for this same reason.
     let count = 0;
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
@@ -218,11 +226,10 @@ export default class Store implements Memory.Vault {
       x += this.system.posX[id];
       y += this.system.posY[id];
       z += this.system.posZ[id];
-      w += this.system.posW[id];
       count++;
     }
     if (count === 0) return [0, 0, 0, 0];
-    return [x / count, y / count, z / count, w / count];
+    return [x / count, y / count, z / count, 0];
   }
 
   /**
@@ -479,10 +486,11 @@ export default class Store implements Memory.Vault {
 
     // Grid-window spatial resonance query: coarse bucket filter reduces candidates from
     // O(rows_per_signature) to O(1) before the exact squared-distance fine filter.
-    // posW (temporal freshness) is intentionally excluded from the grid filter:
-    // it decays every tick, so using it as a grid key causes stored entries to
-    // drift outside the search window even when their XYZ coordinates are stable.
-    // posW is still included in the resonance distance to maintain precision.
+    // posW is excluded from both the grid key and the resonance distance: non-numeric
+    // operator tokens receive posW = systemAge at ingestion, so any cross-time lookup
+    // (stored at systemAge=T1, queried at systemAge=T2) would produce Δw²=(T2-T1)² >>
+    // VAULT_QUERY_THRESHOLD and always miss.  posX already encodes numeric value with
+    // a wider spread (value*2 vs posW's value*0.1), so nothing is lost.
     const R = Math.ceil(
       DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD / DOPAT_CONFIG.memory.GRID_CELL
     );
@@ -493,7 +501,7 @@ export default class Store implements Memory.Vault {
     const uw = DOPAT_CONFIG.memory.USAGE_WEIGHT;
     const stmt = await this._connection.prepare(`
       SELECT target_pattern, slot_flags, signature AS matched_sig,
-             (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2) + pow(anchor_w - ?, 2)) as resonance,
+             (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2)) as resonance,
              net_energy * (1 + LN(1 + COALESCE(usage_count, 0)) * ${uw}) AS combined_score,
              net_energy
       FROM wave_forms
@@ -508,14 +516,13 @@ export default class Store implements Memory.Vault {
       stmt.bindDouble(1, qx);
       stmt.bindDouble(2, qy);
       stmt.bindDouble(3, qz);
-      stmt.bindDouble(4, qw);
-      stmt.bindVarchar(5, signature);
-      stmt.bindInteger(6, gx - R);
-      stmt.bindInteger(7, gx + R);
-      stmt.bindInteger(8, gy - R);
-      stmt.bindInteger(9, gy + R);
-      stmt.bindInteger(10, gz - R);
-      stmt.bindInteger(11, gz + R);
+      stmt.bindVarchar(4, signature);
+      stmt.bindInteger(5, gx - R);
+      stmt.bindInteger(6, gx + R);
+      stmt.bindInteger(7, gy - R);
+      stmt.bindInteger(8, gy + R);
+      stmt.bindInteger(9, gz - R);
+      stmt.bindInteger(10, gz + R);
 
       const res = await stmt.runAndReadAll();
       const rows = res.getRows();

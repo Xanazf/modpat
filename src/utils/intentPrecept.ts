@@ -1,4 +1,3 @@
-import type System from "@core_i/System";
 import { OperatorClass } from "@core_i/System";
 
 export enum IntentTag {
@@ -14,7 +13,7 @@ export enum IntentTag {
  * Returns null if the topic has no known scope.
  */
 export function spawnIntent(
-  system: System,
+  system: Root.ManifoldView,
   atomizer: Atomic.Engine,
   topic: string,
   urgency: number,
@@ -29,12 +28,13 @@ export function spawnIntent(
   return id;
 }
 
-export function decayIntent(system: System, id: number, factor: number): void {
+export function decayIntent(system: Root.ManifoldView, id: number, factor: number): void {
   system.mass[id] *= factor;
   system.update(id);
 }
 
-export function boostIntent(system: System, id: number, factor: number): void {
+export function boostIntent(system: Root.ManifoldView, id: number, factor: number): void {
   system.mass[id] *= factor;
   system.update(id);
 }
+

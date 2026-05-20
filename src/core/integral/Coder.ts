@@ -52,7 +52,7 @@ export class Synthesizer {
     slotFlags: bigint,
     inner: string
   ): string {
-    const varPattern = /VAR_(\d+)/g;
+    const varPattern = /VAR_(\d+)/gi;
     let match: RegExpExecArray | null;
     while ((match = varPattern.exec(outer)) !== null) {
       const st = this.slotTypeFor(parseInt(match[1], 10), slotFlags);
@@ -73,7 +73,7 @@ export class Synthesizer {
     varBindings: Map<number, string>
   ): string {
     return template.replace(
-      /VAR_(\d+)/g,
+      /VAR_(\d+)/gi,
       (_, id) => varBindings.get(+id) ?? "_"
     );
   }
@@ -126,14 +126,8 @@ function deriveIntent(node: any): string {
       const friendlyName = nlp(name.replace(/([A-Z])/g, " $1").trim())
         .normalize()
         .out("text");
-      const ops: string[] = [];
-      walk(node, (n: any) => {
-        if (n.type === "BinaryExpression" && OPERATOR_INTENT[n.operator]) {
-          ops.push(OPERATOR_INTENT[n.operator]);
-        }
-      });
-      const opPhrase = [...new Set(ops)].join(" ");
-      return `${opPhrase ? opPhrase + " " : ""}function ${friendlyName}`.trim();
+      const base = `function ${friendlyName}`.trim();
+      return base;
     }
     case "ArrowFunctionExpression": {
       const ops: string[] = [];
@@ -265,105 +259,95 @@ function extractPatternFromNode(node: any): {
 }
 
 /**
- * Handles code ingestion: parses TypeScript/JavaScript source, extracts abstract
- * patterns from the AST, and crystallizes (intent → pattern) into the vault.
+ * Standalone code-ingestion function (was Coder.processCode).
+ * Parses TypeScript/JavaScript source, extracts abstract patterns from the
+ * AST, and crystallizes (intent → pattern) into the vault.
  */
-class Coder {
-  private systemRef: SystemRef;
-  private get system(): Root.ManifoldView {
-    return this.systemRef.current;
-  }
-  private atomizer: Atomic.Engine;
-  private store: Store;
+export async function processCode(
+  source: string,
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine,
+  store: Store,
+  respond: (msg: string) => void = msg => logger.log(`[Coder]: ${msg}`)
+): Promise<string> {
+  await store.waitForInit();
 
-  private _respond: (msg: string) => void;
-
-  constructor(
-    systemRef: SystemRef,
-    atomizer: Atomic.Engine,
-    store: Store,
-    respond?: (msg: string) => void
-  ) {
-    this.systemRef = systemRef;
-    this.atomizer = atomizer;
-    this.store = store;
-    this._respond = respond ?? (msg => logger.log(`[LiveInference]: ${msg}`));
-  }
-
-  public async processCode(source: string): Promise<string> {
-    await this.store.waitForInit();
-
-    let ast: any;
-    try {
-      ast = parse(source, { module: false });
-    } catch (e: any) {
-      return `[processCode] Parse error: ${e.message}`;
-    }
-
-    const VISITED_TYPES = new Set([
-      "FunctionDeclaration",
-      "FunctionExpression",
-      "ArrowFunctionExpression",
-      "BinaryExpression",
-      "IfStatement",
-      "ReturnStatement",
-      "VariableDeclaration",
-      "CallExpression",
-    ]);
-
-    const collected: {
-      intentPhrase: string;
-      extracted: NonNullable<ReturnType<typeof extractPatternFromNode>>;
-    }[] = [];
-    const seen = new Set<string>();
-
-    walk(ast, (node: any) => {
-      if (!VISITED_TYPES.has(node.type)) return;
-      const extracted = extractPatternFromNode(node);
-      if (!extracted) return;
-      const intentPhrase = deriveIntent(node);
-      const dedupeKey = `${intentPhrase}::${extracted.pattern}`;
-      if (seen.has(dedupeKey)) return;
-      seen.add(dedupeKey);
-      collected.push({ intentPhrase, extracted });
-    });
-
-    let count = 0;
-    for (const { intentPhrase, extracted } of collected) {
+  if (source.includes("|-")) {
+    const [lhs, rhs] = source.split("|-").map(s => s.trim());
+    if (rhs) {
       try {
-        const intentQuanta = this.atomizer.ingestSequence(
-          intentPhrase,
-          this.system
-        );
-        const patternQuanta = this.atomizer.ingestPattern(
-          extracted.pattern,
-          extracted.slotTypes,
-          this.system
-        );
-        const slotFlags = this.store.packSlotFlags(extracted.slotTypes);
-        await this.store.crystallizeProof(
-          intentQuanta,
-          patternQuanta,
-          1.0,
-          slotFlags
-        );
-        count++;
-        logger.debug(
-          `[processCode] +pattern: "${intentPhrase}" → "${extracted.pattern}"`
-        );
+        const innerAst = parse(rhs, { module: false });
+        const node =
+          innerAst.body[0]?.type === "ExpressionStatement"
+            ? innerAst.body[0].expression
+            : innerAst.body[0];
+        const extracted = extractPatternFromNode(node);
+        if (extracted) {
+          const intentQuanta = atomizer.ingestSequence(lhs, system);
+          const patternQuanta = atomizer.ingestPattern(extracted.pattern, extracted.slotTypes, system);
+          const slotFlags = store.packSlotFlags(extracted.slotTypes);
+          await store.crystallizeProof(intentQuanta, patternQuanta, 1.0, slotFlags);
+          const msg = `Manual pattern ingested: "${lhs}" → "${extracted.pattern}"`;
+          respond(msg);
+          return msg;
+        }
       } catch (e: any) {
-        logger.error("[processCode] Failed to crystallize pattern:", e.message);
+        return `[processCode] Parse error in RHS: ${e.message}`;
       }
     }
-
-    const summary = `Ingested ${count} code patterns.`;
-    this.respond(summary);
-    return summary;
+    return "[processCode] Missing RHS for |-";
   }
 
-  private respond(response: string): void {
-    this._respond(response);
+  let ast: any;
+  try {
+    ast = parse(source, { module: false });
+  } catch (e: any) {
+    return `[processCode] Parse error: ${e.message}`;
   }
+
+  const VISITED_TYPES = new Set([
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "BinaryExpression",
+    "IfStatement",
+    "ReturnStatement",
+    "VariableDeclaration",
+    "CallExpression",
+  ]);
+
+  const collected: {
+    intentPhrase: string;
+    extracted: NonNullable<ReturnType<typeof extractPatternFromNode>>;
+  }[] = [];
+  const seen = new Set<string>();
+
+  walk(ast, (node: any) => {
+    if (!VISITED_TYPES.has(node.type)) return;
+    const extracted = extractPatternFromNode(node);
+    if (!extracted) return;
+    const intentPhrase = deriveIntent(node);
+    const dedupeKey = `${intentPhrase}::${extracted.pattern}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    collected.push({ intentPhrase, extracted });
+  });
+
+  let count = 0;
+  for (const { intentPhrase, extracted } of collected) {
+    try {
+      const intentQuanta = atomizer.ingestSequence(intentPhrase, system);
+      const patternQuanta = atomizer.ingestPattern(extracted.pattern, extracted.slotTypes, system);
+      const slotFlags = store.packSlotFlags(extracted.slotTypes);
+      await store.crystallizeProof(intentQuanta, patternQuanta, 1.0, slotFlags);
+      count++;
+      logger.debug(`[processCode] +pattern: "${intentPhrase}" → "${extracted.pattern}"`);
+    } catch (e: any) {
+      logger.error("[processCode] Failed to crystallize pattern:", e.message);
+    }
+  }
+
+  const summary = `Ingested ${count} code patterns.`;
+  respond(summary);
+  return summary;
 }
-
-export default Coder;

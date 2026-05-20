@@ -1,22 +1,161 @@
+import { createHash } from "node:crypto";
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import { metrics } from "@core_s/Metrics";
+import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
+import {
+  boostIntent,
+  decayIntent,
+  IntentTag,
+  spawnIntent as spawnIntentPrecept,
+} from "@utils/intentPrecept";
+import { extractTopic } from "@utils/topicExtraction";
 import nlp from "compromise";
 import { GridIndex4D } from "../structural/GridIndex4D";
-import type System from "./System";
-import { SlotType, SystemRef } from "./System";
+import { type CodePattern, Synthesizer } from "./Coder";
+import { InquiryQueue, type InquiryItem } from "./InquiryQueue";
+import type { SkillHandler } from "./skills";
+import type { Language } from "./language/Language";
+import type { WorkingMemory } from "./language/WorkingMemory";
+import {
+  MapperWorkspace,
+  MapperWorkspacePool,
+} from "./ResolverSlot";
+import { classifyOperatorToken, OperatorClass, SlotType, SystemRef } from "./System";
 
 /**
- * The Mapper is responsible for finding the shortest logical path (Geodesic)
- * through the Dual-Layer Manifold. It treats logical derivation as a
- * physical process of "falling" through a potential field defined by:
+ * Per-call inputs to perceive / perceiveCoherent / probe.
  *
- * 1. Matter Coordinates (posX): The semantic location of content.
- * 2. Kind Coordinates (posY): The structural category of the precept.
- * 3. Energy Coordinates (posZ): The logical potential/consequence depth.
- * 4. Age Coordinates (posW): The temporal context/loom.
+ * Threading these through the call instead of via instance fields is what
+ * makes the engine safe when CognitiveLoop, Learner, dream cycle and user
+ * input call the same Mapper concurrently. Callers that don't set them get
+ * the existing instance-level defaults.
+ */
+export interface PerceptionOptions {
+  /**
+   * Scopes from the caller's working memory. Tokens in the sequence whose
+   * scope appears here receive a warm-start energy bonus in the forward
+   * propagation pass (Phase 2).
+   */
+  contextScopes?: Set<number>;
+  /**
+   * When true, perceive skips Phase 0 (vault recall) and Phase 1
+   * (NLP-derived rules). Used by learnCycle/challenge to verify that the
+   * physics alone can reproduce the answer.
+   */
+  probeMode?: boolean;
+}
+
+/** Backward-compat alias. */
+export type ResolveOptions = PerceptionOptions;
+
+/**
+ * Result returned by perceiveCoherent: the best answer found, a coherence score,
+ * how many iterations it took, what actions the loop took, and why it stopped.
+ */
+export interface CoherentResult {
+  /** The best answer IDs found (empty if the wave never converged). */
+  ids: Uint32Array;
+  /**
+   * Coherence score in [0, 1]: amplitude (normalised sink strength) multiplied by
+   * contrast (how far ahead the winner is of the second-best candidate).
+   * Values >= COHERENCE_THRESHOLD are considered a found answer.
+   */
+  coherence: number;
+  /** Number of perceive passes executed. */
+  iterations: number;
+  /**
+   * Human-readable log of actions taken during the convergence loop:
+   * void expansions, conflict notes, reinforcement boosts.
+   */
+  learned: string[];
+  /**
+   * Why the loop stopped.
+   */
+  diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
+  /**
+   * Diagnostics from the iteration whose answer was chosen as the best.
+   */
+  diagnostics: PerceptionDiagnostics | null;
+}
+
+/**
+ * A token that sits at the intersection of the forward and backward resonance waves.
+ */
+export interface BridgeCandidate {
+  idx: number;
+  id: number;
+  label: string;
+  forwardEnergy: number;
+  backwardEnergy: number;
+  bridgeScore: number;
+  isMissingLink: boolean;
+}
+
+/** A token found by resonance-peak analysis to exhibit operator-like wave topology. */
+export interface DiscoveredOperator {
+  id: number;
+  idx: number;
+  label: string;
+  inferredClass: OperatorClass;
+  confidence: number;
+  outboundRatio: number;
+}
+
+export interface PerceptionDiagnostics {
+  N: number;
+  tokenLabels: string[];
+  operatorClasses: number[];
+  W: Float64Array;
+  accumulated: Float64Array;
+  sinkCandidates: Array<{
+    idx: number;
+    id: number;
+    label: string;
+    strength: number;
+    posX: number;
+    posY: number;
+    posZ: number;
+    posW: number;
+    opClass: number;
+  }>;
+  selectedTargetIdx: number;
+  maxNetEnergy: number;
+  discoveredOperators: DiscoveredOperator[];
+  bridgeCandidates: BridgeCandidate[];
+}
+
+/** Backward-compat alias - tests reference this type name. */
+export type ResolverDiagnostics = PerceptionDiagnostics;
+
+/**
+ * Capture returned by perceiveCapturing: race-free snapshot under the
+ * workspace lock.
+ */
+export interface PerceptionCapture {
+  ids: Uint32Array;
+  diagnostics: PerceptionDiagnostics | null;
+  sinkStrength: number;
+  discoveredOperators: DiscoveredOperator[];
+  bridgeCandidates: BridgeCandidate[];
+}
+
+/**
+ * The Mapper is THE thinker. It owns perception (resonance propagation
+ * through the manifold) AND locomotion (geodesic traversal). Thinking IS
+ * movement through the world; there is no separate deliberation step.
+ *
+ * Locomotion (was Mapper):
+ *  - `traverse` (was `route`) - gradient-descent geodesic through the 4D
+ *    potential field. `calculateGeodesic` is kept as an alias for back-compat.
+ *
+ * Perception (was Resolver):
+ *  - `perceive` (was `resolveSequence`) - full Phase 0..7 pipeline.
+ *  - `perceiveCapturing` - race-free diagnostics capture.
+ *  - `perceiveCoherent` - iterative coherence loop.
+ *  - `probe` - topology-only perception, no vault.
  */
 class Mapper implements Mapping.Engine {
   /** Shared reference cell, swap fires on ManifoldLifecycle failover. */
@@ -24,53 +163,232 @@ class Mapper implements Mapping.Engine {
   private get system(): Root.ManifoldView {
     return this.systemRef.current;
   }
+  /** The engine for transforming between text and quanta. */
+  private atomizer: Atomic.Engine;
+  /** Persistent storage for logical proofs. */
+  private store: Store | null = null;
   /** Optional GPU math engine for acceleration. */
   private gpu: TensorMath_GPU | null = null;
   /** Optional Fractal Unfolder for expanding logical voids. */
   private unfolder: Unfolder | null = null;
   /** WebGPU pipeline for geodesic calculations. */
   private geodesicPipeline: GPUComputePipeline | null = null;
-  /** 4D spatial index, rebuilt at the start of each route() attempt. */
+  /** 4D spatial index used by the locomotion gradient descent. */
   private readonly gridIndex = new GridIndex4D();
+  /** Synthesizer for collapsing logical paths into TypeScript code. */
+  private synthesizer: Synthesizer;
+  /** The language translation boundary. */
+  public language: Language | null = null;
+  /** Open-ended skill registry. */
+  private skills = new Map<number, SkillHandler>();
+  /** Last-elected skill ID for feedback loop. */
+  private lastSkillElected = 0;
+  /** Last-abstracted signature for feedback loop. */
+  public lastSignature: string | null = null;
+
+  // Perception state (was on Resolver)
+
+  /** Maximum capacity for the pre-allocated perception buffers. */
+  private static MAX_SEQUENCE_LENGTH = 1024;
+  /** Default workspace pool size. */
+  private static DEFAULT_POOL_SIZE = 8;
+  /** Per-call workspace pool. */
+  private readonly workspacePool: MapperWorkspacePool;
+  /** 4D spatial index reused across fuzzy-centroid lookups in perception. */
+  private readonly spatialIndex = new GridIndex4D();
+  private lastIndexedLength = -1;
+
+  /** Evidence accumulator for operator discovery. */
+  private operatorEvidence = new Map<
+    number,
+    { cls: OperatorClass; count: number }
+  >();
+
+  /** Sink strength of the most recent completed perceive call (race-prone). */
+  public lastSinkStrength = 0;
+  /** Full diagnostic snapshot from the most recent perceive call. */
+  public lastDiagnostics: PerceptionDiagnostics | null = null;
+  /** Operators discovered via resonance during the most recent perceive call. */
+  public lastDiscoveredOperators: DiscoveredOperator[] = [];
 
   /**
-   * Initializes the mapper with a reference to the dual-layer manifold.
+   * Set of scopes from working memory used as warm-start context for the
+   * forward pass. Deprecated in favour of `opts.contextScopes` for concurrent
+   * callers; kept for sequential back-compat.
+   */
+  public contextScopes: Set<number> = new Set();
+
+  /**
+   * Initializes the Mapper with a reference to the dual-layer manifold.
+   *
+   * @param system The logical manifold (or a SystemRef wrapping it).
+   * @param atomizer The quantum transformer (optional - if omitted, perception
+   *                 methods that need decoding will throw; callers that only
+   *                 need locomotion can pass null/undefined).
+   * @param store Optional persistent memory vault.
+   * @param gpu Optional GPU math engine.
+   * @param unfolder Optional Unfolder for void expansion.
    */
   constructor(
     system: Root.ManifoldView | SystemRef,
+    atomizer?: Atomic.Engine,
+    store: Store | null = null,
     gpu: TensorMath_GPU | null = null,
     unfolder: Unfolder | null = null
   ) {
     this.systemRef =
       system instanceof SystemRef ? system : new SystemRef(system);
+    // atomizer/store may be unset when the Mapper is used purely for
+    // locomotion. Cast through `any` here so the type stays non-null for
+    // perception code paths while still allowing the legacy single-arg form
+    // (Mapper(system)) used internally by older tests.
+    this.atomizer = atomizer as any;
+    this.store = store;
     this.gpu = gpu;
     this.unfolder = unfolder;
+    this.synthesizer = new Synthesizer();
+
+    this.workspacePool = new MapperWorkspacePool(
+      Mapper.DEFAULT_POOL_SIZE,
+      Mapper.MAX_SEQUENCE_LENGTH
+    );
+
+    // Initialize GPU offloading if configured.
+    if (DOPAT_CONFIG.USE_GPU && !this.gpu) {
+      TensorMath_GPU.getDevice()
+        .then(() => {
+          this.gpu = new TensorMath_GPU();
+        })
+        .catch(e => {
+          console.warn(
+            "GPU Acceleration failed to initialize, falling back to CPU:",
+            e.message
+          );
+        });
+    }
   }
 
-  /**
-   * Sets or updates the GPU engine used by the mapper.
-   */
+  // -------------------------------------------------------------------------
+  // GPU / Unfolder wiring
+  // -------------------------------------------------------------------------
+
   public setGPU(gpu: TensorMath_GPU | null): void {
     this.gpu = gpu;
     this.geodesicPipeline = null; // force re-creation with updated shader
   }
 
-  /**
-   * Sets or updates the Unfolder engine used by the mapper.
-   */
+  /** Backward-compat alias. */
+  public setGPUEnabled(enabled: boolean): void {
+    if (enabled) {
+      if (!this.gpu) {
+        TensorMath_GPU.getDevice().then(() => {
+          this.gpu = new TensorMath_GPU();
+        });
+      }
+    } else {
+      this.gpu = null;
+      this.geodesicPipeline = null;
+    }
+  }
+
   public setUnfolder(unfolder: Unfolder | null): void {
     this.unfolder = unfolder;
   }
 
+  public setLanguage(language: Language): void {
+    this.language = language;
+  }
+
   /**
-   * Calculates the optimal geodesic path through the logic manifold.
-   *
-   * @param sourceId Starting quantum ID.
-   * @param targetId Destination quantum ID.
-   * @param options Routing parameters.
-   * @returns A sequence of quantum IDs representing the logical derivation.
+   * Registers a skill handler for a specific capability precept.
    */
-  public async route(
+  public registerSkill(preceptId: number, handler: SkillHandler): void {
+    this.skills.set(preceptId, handler);
+  }
+
+  /**
+   * Elects the most appropriate skill for a given query sequence.
+   * Finds the capability precept with the strongest gravitational attraction
+   * to the query's manifold position.
+   */
+  public electSkill(ids: Uint32Array, intent?: string): number {
+    if (this.skills.size === 0) {
+      logger.log("[Mapper] No skills registered!");
+      return 0;
+    }
+    if (ids.length === 0) return 0;
+
+    // TODO: Implement potential field proximity calculation.
+    // For Phase 4, we use a simple heuristic: if any registered skill's
+    // precept ID is in the query or if we have a default.
+    // In the real implementation, this will use spatialIndex lookups.
+
+    // Phase 4: Intent-based routing
+    if (intent === "code") {
+      for (const id of this.skills.keys()) {
+        const label = this.atomizer.resolveScope(id);
+        if (label?.toLowerCase() === "skill:code") return id;
+      }
+    }
+    
+    if (intent === "assertion") {
+      for (const id of this.skills.keys()) {
+        const label = this.atomizer.resolveScope(id);
+        if (label?.toLowerCase() === "skill:assertion") return id;
+      }
+    }
+
+    // Default: SKILL:LANGUAGE
+    for (const id of this.skills.keys()) {
+      const label = this.atomizer.resolveScope(id);
+      if (label?.toLowerCase() === "skill:language") return id;
+    }
+
+    return this.skills.keys().next().value ?? 0;
+  }
+
+  /**
+   * Vault-hit reinforcement: boost atom masses and refresh concept ages on
+   * both input and output sides of a successful cache lookup.
+   */
+  public reinforceVaultHit(
+    inputIds: Uint32Array,
+    outputIds: Uint32Array
+  ): void {
+    this.boostAtomMasses(inputIds);
+    this.boostAtomMasses(outputIds);
+  }
+
+  private boostAtomMasses(ids: Uint32Array): void {
+    const BOOST = 1.02;
+    const CAP = this.system.c * 30;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (!this.system.isAllocated(id)) continue;
+      const m = this.system.mass[id];
+      if (m <= 0) continue;
+      this.system.mass[id] = Math.min(m * BOOST, CAP);
+      this.system.update(id);
+    }
+    this.system.refreshConceptAgeForIds(ids);
+  }
+
+  public async dispose(): Promise<void> {
+    if (this.gpu) {
+      await this.gpu.dispose();
+      this.gpu = null;
+    }
+  }
+
+  // =========================================================================
+  // LOCOMOTION (was Mapper.route + helpers)
+  // =========================================================================
+
+  /**
+   * Traverses the optimal geodesic path through the logic manifold.
+   * Replaces the legacy `route` name; both call sites are equivalent.
+   */
+  public async traverse(
     sourceId: number,
     targetId: number,
     options: Mapping.RouteOptions = {}
@@ -79,15 +397,12 @@ class Mapper implements Mapping.Engine {
     const boostScopes = options.boostScopes;
     const learningRate = options.learningRate ?? 0.05;
     const maxIterations = options.maxIterations ?? 100;
-    const verbose = options.verbose ?? false;
 
-    // 1. Initialize 4D Path State (Matter, Kind, Energy, Age).
-    const px = new Float64Array(steps + 1); // posX
-    const py = new Float64Array(steps + 1); // posY
-    const pe = new Float64Array(steps + 1); // posZ (Energy)
-    const pa = new Float64Array(steps + 1); // posW (Age)
+    const px = new Float64Array(steps + 1);
+    const py = new Float64Array(steps + 1);
+    const pe = new Float64Array(steps + 1);
+    const pa = new Float64Array(steps + 1);
 
-    // Linear interpolation for initial guess across the dual-layer coordinates.
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       px[i] =
@@ -113,7 +428,6 @@ class Mapper implements Mapping.Engine {
     }[] = [];
     let finalIds: Uint32Array | null = null;
 
-    // 2. Iterative Relaxation using Manifold Potential Field.
     for (let attempt = 0; attempt < 10; attempt++) {
       this.buildGridIndex();
       if (this.gpu) {
@@ -144,7 +458,6 @@ class Mapper implements Mapping.Engine {
         );
       }
 
-      // Check for logical voids and trigger the Unfolder.
       if (this.unfolder) {
         let voidDetected = false;
         for (let i = 0; i <= steps; i++) {
@@ -241,38 +554,51 @@ class Mapper implements Mapping.Engine {
         targetId
       );
 
-    // Constellation refactoring: reinforce atoms on the discovered path.
-    // Each traversal increases the mass of intermediate semantic atoms slightly,
-    // making them stronger gravitational attractors - tightening their orbital
-    // bonds with nearby atoms and naturally merging constellations that share
-    // frequently-used inference bridges.
     this.reinforcePath(result);
-
     return result;
+  }
+
+  /** Backward-compat alias for `traverse`. */
+  public route(
+    sourceId: number,
+    targetId: number,
+    options: Mapping.RouteOptions = {}
+  ): Promise<Uint32Array> {
+    return this.traverse(sourceId, targetId, options);
+  }
+
+  /**
+   * Calculates a Geodesic Path in 4D (X, Y, Entropy, Time) between two concepts.
+   * Kept as an alias for the previous Resolver.calculateGeodesic API.
+   */
+  public async calculateGeodesic(
+    startId: number,
+    endId: number,
+    steps: number = 32,
+    boostScopes?: Set<number>,
+    topic?: string,
+    preExpandLength: number = 0
+  ): Promise<Uint32Array> {
+    return this.traverse(startId, endId, {
+      steps,
+      boostScopes,
+      topic,
+      preExpandLength,
+    });
   }
 
   /**
    * Reinforces the inferential mass of atoms along a successfully computed path.
-   *
-   * Semantics: an atom that was chosen by the Mapper as part of the optimal
-   * logical path is demonstrably useful.  Raising its mass slightly makes it
-   * a stronger gravitational centre, pulling related atoms into its orbit and
-   * solidifying constellation structure over time.
-   *
-   * The 5% growth per traversal is bounded by MAX_REINFORCE_MASS (well below
-   * TRAP_MASS_THRESHOLD) so reinforcement never causes the Mapper to avoid
-   * its own previously-reinforced bridges.
    */
   private reinforcePath(path: Uint32Array): void {
     const sys = this.system;
     const REINFORCE_FACTOR = 1.05;
-    const MAX_REINFORCE_MASS = sys.c * 20; // capped well below TRAP_MASS_THRESHOLD
+    const MAX_REINFORCE_MASS = sys.c * 20;
 
     for (let i = 1; i < path.length - 1; i++) {
-      // skip source and target
       const id = path[i];
       if (!sys.isAllocated(id)) continue;
-      if (sys.operatorClass[id] !== 0) continue; // semantic atoms only
+      if (sys.operatorClass[id] !== 0) continue;
       const m = sys.mass[id];
       if (m <= 0) continue;
       sys.mass[id] = Math.min(m * REINFORCE_FACTOR, MAX_REINFORCE_MASS);
@@ -280,9 +606,6 @@ class Mapper implements Mapping.Engine {
     }
   }
 
-  /**
-   * Performs gradient descent on the logic density field using GPU acceleration.
-   */
   private async relaxPathGPU(
     px: Float64Array,
     py: Float64Array,
@@ -301,13 +624,9 @@ class Mapper implements Mapping.Engine {
     const sysInfluence = new Float32Array(sysLength);
     const sysSlotType = new Uint32Array(sysLength);
     for (let j = 0; j < sysLength; j++) {
-      // Influence is derived from Matter Density and Energy Intensity
-      // Syntactic Markov Chain Baseline: +5.0 to ensure operands are visible
       let influence =
         this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
       if (boostScopes?.has(this.system.scope[j])) {
-        // Moderate additive boost: makes topic keywords ~10x the baseline (50/5),
-        // not ~556x (c^2*10/5). A massive boost collapses the path to a point attractor.
         influence += 50.0;
       }
       sysInfluence[j] = influence;
@@ -389,7 +708,7 @@ class Mapper implements Mapping.Engine {
 
     const bParams = createB(
       params,
-      64, // expanded: added bodySlotAttr + condSlotAttr floats
+      64,
       GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     );
     const bReadPath = createB(
@@ -440,9 +759,6 @@ class Mapper implements Mapping.Engine {
     ].forEach(b => b.destroy());
   }
 
-  /**
-   * Initializes the GPU compute pipeline for 4D geodesic calculations.
-   */
   private async initGPUPipeline(): Promise<void> {
     const device = await TensorMath_GPU.getDevice();
     const geodesicShader = device.createShaderModule({
@@ -456,8 +772,8 @@ class Mapper implements Mapping.Engine {
         @group(0) @binding(4) var<uniform> params: Params;
         @group(0) @binding(5) var<storage, read> sysSlotType: array<u32>;
 
-        const SLOT_BODY: u32      = 2u;  // SlotType.Body      = 1 << 1
-        const SLOT_CONDITION: u32 = 4u;  // SlotType.Condition = 1 << 2
+        const SLOT_BODY: u32      = 2u;
+        const SLOT_CONDITION: u32 = 4u;
 
         struct GradResult { V: f32, gx: f32, gy: f32, gz: f32, gw: f32 };
 
@@ -507,9 +823,8 @@ class Mapper implements Mapping.Engine {
                     let displacement = params.lr * (spring * 2.0 - grad);
 
                     var next = curr + displacement;
-                    // Semi-implicit integration: apply soft constraints to maintain flow without hard clipping
                     let ageDiff = next.w - pathData[i-1u].w;
-                    if (ageDiff < 0.0) { next.w = next.w - ageDiff * 0.9; } // Soft asymmetric rebound
+                    if (ageDiff < 0.0) { next.w = next.w - ageDiff * 0.9; }
                     pathData[i] = next;
                 }
                 storageBarrier();
@@ -523,10 +838,6 @@ class Mapper implements Mapping.Engine {
     });
   }
 
-  /**
-   * Rebuilds the 4D spatial index from the current system state.
-   * O(N) rebuild is amortised across O(maxIters × steps) gradient queries.
-   */
   private buildGridIndex(): void {
     this.gridIndex.clear();
     const n = this.system.length;
@@ -541,10 +852,6 @@ class Mapper implements Mapping.Engine {
     }
   }
 
-  /**
-   * Performs gradient descent using the analytic gradient of the potential field.
-   * One pass per path point per iteration versus the previous 4-call finite-difference block.
-   */
   private relaxPath(
     px: Float64Array,
     py: Float64Array,
@@ -576,12 +883,11 @@ class Mapper implements Mapping.Engine {
         py[i] += lr * (sy * 2.0 - gy);
         pe[i] += lr * (se * 2.0 - gz);
 
-        // Soft Asymmetric Monotonic Age Traversal (Semi-implicit constraint)
         const da_move = lr * (sa * 2.0 - gw);
         pa[i] += da_move;
 
         const ageDiff = pa[i] - pa[i - 1];
-        if (ageDiff < 0) pa[i] -= ageDiff * 0.9; // Soft rebound
+        if (ageDiff < 0) pa[i] -= ageDiff * 0.9;
         if (i < steps) {
           const nextAgeDiff = pa[i + 1] - pa[i];
           if (nextAgeDiff < 0) pa[i] += nextAgeDiff * 0.9;
@@ -590,14 +896,6 @@ class Mapper implements Mapping.Engine {
     }
   }
 
-  /**
-   * Computes the manifold potential and its analytic gradient at a point in one pass.
-   * Replaces the 4-evaluation finite-difference block; combined with the spatial index
-   * (3a) the per-call cost drops from O(N) × 4 to O(candidates_in_radius) × 1.
-   *
-   * Gradient derivation: V = 1 − Σ infl_j · exp(−d²/F) + Σ pen_k · exp(−d²_k/F_k)
-   *   ∂V/∂px = Σ infl_j · exp(−d²/F) · 2(px−xj)/F  −  Σ pen_k · exp(−d²_k/F_k) · 2(px−xk)/F_k
-   */
   private getGradient(
     px: number,
     py: number,
@@ -671,18 +969,6 @@ class Mapper implements Mapping.Engine {
     return [Math.max(0.01, V), gx, gy, gz, gw];
   }
 
-  private getPotential(
-    x: number,
-    y: number,
-    z: number,
-    w: number,
-    pens: any[],
-    boost: Set<number> | undefined
-  ): number {
-    const [V] = this.getGradient(x, y, z, w, pens, boost);
-    return V;
-  }
-
   private getPotentialAndNearest(
     x: number,
     y: number,
@@ -692,8 +978,6 @@ class Mapper implements Mapping.Engine {
     boost: Set<number> | undefined
   ): { potential: number; nearestId: number } {
     const phys = DOPAT_CONFIG.PHYSICS;
-    // Use a large radius so the void-expansion unfolder can find a nearby anchor
-    // even when the path is wandering outside the normal influence zone.
     const nearRadius = Math.sqrt(phys.INFLUENCE_RADIUS) * 4;
     const nearestId = this.gridIndex.nearest(
       x,
@@ -715,8 +999,6 @@ class Mapper implements Mapping.Engine {
     steps: number
   ): Mapping.ReviewReport {
     const phys = DOPAT_CONFIG.PHYSICS;
-    // Traps are only relevant within TRAP_DISTANCE_THRESHOLD (squared).
-    // Using sqrt as radius guarantees we find any trap-eligible node.
     const trapRadius = Math.sqrt(phys.TRAP_DISTANCE_THRESHOLD);
     for (let i = 1; i < steps; i++) {
       const nearestId = this.gridIndex.nearest(
@@ -761,31 +1043,23 @@ class Mapper implements Mapping.Engine {
       let bestId = -1,
         minDiff = Infinity;
 
-      // When an expansion was performed, only the freshly-added atoms
-      // (index >= preExpandLength) and the explicit targetId are candidates.
-      // Skipping old atoms turns the inner loop from O(N_total) to
-      // O(N_expanded + 1) without changing correctness.
       const loopStart = preExpandLength > 0 ? preExpandLength : 0;
 
-      // Cost evaluation kernel - shared between main loop and targetId probe.
       const evalJ = (j: number): void => {
         const dx = this.system.posX[j] - px[i],
           dy = this.system.posY[j] - py[i],
           dz = this.system.posZ[j] - pe[i],
           dw = this.system.posW[j] - pa[i];
         const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-        let totalDiff = distSq + dw * dw * 1000000.0; // temporal snapping penalty
+        let totalDiff = distSq + dw * dw * 1000000.0;
 
         const layerJ = Math.floor(
           this.system.posZ[j] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
         );
 
-        // Monotonic Grammatical Filter:
-        // Ensure grammatical continuity per fact layer. We track the furthest we've read
-        // in each fact (posZ layer) and heavily penalize reading backward.
         const maxPosY = maxPosYByLayer.get(layerJ) ?? -Infinity;
         if (this.system.posY[j] < maxPosY) {
-          totalDiff += 1000000.0; // extreme penalty for backwards syntax
+          totalDiff += 1000000.0;
         }
 
         if (totalDiff < minDiff) {
@@ -807,8 +1081,6 @@ class Mapper implements Mapping.Engine {
         evalJ(j);
       }
 
-      // Always evaluate targetId even when it falls below preExpandLength -
-      // it is the explicit geodesic endpoint and must remain reachable.
       if (targetId >= 0 && targetId < loopStart) {
         evalJ(targetId);
       }
@@ -816,11 +1088,6 @@ class Mapper implements Mapping.Engine {
         bestId !== -1 &&
         (resultIds.length === 0 || resultIds[resultIds.length - 1] !== bestId)
       ) {
-        /** Continuous Path Reconstruction:
-         *  If the sampled points jump across multiple words within the SAME grammatical trench (posZ layer),
-         *  it means the continuous physical path rolled over the intermediate words. We must fill them in
-         *  to fully reconstruct the bridging syntax.
-         */
         const layerBest = Math.floor(
           this.system.posZ[bestId] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
         );
@@ -832,8 +1099,6 @@ class Mapper implements Mapping.Engine {
           );
 
           if (layerLast === layerBest && bestId > lastId) {
-            // only fill in the gap if it's reasonably small (e.g. < 5 tokens).
-            // ff it's a huge jump, it means the path left the trench and returned later.
             if (bestId - lastId < DOPAT_CONFIG.mapper.PATH_GAP_FILL_MAX) {
               for (let fillId = lastId + 1; fillId < bestId; fillId++) {
                 resultIds.push(fillId);
@@ -844,7 +1109,6 @@ class Mapper implements Mapping.Engine {
 
         resultIds.push(bestId);
 
-        // Update the max grammatical position read for this fact layer
         const currentMax = maxPosYByLayer.get(layerBest) ?? -Infinity;
         if (this.system.posY[bestId] > currentMax) {
           maxPosYByLayer.set(layerBest, this.system.posY[bestId]);
@@ -853,6 +1117,2092 @@ class Mapper implements Mapping.Engine {
     }
     return new Uint32Array(resultIds);
   }
+
+  // =========================================================================
+  // PERCEPTION (was Resolver.resolveSequence + helpers)
+  // =========================================================================
+
+  /** Probe mode: run physics only, skip vault and NLP rules. */
+  public async probe(
+    sequenceIds: Uint32Array,
+    opts: PerceptionOptions = {}
+  ): Promise<Uint32Array> {
+    return this.perceive(sequenceIds, { ...opts, probeMode: true });
+  }
+
+  /** Backward-compat alias. */
+  public probeSequence(
+    sequenceIds: Uint32Array,
+    opts: PerceptionOptions = {}
+  ): Promise<Uint32Array> {
+    return this.probe(sequenceIds, opts);
+  }
+
+  /** Full Phase 0..7 perception pipeline. */
+  public async perceive(
+    sequenceIds: Uint32Array,
+    opts: PerceptionOptions = {}
+  ): Promise<Uint32Array> {
+    return (await this._perceiveCapturing(sequenceIds, opts)).ids;
+  }
+
+  /** Backward-compat alias. */
+  public resolveSequence(
+    sequenceIds: Uint32Array,
+    opts: PerceptionOptions = {}
+  ): Promise<Uint32Array> {
+    return this.perceive(sequenceIds, opts);
+  }
+
+  /** Race-free diagnostics capture. */
+  public async perceiveCapturing(
+    sequenceIds: Uint32Array,
+    opts: PerceptionOptions = {}
+  ): Promise<PerceptionCapture> {
+    return this._perceiveCapturing(sequenceIds, opts);
+  }
+
+  /** Backward-compat alias. */
+  public resolveSequenceCaptured(
+    sequenceIds: Uint32Array,
+    opts: PerceptionOptions = {}
+  ): Promise<PerceptionCapture> {
+    return this.perceiveCapturing(sequenceIds, opts);
+  }
+
+  private async _perceiveCapturing(
+    sequenceIds: Uint32Array,
+    opts: PerceptionOptions
+  ): Promise<PerceptionCapture> {
+    const N = sequenceIds.length;
+    if (N === 0) {
+      return {
+        ids: new Uint32Array(0),
+        diagnostics: null,
+        sinkStrength: 0,
+        discoveredOperators: [],
+        bridgeCandidates: [],
+      };
+    }
+
+    if (N > Mapper.MAX_SEQUENCE_LENGTH) {
+      throw new Error(
+        `Sequence length ${N} exceeds max DOD buffer capacity ${Mapper.MAX_SEQUENCE_LENGTH}`
+      );
+    }
+
+    const slot = await this.workspacePool.acquire();
+    slot.contextScopes = opts.contextScopes ?? this.contextScopes;
+    slot.probeMode = opts.probeMode ?? false;
+    try {
+      const ids = await this._perceiveWithSlot(sequenceIds, slot);
+      const capture: PerceptionCapture = {
+        ids,
+        diagnostics: slot.diagnostics,
+        sinkStrength: slot.sinkStrength,
+        discoveredOperators: slot.discoveredOperators,
+        bridgeCandidates: slot.bridgeCandidates,
+      };
+      this.lastSinkStrength = capture.sinkStrength;
+      this.lastDiagnostics = capture.diagnostics;
+      this.lastDiscoveredOperators = capture.discoveredOperators;
+      return capture;
+    } finally {
+      this.workspacePool.release(slot);
+    }
+  }
+
+  private async _perceiveWithSlot(
+    sequenceIds: Uint32Array,
+    slot: MapperWorkspace
+  ): Promise<Uint32Array> {
+    const N = sequenceIds.length;
+    slot.sinkStrength = 0;
+    slot.diagnostics = null;
+
+    const lastId = sequenceIds[N - 1];
+    const lastClass = this.system.operatorClass[lastId];
+
+    let queryOpId = lastId;
+    let queryOpClass = lastClass;
+    let subjectIds = sequenceIds.slice(0, N - 1);
+
+    if (lastClass === OperatorClass.Sink && N >= 3) {
+      const prevId = sequenceIds[N - 2];
+      const prevClass = this.system.operatorClass[prevId];
+      if (prevClass === OperatorClass.IdentityShift) {
+        queryOpId = prevId;
+        queryOpClass = prevClass;
+        subjectIds = sequenceIds.slice(0, N - 2);
+      }
+    }
+
+    // Phase 0b: vault check first (crystallised knowledge, fast path + vault.hit accounting).
+    // Must run before the topology walk so that previously-answered queries get a vault hit
+    // rather than re-deriving via PartLayer every time (matches old Listener Phase 0 behaviour).
+    const derivation = slot.probeMode
+      ? null
+      : await this.resolveSemanticDerivation(sequenceIds);
+    if (derivation) return derivation;
+
+    // Phase 0: topology walk (raw manifold inference from PartLayer chains).
+    if (queryOpClass === OperatorClass.IdentityShift && subjectIds.length > 0) {
+      const result = this.resolveMultiTokenSemanticLookup(
+        subjectIds,
+        queryOpId
+      );
+
+      logger.debug(
+        `[DEBUG MAPPER] Phase 0 matched IDs: ${result.join(",")}, words: ${this.atomizer.decodeSequence(result, this.system)}`
+      );
+
+      if (result.length > 0) {
+        if (!slot.probeMode && this.store) {
+          await this.store.crystallizeProof(sequenceIds, result, 1.0);
+          this.boostAtomMasses(sequenceIds);
+          this.boostAtomMasses(result);
+        }
+        return result;
+      }
+    }
+
+    const energyVibration = slot.T_buffer.subarray(0, N);
+    energyVibration.fill(0);
+    if (N > 0) energyVibration[0] = 1.0;
+
+    if (slot.contextScopes.size > 0) {
+      const CONTEXT_WEIGHT = 0.35;
+      for (let i = 1; i < N; i++) {
+        if (slot.contextScopes.has(this.system.scope[sequenceIds[i]])) {
+          energyVibration[i] = Math.max(energyVibration[i], CONTEXT_WEIGHT);
+        }
+      }
+    }
+
+    const ageWeight = DOPAT_CONFIG.resolver.AGE_ENERGY_WEIGHT;
+    const sysAge = this.system.systemAge;
+    for (let i = 0; i < N; i++) {
+      const id = sequenceIds[i];
+      let freshness: number;
+      if (this.system.decayRate[id] === 0) {
+        freshness = 1.0;
+      } else {
+        const staleness = Math.max(0, sysAge - this.system.posW[id]);
+        freshness = Math.exp(-DOPAT_CONFIG.PHYSICS.AGE_DECAY_RATE * staleness);
+      }
+      if (freshness > 0.01) {
+        energyVibration[i] = Math.min(
+          1.0,
+          energyVibration[i] + freshness * ageWeight
+        );
+      }
+    }
+
+    const transferMatrix = slot.W_buffer.subarray(0, N * N);
+    transferMatrix.fill(0);
+
+    let sinkNodeIdx = -1;
+
+    for (let i = 0; i < N; i++) {
+      const id = sequenceIds[i];
+      const scope = this.system.scope[id];
+      const opClass = this.system.operatorClass[id];
+
+      if (opClass === OperatorClass.Sink) sinkNodeIdx = i;
+
+      for (let j = 0; j < N; j++) {
+        if (
+          i !== j &&
+          this.system.scope[sequenceIds[j]] === scope &&
+          scope !== 0
+        ) {
+          transferMatrix[i * N + j] = Math.max(
+            transferMatrix[i * N + j],
+            DOPAT_CONFIG.resolver.W_CONSTRUCTIVE
+          );
+        }
+      }
+
+      if (i > 0 && i < N - 1) {
+        if (
+          opClass === OperatorClass.IdentityShift ||
+          opClass === OperatorClass.Quantifier
+        ) {
+          const massRatio = Math.abs(this.system.mass[id]) / this.system.c ** 2;
+          const lensStrength = massRatio * DOPAT_CONFIG.resolver.W_LENSING;
+          transferMatrix[(i - 1) * N + (i + 1)] = lensStrength;
+        } else if (opClass === OperatorClass.Inversion) {
+          transferMatrix[i * N + (i + 1)] = DOPAT_CONFIG.resolver.W_DESTRUCTIVE;
+        }
+      }
+    }
+    for (let i = 0; i < N - 1; i++) {
+      if (this.system.operatorClass[sequenceIds[i]] !== OperatorClass.Inversion)
+        continue;
+      if (this.system.operatorClass[sequenceIds[i + 1]] !== OperatorClass.None)
+        continue;
+      const negatedScope = this.system.scope[sequenceIds[i + 1]];
+      for (let j = 1; j < N - 1; j++) {
+        if (
+          this.system.operatorClass[sequenceIds[j]] ===
+            OperatorClass.IdentityShift &&
+          j + 1 < N - 1
+        ) {
+          if (this.system.scope[sequenceIds[j + 1]] === negatedScope) {
+            const bPos = j + 1;
+            const aPos = j - 1;
+            const backVal = -DOPAT_CONFIG.resolver.W_LENSING;
+            if (transferMatrix[bPos * N + aPos] > backVal) {
+              transferMatrix[bPos * N + aPos] = backVal;
+            }
+          }
+        }
+      }
+    }
+
+    const constructiveFloor = DOPAT_CONFIG.resolver.W_CONSTRUCTIVE / (N + 1);
+    for (let i = 0; i < N; i++) {
+      let rowSum = 0;
+      for (let j = 0; j < N; j++) {
+        rowSum += Math.abs(transferMatrix[i * N + j]);
+      }
+      if (rowSum > 0) {
+        for (let j = 0; j < N; j++) {
+          transferMatrix[i * N + j] /= rowSum;
+        }
+      }
+      const scope_i = this.system.scope[sequenceIds[i]];
+      if (scope_i !== 0) {
+        for (let j = 0; j < N; j++) {
+          if (i !== j && this.system.scope[sequenceIds[j]] === scope_i) {
+            if (
+              transferMatrix[i * N + j] > 0 &&
+              transferMatrix[i * N + j] < constructiveFloor
+            ) {
+              transferMatrix[i * N + j] = constructiveFloor;
+            }
+          }
+        }
+      }
+    }
+
+    const accumulatedResonance = slot.E_total_buffer.subarray(0, N * N);
+    const currentResonance = slot.E_curr_buffer.subarray(0, N * N);
+    accumulatedResonance.set(transferMatrix);
+    currentResonance.set(transferMatrix);
+
+    const logicalConductivity = DOPAT_CONFIG.resolver.PROPAGATION_ALPHA;
+
+    if (this.gpu && N > 16) {
+      for (
+        let step = 1;
+        step < DOPAT_CONFIG.resolver.PROPAGATION_ITERS;
+        step++
+      ) {
+        const nextResonanceRes = await this.gpu.matMulF64(
+          currentResonance,
+          transferMatrix,
+          N,
+          N,
+          N
+        );
+        const dampenedResonance = await this.gpu.mulScalarF64(
+          nextResonanceRes,
+          logicalConductivity
+        );
+        const totalResonanceRes = await this.gpu.addF64(
+          accumulatedResonance,
+          dampenedResonance
+        );
+        accumulatedResonance.set(totalResonanceRes);
+        currentResonance.set(dampenedResonance);
+      }
+    } else {
+      for (
+        let step = 1;
+        step < DOPAT_CONFIG.resolver.PROPAGATION_ITERS;
+        step++
+      ) {
+        const nextResonance = slot.E_new_buffer.subarray(0, N * N);
+        nextResonance.fill(0);
+        for (let i = 0; i < N; i++) {
+          for (let j = 0; j < N; j++) {
+            let sum = 0;
+            for (let k = 0; k < N; k++) {
+              sum += currentResonance[i * N + k] * transferMatrix[k * N + j];
+            }
+            const dampened = sum * logicalConductivity;
+            nextResonance[i * N + j] = dampened;
+            accumulatedResonance[i * N + j] += dampened;
+          }
+        }
+        currentResonance.set(nextResonance);
+      }
+    }
+
+    slot.discoveredOperators = this.discoverOperatorsByResonance(
+      sequenceIds,
+      N,
+      accumulatedResonance
+    );
+
+    const T_back = slot.T_back_buffer.subarray(0, N);
+    const T_back_nx = slot.T_back_next_buffer.subarray(0, N);
+    const backwardEnergy = slot.backwardEnergyBuffer.subarray(0, N);
+    T_back.fill(0);
+    T_back_nx.fill(0);
+    backwardEnergy.fill(0);
+
+    if (sinkNodeIdx !== -1) {
+      T_back[sinkNodeIdx] = 1.0;
+      backwardEnergy[sinkNodeIdx] = 1.0;
+
+      for (
+        let step = 0;
+        step < DOPAT_CONFIG.resolver.PROPAGATION_ITERS;
+        step++
+      ) {
+        T_back_nx.fill(0);
+        for (let i = 0; i < N; i++) {
+          let sum = 0;
+          for (let j = 0; j < N; j++) {
+            sum += transferMatrix[j * N + i] * T_back[j];
+          }
+          T_back_nx[i] = sum * logicalConductivity;
+          backwardEnergy[i] += T_back_nx[i];
+        }
+        T_back.set(T_back_nx);
+      }
+    }
+
+    const bridgeCandidates: BridgeCandidate[] = [];
+    const FWD_THRESHOLD = 0.05;
+    const BACK_THRESHOLD = 0.05;
+
+    for (let i = 0; i < N; i++) {
+      if (this.system.operatorClass[sequenceIds[i]] !== OperatorClass.None)
+        continue;
+
+      let fwd = 0;
+      for (let j = 0; j < N; j++) {
+        if (j !== i) fwd += accumulatedResonance[j * N + i];
+      }
+      const bwd = backwardEnergy[i];
+      const bridgeScore = fwd * bwd;
+      const isMissingLink = bwd > BACK_THRESHOLD && fwd < FWD_THRESHOLD;
+
+      if (bridgeScore > 0 || isMissingLink) {
+        bridgeCandidates.push({
+          idx: i,
+          id: sequenceIds[i],
+          label: this.atomizer
+            .decodeSequence(new Uint32Array([sequenceIds[i]]), this.system)
+            .trim(),
+          forwardEnergy: fwd,
+          backwardEnergy: bwd,
+          bridgeScore,
+          isMissingLink,
+        });
+      }
+    }
+    bridgeCandidates.sort((a, b) => b.bridgeScore - a.bridgeScore);
+
+    if (sinkNodeIdx === -1) return sequenceIds;
+
+    let targetNodeIdx = -1;
+    let maxNetEnergy = -Infinity;
+    const allSinkCandidates: PerceptionDiagnostics["sinkCandidates"] = [];
+
+    for (let j = 0; j < N; j++) {
+      if (this.system.operatorClass[sequenceIds[j]] === OperatorClass.None) {
+        let incomingEnergy = 0;
+        let outboundEnergy = 0;
+        for (let i = 0; i < N; i++) {
+          if (i !== j) {
+            incomingEnergy += accumulatedResonance[i * N + j];
+            outboundEnergy += accumulatedResonance[j * N + i];
+          }
+        }
+
+        const sinkStrength = incomingEnergy / (1.0 + outboundEnergy);
+        if (sinkStrength > maxNetEnergy) {
+          maxNetEnergy = sinkStrength;
+          targetNodeIdx = j;
+        }
+        const id = sequenceIds[j];
+        allSinkCandidates.push({
+          idx: j,
+          id,
+          strength: sinkStrength,
+          label: this.atomizer
+            .decodeSequence(new Uint32Array([id]), this.system)
+            .trim(),
+          posX: this.system.posX[id],
+          posY: this.system.posY[id],
+          posZ: this.system.posZ[id],
+          posW: this.system.posW[id],
+          opClass: this.system.operatorClass[id],
+        });
+      }
+    }
+
+    slot.sinkStrength = Math.max(0, maxNetEnergy);
+    slot.bridgeCandidates = bridgeCandidates;
+    slot.diagnostics = {
+      N,
+      tokenLabels: Array.from(sequenceIds).map(id =>
+        this.atomizer.decodeSequence(new Uint32Array([id]), this.system).trim()
+      ),
+      operatorClasses: Array.from(sequenceIds).map(
+        id => this.system.operatorClass[id]
+      ),
+      W: new Float64Array(transferMatrix),
+      accumulated: new Float64Array(accumulatedResonance),
+      sinkCandidates: allSinkCandidates
+        .sort((a, b) => b.strength - a.strength)
+        .slice(0, 5),
+      selectedTargetIdx: targetNodeIdx,
+      maxNetEnergy,
+      discoveredOperators: slot.discoveredOperators,
+      bridgeCandidates,
+    };
+
+    {
+      const directlyNegatedScopes = new Set<number>();
+      let inversionTokenId = -1;
+      for (let i = 0; i < N - 1; i++) {
+        if (
+          this.system.operatorClass[sequenceIds[i]] ===
+            OperatorClass.Inversion &&
+          this.system.operatorClass[sequenceIds[i + 1]] === OperatorClass.None
+        ) {
+          directlyNegatedScopes.add(this.system.scope[sequenceIds[i + 1]]);
+          if (inversionTokenId === -1) inversionTokenId = sequenceIds[i];
+        }
+      }
+      if (inversionTokenId !== -1 && directlyNegatedScopes.size > 0) {
+        let minStrength = -1e-9;
+        let negatedConclusionId = -1;
+        for (const c of allSinkCandidates) {
+          const isDirectlyNegated = directlyNegatedScopes.has(
+            this.system.scope[c.id]
+          );
+          if (!isDirectlyNegated && c.strength < minStrength) {
+            minStrength = c.strength;
+            negatedConclusionId = c.id;
+          }
+        }
+        if (negatedConclusionId !== -1) {
+          slot.sinkStrength = Math.abs(minStrength);
+          return new Uint32Array([inversionTokenId, negatedConclusionId]);
+        }
+      }
+    }
+
+    if (maxNetEnergy <= 0) {
+      const lastIdInSequence = sequenceIds[N - 1];
+      const isSink =
+        this.system.operatorClass[lastIdInSequence] === OperatorClass.Sink;
+      if (isSink) {
+        return this.resolveCodeSynthesis(sequenceIds);
+      }
+
+      return this.atomizer.ingestSequence("unknown", this.system);
+    }
+
+    let sourceNodeIdx = -1;
+    let directScopesCount = 0;
+    const directScopes = slot.directScopesBuffer.subarray(0, N);
+
+    for (let k = 0; k < N; k++) {
+      if (transferMatrix[k * N + targetNodeIdx] > 0) {
+        directScopes[directScopesCount++] = this.system.scope[sequenceIds[k]];
+      }
+    }
+
+    const hasDirectScope = (scope: number) => {
+      for (let i = 0; i < directScopesCount; i++) {
+        if (directScopes[i] === scope) return true;
+      }
+      return false;
+    };
+
+    for (let i = 0; i < N; i++) {
+      if (
+        i !== targetNodeIdx &&
+        this.system.operatorClass[sequenceIds[i]] === OperatorClass.None
+      ) {
+        if (
+          accumulatedResonance[i * N + targetNodeIdx] > 0 &&
+          transferMatrix[i * N + targetNodeIdx] === 0
+        ) {
+          if (!hasDirectScope(this.system.scope[sequenceIds[i]])) {
+            sourceNodeIdx = i;
+            break;
+          }
+        }
+      }
+    }
+
+    let resultCount = 0;
+    const resultIds = slot.resultIdsBuffer.subarray(0, N);
+
+    const pushWithModifiers = (index: number) => {
+      if (index > 0) {
+        const leftId = sequenceIds[index - 1];
+        if (this.system.operatorClass[leftId] === OperatorClass.Modifier) {
+          resultIds[resultCount++] = leftId;
+        }
+      }
+      const id = sequenceIds[index];
+      if (this.system.operatorClass[id] !== OperatorClass.Sink) {
+        resultIds[resultCount++] = id;
+      }
+    };
+
+    if (sourceNodeIdx !== -1) {
+      const originalOp = this.findDominantOperator(sequenceIds, sourceNodeIdx);
+      pushWithModifiers(sourceNodeIdx);
+      if (
+        originalOp !== -1 &&
+        this.system.operatorClass[originalOp] !== OperatorClass.Sink
+      ) {
+        resultIds[resultCount++] = originalOp;
+      }
+      pushWithModifiers(targetNodeIdx);
+    } else {
+      pushWithModifiers(targetNodeIdx);
+    }
+
+    const T_next = slot.T_next_buffer.subarray(0, N);
+    for (let tick = 0; tick < N; tick++) {
+      T_next.set(energyVibration);
+      for (let i = 0; i < N; i++) {
+        for (let j = 0; j < N; j++) {
+          const flow = transferMatrix[i * N + j];
+          if (flow > 0) {
+            T_next[j] += energyVibration[i] * flow;
+          }
+        }
+      }
+      energyVibration.set(T_next);
+    }
+
+    const finalPath = new Uint32Array(resultIds.subarray(0, resultCount));
+
+    return finalPath;
+  }
+
+  private async resolveCodeSynthesis(
+    sequenceIds: Uint32Array
+  ): Promise<Uint32Array> {
+    if (!this.store)
+      return this.atomizer.ingestSequence("unknown", this.system);
+
+    const lastId = sequenceIds[sequenceIds.length - 1];
+    const isSink = this.system.operatorClass[lastId] === OperatorClass.Sink;
+    const lookupIds = isSink ? sequenceIds.slice(0, -1) : sequenceIds;
+
+    const direct = await this.store.checkInterferencePattern(lookupIds);
+    if (direct && direct.ids.length > 0) {
+      const template = this.atomizer.decodeSequence(direct.ids, this.system);
+      const contextTokens = Array.from(sequenceIds)
+        .filter(id => {
+          const cls = this.system.operatorClass[id];
+          return cls === OperatorClass.None || cls === OperatorClass.Action || cls === OperatorClass.Arithmetic;
+        })
+        .map(id =>
+          this.atomizer
+            .decodeSequence(new Uint32Array([id]), this.system)
+            .trim()
+        )
+        .filter(t => t.length > 0);
+      const varBindings = this.synthesizer.buildBindings(
+        contextTokens,
+        direct.slotFlags
+      );
+      const instantiated = this.synthesizer.instantiate(template, varBindings);
+      if (instantiated && instantiated !== "unknown") {
+        return this.atomizer.ingestSequence(instantiated, this.system);
+      }
+    }
+
+    const attractors: { id: number; posZ: number }[] = [];
+    for (let i = 0; i < this.system.length; i++) {
+      if (!this.system.isAllocated(i)) continue;
+      if (this.system.slotType[i] & (SlotType.Body | SlotType.Condition)) {
+        attractors.push({ id: i, posZ: this.system.posZ[i] });
+      }
+    }
+    attractors.sort((a, b) => b.posZ - a.posZ);
+
+    const patterns: CodePattern[] = [];
+    for (const { id } of attractors.slice(0, 6)) {
+      const attrSeq = new Uint32Array([id]);
+      const result = await this.store.checkInterferencePattern(attrSeq);
+      if (result && result.ids.length > 0) {
+        patterns.push({
+          template: this.atomizer.decodeSequence(result.ids, this.system),
+          slotFlags: result.slotFlags,
+        });
+      }
+    }
+
+    if (patterns.length > 0) {
+      const composed = this.synthesizer.compose(patterns);
+      const contextTokens = Array.from(sequenceIds)
+        .map(id =>
+          this.atomizer
+            .decodeSequence(new Uint32Array([id]), this.system)
+            .trim()
+        )
+        .filter(t => t.length > 0);
+      const varBindings = this.synthesizer.buildBindings(
+        contextTokens,
+        patterns[0].slotFlags
+      );
+      const instantiated = this.synthesizer.instantiate(composed, varBindings);
+      if (instantiated && instantiated !== "unknown") {
+        return this.atomizer.ingestSequence(instantiated, this.system);
+      }
+    }
+
+    return this.atomizer.ingestSequence("unknown", this.system);
+  }
+
+  private discoverOperatorsByResonance(
+    sequenceIds: Uint32Array,
+    N: number,
+    accumulated: Float64Array
+  ): DiscoveredOperator[] {
+    const cfg = DOPAT_CONFIG.resolver;
+    const eps = this.system.epsilon;
+    const discovered: DiscoveredOperator[] = [];
+
+    for (let i = 0; i < N; i++) {
+      const id = sequenceIds[i];
+      if (this.system.operatorClass[id] !== OperatorClass.None) continue;
+
+      let outbound = 0;
+      let incoming = 0;
+      for (let j = 0; j < N; j++) {
+        if (j === i) continue;
+        outbound += Math.abs(accumulated[i * N + j]);
+        incoming += Math.abs(accumulated[j * N + i]);
+      }
+
+      const totalFlow = outbound + incoming;
+      if (totalFlow < cfg.OPERATOR_DISCOVERY_MIN_FLOW) continue;
+
+      const ratio = outbound / (totalFlow + eps);
+
+      const rightNeighborClass =
+        i < N - 1
+          ? this.system.operatorClass[sequenceIds[i + 1]]
+          : OperatorClass.None;
+      if (
+        rightNeighborClass === OperatorClass.IdentityShift ||
+        rightNeighborClass === OperatorClass.Quantifier
+      )
+        continue;
+
+      let inferredClass = OperatorClass.None;
+      if (i > 0 && i < N - 1) {
+        if (ratio >= cfg.OPERATOR_DISCOVERY_OUTBOUND_THRESHOLD) {
+          inferredClass = OperatorClass.IdentityShift;
+        } else if (ratio >= cfg.OPERATOR_DISCOVERY_CONJUNCTION_THRESHOLD) {
+          inferredClass = OperatorClass.Conjunction;
+        }
+      }
+
+      if (inferredClass === OperatorClass.None) continue;
+
+      discovered.push({
+        id,
+        idx: i,
+        label: this.atomizer
+          .decodeSequence(new Uint32Array([id]), this.system)
+          .trim(),
+        inferredClass,
+        confidence: ratio,
+        outboundRatio: ratio,
+      });
+    }
+
+    const CONFIRM_THRESHOLD = 3;
+    const discoveredIds = new Set(discovered.map(d => d.id));
+
+    for (const d of discovered) {
+      if (d.confidence < cfg.OPERATOR_DISCOVERY_CONFIDENCE_THRESHOLD) continue;
+      const ev = this.operatorEvidence.get(d.id);
+      if (!ev || ev.cls !== d.inferredClass) {
+        this.operatorEvidence.set(d.id, { cls: d.inferredClass, count: 1 });
+      } else {
+        ev.count++;
+        if (ev.count >= CONFIRM_THRESHOLD) {
+          this.system.operatorClass[d.id] = d.inferredClass;
+          this.system.mass[d.id] = this.system.c ** 2;
+          this.system.update(d.id, "operator_discovery");
+          this.operatorEvidence.delete(d.id);
+        }
+      }
+    }
+
+    for (const [id, ev] of this.operatorEvidence) {
+      if (!discoveredIds.has(id)) {
+        ev.count--;
+        if (ev.count <= 0) this.operatorEvidence.delete(id);
+      }
+    }
+
+    return discovered;
+  }
+
+  // =========================================================================
+  // COHERENT RESOLUTION (was Resolver.resolveCoherent)
+  // =========================================================================
+
+  public async perceiveCoherent(
+    sequenceIds: Uint32Array,
+    opts: { probeMode?: boolean; maxIterations?: number; contextScopes?: Set<number> } = {}
+  ): Promise<CoherentResult> {
+    const maxIter =
+      opts.maxIterations ?? DOPAT_CONFIG.resolver.COHERENCE_MAX_ITERS;
+    const threshold = DOPAT_CONFIG.resolver.COHERENCE_THRESHOLD;
+    const contrastMin = DOPAT_CONFIG.resolver.COHERENCE_CONTRAST;
+    const inProbe = opts.probeMode ?? false;
+
+    const learned: string[] = [];
+    let bestIds: Uint32Array = new Uint32Array(0);
+    let bestDiag: PerceptionDiagnostics | null = null;
+    let bestCoherence = 0;
+    let staleSince = 0;
+    let finalDiagnosis: CoherentResult["diagnosis"] = "exhausted";
+    let iter = 0;
+
+    for (; iter < maxIter; iter++) {
+      const capture = await this._perceiveCapturing(sequenceIds, {
+        probeMode: inProbe,
+        contextScopes: opts.contextScopes,
+      });
+      const ids = capture.ids;
+      const diag = capture.diagnostics;
+      const coherence = this.measureCoherence(diag);
+
+      if (iter === 0 || coherence > bestCoherence) {
+        bestCoherence = coherence;
+        bestIds = ids;
+        bestDiag = diag;
+        staleSince = 0;
+      } else {
+        staleSince++;
+      }
+
+      if (coherence >= threshold) {
+        finalDiagnosis = "coherent";
+        iter++;
+        break;
+      }
+
+      if (staleSince >= 2) {
+        break;
+      }
+
+      if (!diag) {
+        finalDiagnosis = "void";
+        break;
+      }
+
+      const dx = this.diagnoseLowCoherence(diag, contrastMin);
+
+      if (dx === "void") {
+        finalDiagnosis = "void";
+        if (inProbe) break;
+        const topic = this.extractContentWords(sequenceIds);
+        if (!topic) break;
+
+        let expanded = false;
+
+        if (!expanded && this.unfolder) {
+          const voidId = this.placeVoidAtCentroid(sequenceIds);
+          const unfolded = await this.unfolder.expand(voidId, topic);
+          if (unfolded) {
+            expanded = true;
+            learned.push(`expanded "${topic}"`);
+          }
+        }
+
+        if (!expanded) break;
+      } else if (dx === "conflict") {
+        finalDiagnosis = "conflict";
+        const a = diag.sinkCandidates[0]?.label ?? "?";
+        const b = diag.sinkCandidates[1]?.label ?? "?";
+        learned.push(`conflict: "${a}" vs "${b}"`);
+        break;
+      } else {
+        finalDiagnosis = "weak";
+        if (!inProbe && this.store) {
+          const { signature } = this.store.abstractSequence(sequenceIds);
+          await this.store.adjustEnergy(signature, 0.2);
+          const label = diag.sinkCandidates[0]?.label ?? "?";
+          learned.push(`reinforced "${label}"`);
+        }
+        break;
+      }
+    }
+
+    if (bestIds.length === 0) {
+      bestIds = this.atomizer.ingestSequence("unknown", this.system);
+    }
+
+    return {
+      ids: bestIds,
+      coherence: bestCoherence,
+      iterations: iter,
+      learned,
+      diagnosis: finalDiagnosis,
+      diagnostics: bestDiag,
+    };
+  }
+
+  /** Backward-compat alias. */
+  public resolveCoherent(
+    sequenceIds: Uint32Array,
+    opts: { probeMode?: boolean; maxIterations?: number } = {}
+  ): Promise<CoherentResult> {
+    return this.perceiveCoherent(sequenceIds, opts);
+  }
+
+  private measureCoherence(diag: PerceptionDiagnostics | null): number {
+    if (!diag || diag.maxNetEnergy <= 0 || diag.sinkCandidates.length === 0)
+      return 0;
+    const best = diag.sinkCandidates[0].strength;
+    if (best <= 0) return 0;
+    const amplitude = diag.maxNetEnergy / (1 + diag.maxNetEnergy);
+    const second = diag.sinkCandidates[1]?.strength ?? 0;
+    const contrast = second <= 0 ? 1.0 : best / (best + second);
+    return amplitude * contrast;
+  }
+
+  private diagnoseLowCoherence(
+    diag: PerceptionDiagnostics,
+    contrastMin: number
+  ): "void" | "conflict" | "weak" {
+    if (diag.maxNetEnergy <= 0 || diag.sinkCandidates.length === 0)
+      return "void";
+    const best = diag.sinkCandidates[0].strength;
+    const second = diag.sinkCandidates[1]?.strength ?? 0;
+    if (second > 0 && best / second < contrastMin) return "conflict";
+    return "weak";
+  }
+
+  private extractContentWords(sequenceIds: Uint32Array): string {
+    const nonOpIds: number[] = [];
+    for (let i = 0; i < sequenceIds.length; i++) {
+      const id = sequenceIds[i];
+      if (
+        this.system.isAllocated(id) &&
+        this.system.operatorClass[id] === OperatorClass.None
+      )
+        nonOpIds.push(id);
+    }
+    return this.atomizer
+      .decodeSequence(new Uint32Array(nonOpIds), this.system)
+      .trim();
+  }
+
+  private placeVoidAtCentroid(sequenceIds: Uint32Array): number {
+    const nonOpIds: number[] = [];
+    for (let i = 0; i < sequenceIds.length; i++) {
+      const id = sequenceIds[i];
+      if (
+        this.system.isAllocated(id) &&
+        this.system.operatorClass[id] === OperatorClass.None
+      )
+        nonOpIds.push(id);
+    }
+    let ax = 0,
+      ay = 0,
+      az = 0,
+      aw = 0;
+    for (const id of nonOpIds) {
+      ax += this.system.posX[id];
+      ay += this.system.posY[id];
+      az += this.system.posZ[id];
+      aw += this.system.posW[id];
+    }
+    const n = Math.max(1, nonOpIds.length);
+    const voidScope = this.atomizer.getSymbolScope("void", false);
+    const voidId = this.system.createLocation(-this.system.c, voidScope);
+    this.system.posX[voidId] = ax / n;
+    this.system.posY[voidId] = ay / n;
+    this.system.posZ[voidId] = az / n;
+    this.system.posW[voidId] = aw / n;
+    this.system.update(voidId);
+    return voidId;
+  }
+
+  // =========================================================================
+  // SEMANTIC LOOKUP (was Resolver private helpers)
+  // =========================================================================
+
+  private findDominantOperator(
+    sequenceIds: Uint32Array,
+    sourceNodeIdx?: number
+  ): number {
+    if (sourceNodeIdx !== undefined && sourceNodeIdx !== -1) {
+      for (let i = sourceNodeIdx + 1; i < sequenceIds.length; i++) {
+        const cls = this.system.operatorClass[sequenceIds[i]];
+        if (cls === OperatorClass.IdentityShift) return sequenceIds[i];
+        if (cls === OperatorClass.Conjunction || cls === OperatorClass.Sink)
+          break;
+      }
+    }
+
+    for (let i = sequenceIds.length - 1; i >= 0; i--) {
+      const cls = this.system.operatorClass[sequenceIds[i]];
+      if (cls === OperatorClass.IdentityShift) return sequenceIds[i];
+    }
+    return -1;
+  }
+
+  private ensureSpatialIndex(): void {
+    const n = this.system.length;
+    if (n === this.lastIndexedLength) return;
+    this.spatialIndex.clear();
+    for (let j = 0; j < n; j++) {
+      this.spatialIndex.insert(
+        j,
+        this.system.posX[j],
+        this.system.posY[j],
+        this.system.posZ[j],
+        this.system.posW[j]
+      );
+    }
+    this.lastIndexedLength = n;
+  }
+
+  private resolveMultiTokenSemanticLookup(
+    subjectIds: Uint32Array,
+    operatorId: number
+  ): Uint32Array {
+    if (subjectIds.length === 0) return new Uint32Array(0);
+
+    const operatorScope = this.system.scope[operatorId];
+    const operatorIdClass = this.system.operatorClass[operatorId];
+    const length = this.system.length;
+
+    const queryIdSet = new Set<number>(subjectIds);
+    queryIdSet.add(operatorId);
+    const ringEntries = this.system.getSequenceEntries();
+    for (let r = ringEntries.length - 1; r >= 0; r--) {
+      const { scope0, startId } = ringEntries[r];
+      if (queryIdSet.has(startId)) continue;
+      if (scope0 !== this.system.scope[subjectIds[0]]) continue;
+      if (!this.system.isAllocated(startId)) continue;
+
+      let match = true;
+      for (let j = 0; j < subjectIds.length; j++) {
+        const cId = startId + j;
+        if (
+          cId >= length ||
+          !this.system.isAllocated(cId) ||
+          this.system.scope[cId] !== this.system.scope[subjectIds[j]]
+        ) {
+          match = false;
+          break;
+        }
+      }
+      if (!match) continue;
+
+      const opId = startId + subjectIds.length;
+      if (opId < length && this.system.scope[opId] === operatorScope) {
+        // Navigate via PartLayer (semantic chain), not sequential arithmetic.
+        // Sequential +1 would incorrectly land on freshly-allocated IDs from
+        // an unrelated ingestion that happens to follow this sequence in memory.
+        const next = this.system.PartLayer[opId];
+        if (next !== 0 && this.system.isAllocated(next)) {
+          return this.collectSequence(next, 1);
+        }
+      }
+    }
+
+    const firstSubjectScope = this.system.scope[subjectIds[0]];
+    const candidatesForScope = this.system.getIdsByScope(firstSubjectScope);
+
+    for (const i of candidatesForScope) {
+      if (queryIdSet.has(i)) continue;
+
+      let match = true;
+      let curr = i;
+      for (let j = 0; j < subjectIds.length; j++) {
+        if (
+          curr === 0 ||
+          !this.system.isAllocated(curr) ||
+          this.system.scope[curr] !== this.system.scope[subjectIds[j]]
+        ) {
+          match = false;
+          break;
+        }
+        if (j < subjectIds.length - 1) {
+          curr = this.system.PartLayer[curr];
+        }
+      }
+      if (!match) continue;
+
+      const opId = this.system.PartLayer[curr];
+
+      if (
+        opId !== 0 &&
+        this.system.isAllocated(opId) &&
+        this.system.scope[opId] === operatorScope
+      ) {
+        return this.collectSequence(this.system.PartLayer[opId], 1);
+      }
+    }
+
+    if (operatorIdClass === OperatorClass.IdentityShift) {
+      for (const i of this.system.getIdsByScope(operatorScope)) {
+        if (queryIdSet.has(i)) continue;
+
+        let match = true;
+        let curr = this.system.PartLayer[i];
+        for (let j = 0; j < subjectIds.length; j++) {
+          if (
+            curr === 0 ||
+            !this.system.isAllocated(curr) ||
+            this.system.scope[curr] !== this.system.scope[subjectIds[j]]
+          ) {
+            match = false;
+            break;
+          }
+          curr = this.system.PartLayer[curr];
+        }
+        if (match) {
+          return this.collectSequence(this.system.ComplexLayer[i], -1);
+        }
+      }
+    }
+
+    let subX = 0,
+      subY = 0,
+      subZ = 0,
+      subW = 0,
+      subMass = 0;
+    for (let i = 0; i < subjectIds.length; i++) {
+      const id = subjectIds[i];
+      const m = this.system.mass[id] || 1.0;
+      subX += this.system.posX[id] * m;
+      subY += this.system.posY[id] * m;
+      subZ += this.system.posZ[id] * m;
+      subW += this.system.posW[id] * m;
+      subMass += m;
+    }
+    if (subMass > 0) {
+      subX /= subMass;
+      subY /= subMass;
+      subZ /= subMass;
+      subW /= subMass;
+    }
+
+    let variance = 0;
+    for (let i = 0; i < subjectIds.length; i++) {
+      const id = subjectIds[i];
+      const dx = this.system.posX[id] - subX;
+      const dy = this.system.posY[id] - subY;
+      const dz = this.system.posZ[id] - subZ;
+      const dw = this.system.posW[id] - subW;
+      variance += dx * dx + dy * dy + dz * dz + dw * dw;
+    }
+    const dynamicThreshold = Math.max(5.0, variance * 2.0);
+
+    this.ensureSpatialIndex();
+    const searchRadius = Math.sqrt(dynamicThreshold);
+    const candidates = this.spatialIndex.candidatesInRadius(
+      subX,
+      subY,
+      subZ,
+      subW,
+      searchRadius
+    );
+
+    const results: { ids: Uint32Array; score: number }[] = [];
+    for (const i of candidates) {
+      if (queryIdSet.has(i)) continue;
+
+      const opClass = this.system.operatorClass[i];
+
+      if (
+        opClass === operatorIdClass &&
+        this.system.scope[i] === operatorScope
+      ) {
+        const memSub = this.getClusterCentroid(this.system.ComplexLayer[i], -1);
+        if (memSub.count > 0) {
+          const dx = memSub.x - subX;
+          const dy = memSub.y - subY;
+          const dz = memSub.z - subZ;
+          const dw = memSub.w - subW;
+          const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+
+          if (distSq < dynamicThreshold) {
+            results.push({
+              ids: this.collectSequence(this.system.PartLayer[i], 1),
+              score: distSq,
+            });
+          }
+        }
+
+        if (opClass === OperatorClass.IdentityShift) {
+          const memObj = this.getClusterCentroid(this.system.PartLayer[i], 1);
+          if (memObj.count > 0) {
+            const dx = memObj.x - subX;
+            const dy = memObj.y - subY;
+            const dz = memObj.z - subZ;
+            const dw = memObj.w - subW;
+            const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+
+            if (distSq < dynamicThreshold) {
+              results.push({
+                ids: this.collectSequence(this.system.ComplexLayer[i], -1),
+                score: distSq * 0.1,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (results.length > 0) {
+      results.sort((a, b) => a.score - b.score);
+      return results[0].ids;
+    }
+
+    return new Uint32Array(0);
+  }
+
+  private getClusterCentroid(
+    startId: number,
+    direction: 1 | -1
+  ): {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    totalMass: number;
+    count: number;
+  } {
+    let x = 0,
+      y = 0,
+      z = 0,
+      w = 0,
+      totalMass = 0,
+      count = 0;
+    let k = startId;
+
+    while (k !== 0 && this.system.isAllocated(k)) {
+      if (this.system.operatorClass[k] !== OperatorClass.None) break;
+
+      const m = this.system.mass[k] || 1.0;
+      x += this.system.posX[k] * m;
+      y += this.system.posY[k] * m;
+      z += this.system.posZ[k] * m;
+      w += this.system.posW[k] * m;
+      totalMass += m;
+      count++;
+
+      k =
+        direction === 1
+          ? this.system.PartLayer[k]
+          : this.system.ComplexLayer[k];
+    }
+
+    if (totalMass > 0) {
+      x /= totalMass;
+      y /= totalMass;
+      z /= totalMass;
+      w /= totalMass;
+    }
+    return { x, y, z, w, totalMass, count };
+  }
+
+  public collectSequence(startId: number, direction: 1 | -1): Uint32Array {
+    const ids: number[] = [];
+    let k = startId;
+
+    while (k !== 0 && this.system.isAllocated(k)) {
+      if (this.system.operatorClass[k] !== OperatorClass.None) break;
+
+      if (direction === 1) {
+        ids.push(k);
+        k = this.system.PartLayer[k];
+      } else {
+        ids.unshift(k);
+        k = this.system.ComplexLayer[k];
+      }
+    }
+    return new Uint32Array(ids);
+  }
+
+  private getSymbolScope(symbol: string): number {
+    return this.atomizer.getSymbolScope(symbol, false);
+  }
+
+  private memoryContains(
+    subjectScope: number,
+    operatorScope: number,
+    objectScope: number
+  ): boolean {
+    const length = this.system.length;
+    for (let i = 0; i < length - 2; i++) {
+      if (
+        this.system.scope[i] === subjectScope &&
+        this.system.scope[i + 1] === operatorScope &&
+        this.system.scope[i + 2] === objectScope
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private findVerbForSubjectObject(
+    subjectScope: number,
+    objectScope: number
+  ): number {
+    const length = this.system.length;
+    for (let i = 0; i < length - 2; i++) {
+      if (
+        this.system.scope[i] === subjectScope &&
+        this.system.scope[i + 2] === objectScope &&
+        this.system.mass[i + 1] === this.system.c ** 2
+      ) {
+        return this.system.scope[i + 1];
+      }
+    }
+    return -1;
+  }
+
+  private async resolveSemanticDerivation(
+    sequenceIds: Uint32Array
+  ): Promise<Uint32Array | null> {
+    if (this.store) {
+      const vaultHit = await this.store.checkInterferencePattern(sequenceIds);
+      if (vaultHit && vaultHit.ids.length > 0) return vaultHit.ids;
+
+      // Also try sink-appended form: assertions are crystallized as
+      // [subject... op sink] → [object], so a query [subject... op] won't match
+      // without the sink suffix.  Append the first available Sink precept and retry.
+      const N = sequenceIds.length;
+      const lastClass = N > 0 ? this.system.operatorClass[sequenceIds[N - 1]] : OperatorClass.None;
+      if (lastClass === OperatorClass.IdentityShift || lastClass === OperatorClass.Action) {
+        const sinkScope = this.atomizer?.getSymbolScope("|-", false) ?? 0;
+        if (sinkScope > 0) {
+          const sinkId = [...this.system.getIdsByScope(sinkScope)].find(
+            id => this.system.isAllocated(id) && this.system.operatorClass[id] === OperatorClass.Sink
+          );
+          if (sinkId !== undefined) {
+            const probe = new Uint32Array([...sequenceIds, sinkId]);
+            const sinkHit = await this.store.checkInterferencePattern(probe);
+            if (sinkHit && sinkHit.ids.length > 0) return sinkHit.ids;
+          }
+        }
+      }
+    }
+
+    const text = this.atomizer.decodeSequence(sequenceIds, this.system);
+    const doc = nlp(text);
+
+    const verbs = doc.verbs().out("array");
+    const dates = doc.match("#Date").out("array");
+
+    if (verbs.length > 0 && dates.length > 0) {
+      const verb = verbs[0];
+      const date = dates[0];
+
+      const verbScope = this.getSymbolScope(verb);
+      const impliesScope = this.getSymbolScope("implies");
+      const creationScope = this.getSymbolScope("creation");
+
+      if (this.memoryContains(verbScope, impliesScope, creationScope)) {
+        const objectTokens = doc.match(`${verb} [*]`).out("array");
+        if (objectTokens.length > 0) {
+          const objectStr = objectTokens[0]
+            .replace(verb, "")
+            .replace(/\|-/g, "")
+            .trim();
+          if (objectStr) {
+            const targetStr = `then ${objectStr} did not exist before ${date}`;
+            return this.atomizer.ingestSequence(targetStr, this.system);
+          }
+        }
+      } else {
+        let subjectScope = -1,
+          objectScope = -1,
+          subjectStr = "",
+          objectStr = "";
+        for (let i = 0; i < sequenceIds.length - 2; i++) {
+          if (this.system.scope[sequenceIds[i + 1]] === verbScope) {
+            subjectScope = this.system.scope[sequenceIds[i]];
+            objectScope = this.system.scope[sequenceIds[i + 2]];
+            subjectStr = this.atomizer.decodeSequence(
+              new Uint32Array([sequenceIds[i]]),
+              this.system
+            );
+            objectStr = this.atomizer.decodeSequence(
+              new Uint32Array([sequenceIds[i + 2]]),
+              this.system
+            );
+            break;
+          }
+        }
+        if (subjectScope !== -1 && objectScope !== -1) {
+          const existingVerbScope = this.findVerbForSubjectObject(
+            subjectScope,
+            objectScope
+          );
+          if (existingVerbScope !== -1 && existingVerbScope !== verbScope) {
+            if (
+              this.memoryContains(
+                existingVerbScope,
+                impliesScope,
+                creationScope
+              )
+            ) {
+              const infVerb =
+                nlp(verb).verbs().toInfinitive().out("array")[0] || verb;
+              const targetStr = `then ${subjectStr} did not ${infVerb} ${objectStr}`;
+              return this.atomizer.ingestSequence(targetStr, this.system);
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // =========================================================================
+  // SKILLS / PROCESS / LEARNING / MOTIVATION / INQUIRY (Phase 3+4)
+  // =========================================================================
+
+
+  // ---- Learner internals --------------------------------------------------
+
+  private static readonly NOISE_PROBES = [
+    "mathematics",
+    "ocean",
+    "atmosphere",
+    "civilization",
+    "architecture",
+    "astronomy",
+    "chemistry",
+    "philosophy",
+    "electricity",
+    "geography",
+    "evolution",
+    "mythology",
+  ];
+
+  private _contextFingerprint(): string {
+    const n = this.system.length;
+    const sample = Array.from(this.system.scope.subarray(0, Math.min(100, n)));
+    return createHash("sha256")
+      .update(`${n}:${sample.join(",")}`)
+      .digest("hex")
+      .slice(0, 16);
+  }
+
+  private _buildProbeText(factText: string): string | null {
+    const tokens = factText
+      .trim()
+      .split(/\s+/)
+      .filter(t => t.length > 0);
+    if (tokens.length < 2) return null;
+    tokens.pop();
+    return tokens.join(" ") + " |-";
+  }
+
+  private _normaliseLearned(s: string): string {
+    return s.toLowerCase().replace(/\|-/g, "").replace(/\s+/g, " ").trim();
+  }
+
+  private _resultMatchesExpected(reproduced: string, expected: string): boolean {
+    const r = this._normaliseLearned(reproduced);
+    const e = this._normaliseLearned(expected);
+    if (r === e) return true;
+    if (e.length > 0 && (r.includes(e) || e.includes(r))) return true;
+    return false;
+  }
+
+  private _stateName(s: Memory.KnowledgeState): string {
+    return ["Heard", "Remembered", "Learned", "Generalized"][s] ?? String(s);
+  }
+
+  /**
+   * Attempts to reproduce the answer for a single vault candidate using probe
+   * mode (no vault, no NLP-derived rules - pure topology).
+   */
+  public async challenge(
+    candidate: Memory.ChallengeCandidate
+  ): Promise<Memory.ChallengeResult> {
+    const contextHash = this._contextFingerprint();
+    const probeText = this._buildProbeText(candidate.factText);
+
+    if (!probeText || !this.atomizer) {
+      return {
+        success: false,
+        reproduced: "",
+        expected: candidate.targetPattern,
+        contextHash,
+        coherence: 0,
+        learned: [],
+        hasGeneralizationSignal: false,
+        diagnostics: null,
+        probeIds: new Uint32Array(0),
+      };
+    }
+
+    const probeIds = this.atomizer.ingestSequence(probeText, this.system);
+
+    const coherentResult = await this.perceiveCoherent(probeIds, {
+      probeMode: true,
+      maxIterations: 3,
+    });
+
+    const reproduced = this.atomizer
+      .decodeSequence(coherentResult.ids, this.system)
+      .trim();
+
+    const success =
+      this._normaliseLearned(reproduced).length > 0 &&
+      this._normaliseLearned(reproduced) !== this._normaliseLearned(probeText) &&
+      this._normaliseLearned(reproduced) !== "unknown" &&
+      this._resultMatchesExpected(reproduced, candidate.targetPattern);
+
+    const factWords = new Set(candidate.factText.toLowerCase().split(/\s+/));
+    const hasGeneralizationSignal =
+      success &&
+      (coherentResult.diagnostics?.bridgeCandidates ?? []).some(
+        b =>
+          !b.isMissingLink &&
+          b.bridgeScore > 0.05 &&
+          !factWords.has(b.label.toLowerCase())
+      );
+
+    logger.debug(
+      `[LEARNER] challenge "${probeText}" → "${reproduced}" ` +
+        `(expected: "${candidate.targetPattern}", ` +
+        `coherence: ${coherentResult.coherence.toFixed(3)}, ` +
+        `diagnosis: ${coherentResult.diagnosis}, success: ${success}, ` +
+        `genSignal: ${hasGeneralizationSignal})`
+    );
+
+    return {
+      success,
+      reproduced,
+      expected: candidate.targetPattern,
+      contextHash,
+      coherence: coherentResult.coherence,
+      learned: coherentResult.learned,
+      hasGeneralizationSignal,
+      diagnostics: coherentResult.diagnostics,
+      probeIds,
+    };
+  }
+
+  private async _crystallizeLearnedPath(
+    candidate: Memory.ChallengeCandidate,
+    diagnostics: any,
+    probeIds: Uint32Array,
+    energy: number = 1.5
+  ): Promise<void> {
+    const diag = diagnostics;
+    if (!diag || diag.sinkCandidates.length === 0) return;
+    if (!this.store) return;
+
+    const probeText = this._buildProbeText(candidate.factText);
+    if (!probeText) return;
+
+    const inputIds = probeIds;
+    const best = diag.sinkCandidates[0];
+    const outputIds = new Uint32Array([best.id]);
+
+    await this.store.crystallizeProof(inputIds, outputIds, energy);
+    await this.store.updateKnowledgeState(
+      candidate.signature,
+      energy >= 2.0 ? 3 : 2,
+      candidate.reproductionCount + 2,
+      candidate.contextHash
+    );
+
+    logger.debug(
+      `[LEARNER] Crystallized learned path for "${candidate.factText}" ` +
+        `→ "${best.label}" at 1.5× energy`
+    );
+  }
+
+  /**
+   * Autonomous learning cycle: samples low-confidence vault facts, challenges
+   * each in probe mode, and promotes those whose answers can be reproduced in
+   * 2+ distinct manifold contexts.
+   */
+  public async learnCycle(
+    batchSize: number = 10
+  ): Promise<Memory.ValidationReport> {
+    if (!this.store) {
+      return {
+        challenged: 0,
+        promoted: 0,
+        failed: 0,
+        expandedTopics: [],
+        summary: { heard: 0, remembered: 0, learned: 0, generalized: 0 },
+      };
+    }
+    const candidates = await this.store.sampleForChallenge(batchSize);
+    const report: Memory.ValidationReport = {
+      challenged: candidates.length,
+      promoted: 0,
+      failed: 0,
+      expandedTopics: [],
+      summary: { heard: 0, remembered: 0, learned: 0, generalized: 0 },
+    };
+
+    for (const candidate of candidates) {
+      const existingHashes = new Set(
+        candidate.contextHash.split("|").filter(Boolean)
+      );
+      let repCount = candidate.reproductionCount;
+
+      const result1 = await this.challenge(candidate);
+      let bestResult = result1;
+      if (result1.success && !existingHashes.has(result1.contextHash)) {
+        repCount++;
+        existingHashes.add(result1.contextHash);
+      }
+      for (const l of result1.learned) {
+        if (!report.expandedTopics.includes(l)) report.expandedTopics.push(l);
+      }
+      const generalizationFastTrack =
+        result1.hasGeneralizationSignal && result1.success;
+
+      let expandedTopic = "";
+
+      // Env 2: related topic expansion.
+      if (repCount < 2 && this.unfolder && this.atomizer) {
+        const topic = extractTopic(candidate.factText);
+        if (topic) {
+          const voidScope = this.atomizer.getSymbolScope("void", false);
+          const voidId = this.system.createLocation(-this.system.c, voidScope);
+          const expanded = await this.unfolder.expand(voidId, topic);
+          if (expanded) {
+            expandedTopic = topic;
+            report.expandedTopics.push(topic);
+            const result2 = await this.challenge(candidate);
+            if (result2.success) bestResult = result2;
+            if (result2.success && !existingHashes.has(result2.contextHash)) {
+              repCount++;
+              existingHashes.add(result2.contextHash);
+            }
+          }
+        }
+      }
+
+      // Env 3: unrelated noise expansion for Generalized promotion.
+      if (
+        repCount >= 2 &&
+        candidate.knowledgeState < 3 &&
+        this.unfolder &&
+        this.atomizer
+      ) {
+        const factWords = candidate.factText.toLowerCase().split(/\s+/);
+        const noiseTopic =
+          Mapper.NOISE_PROBES.find(t => !factWords.includes(t)) ??
+          Mapper.NOISE_PROBES[0];
+        const noiseScope = this.atomizer.getSymbolScope("void", false);
+        const noiseVoidId = this.system.createLocation(
+          -this.system.c,
+          noiseScope
+        );
+        const noiseExpanded = await this.unfolder.expand(
+          noiseVoidId,
+          noiseTopic
+        );
+        if (noiseExpanded) {
+          const result3 = await this.challenge(candidate);
+          if (result3.success) bestResult = result3;
+          if (result3.success && !existingHashes.has(result3.contextHash)) {
+            repCount++;
+            existingHashes.add(result3.contextHash);
+            if (!report.expandedTopics.includes(noiseTopic))
+              report.expandedTopics.push(noiseTopic);
+          }
+        }
+      }
+
+      const prevState = candidate.knowledgeState;
+      let newState: Memory.KnowledgeState = prevState;
+      if ((repCount >= 3 || generalizationFastTrack) && prevState < 3) {
+        newState = 3;
+      } else if (repCount >= 2 && prevState < 2) {
+        newState = 2;
+      } else if (repCount >= 1 && prevState < 1) {
+        newState = 1;
+      }
+
+      const newCtxHash = [...existingHashes].slice(0, 5).join("|");
+      await this.store.updateKnowledgeState(
+        candidate.signature,
+        newState,
+        repCount,
+        newCtxHash
+      );
+
+      if (newState > prevState) {
+        report.promoted++;
+        if (newState >= 2) {
+          await this._crystallizeLearnedPath(
+            candidate,
+            bestResult.diagnostics,
+            bestResult.probeIds,
+            newState === 3 ? 2.0 : 1.5
+          );
+        }
+        logger.debug(
+          `[LEARNER] "${candidate.factText}" promoted ` +
+            `${this._stateName(prevState)} → ${this._stateName(newState)} ` +
+            `(repCount=${repCount}${expandedTopic ? `, expanded="${expandedTopic}"` : ""})`
+        );
+      } else if (!result1.success && !expandedTopic) {
+        report.failed++;
+      }
+    }
+
+    report.summary = await this.store.getKnowledgeSummary();
+    return report;
+  }
+
+  // ---- Inquiry internals --------------------------------------------------
+
+  private _inquiryQueue: InquiryQueue | null = null;
+
+  /**
+   * Returns the InquiryQueue instance.  Lazy-initialised on first access so
+   * Mappers built without a store (locomotion-only callers) still work.
+   */
+  public getInquiryQueue(): InquiryQueue {
+    if (!this._inquiryQueue) {
+      this._inquiryQueue = new InquiryQueue(this.store ?? undefined);
+      this._inquiryQueue.onEnqueue = (topic: string) => {
+        this.spawnIntent(topic, 2.0, IntentTag.INQUIRY_GAP);
+      };
+    }
+    return this._inquiryQueue;
+  }
+
+  public enqueueInquiry(topic: string, query: string): void {
+    this.getInquiryQueue().enqueue(topic, query);
+  }
+
+  public enqueueInquiryImmediate(topic: string, query: string): void {
+    this.getInquiryQueue().enqueueImmediate(topic, query);
+  }
+
+  public async drainInquiries(n: number = 3): Promise<InquiryItem[]> {
+    if (!this.atomizer) return [];
+    return this.getInquiryQueue().step(
+      n,
+      this.unfolder,
+      this,
+      this.system,
+      this.atomizer,
+      this.store ?? undefined
+    );
+  }
+
+  // ---- CognitiveLoop internals --------------------------------------------
+
+  private _cogTimer: ReturnType<typeof setInterval> | null = null;
+  private _learnerTimer: ReturnType<typeof setInterval> | null = null;
+  private _intentIds = new Set<number>();
+  private _intentTagMap = new Map<number, IntentTag>();
+  private _intentFailureCount = new Map<number, number>();
+  private _cogTickCount = 0;
+
+  public registerIntent(id: number, tag: IntentTag): void {
+    this._intentIds.add(id);
+    this._intentTagMap.set(id, tag);
+  }
+
+  public spawnIntent(
+    topic: string,
+    energy: number = 1.0,
+    tag: IntentTag = IntentTag.USER_UNKNOWN
+  ): number | null {
+    if (!this.atomizer) return null;
+    const id = spawnIntentPrecept(
+      this.system,
+      this.atomizer,
+      topic,
+      energy,
+      tag,
+      this._intentTagMap
+    );
+    if (id !== null) this._intentIds.add(id);
+    return id;
+  }
+
+  /** Hook for external listeners (LiveInference compatibility). */
+  public onUnknown?: (topic: string) => void;
+
+  public startAutonomy(opts: { intervalMs?: number; learnerIntervalMs?: number } = {}): void {
+    const cogTick =
+      opts.intervalMs ??
+      ((DOPAT_CONFIG.observability as any).COGNITIVE_TICK_MS ?? 5_000);
+    const learnerMs = opts.learnerIntervalMs ?? 10_000;
+
+    if (this._cogTimer === null) {
+      this._cogTimer = setInterval(
+        () => this._cogTick().catch(e => logger.warn("[CLOOP]", e)),
+        cogTick
+      );
+      logger.debug("[CLOOP] started");
+    }
+
+    if (this._learnerTimer === null && this.store) {
+      let _cycles = 0;
+      this._learnerTimer = setInterval(() => {
+        this.learnCycle(5).catch(e => logger.warn("[LEARNER TIMER]", e));
+        if (++_cycles % 6 === 0) {
+          this.store
+            ?.cullWeakWaveForms()
+            .catch(e => logger.warn("[VAULT CULL]", e));
+        }
+      }, learnerMs);
+    }
+  }
+
+  public stopAutonomy(): void {
+    if (this._cogTimer !== null) {
+      clearInterval(this._cogTimer);
+      this._cogTimer = null;
+    }
+    if (this._learnerTimer !== null) {
+      clearInterval(this._learnerTimer);
+      this._learnerTimer = null;
+    }
+  }
+
+  private async _cogTick(): Promise<void> {
+    if (!this.atomizer || !this.store) return;
+    this._cogTickCount++;
+
+    // 1. SENSE - prune freed/decayed IDs
+    for (const id of this._intentIds) {
+      if (!this.system.isAllocated(id) || this.system.mass[id] <= 0) {
+        this._intentIds.delete(id);
+        this._intentTagMap.delete(id);
+        this._intentFailureCount.delete(id);
+      }
+    }
+
+    if (this._cogTickCount % 12 === 0) {
+      this._scanVaultUnderexplored().catch(() => {});
+    }
+
+    if (this._intentIds.size === 0) return;
+
+    // 2. SELECT
+    let bestId = -1;
+    let bestScore = -Infinity;
+    for (const id of this._intentIds) {
+      const failures = this._intentFailureCount.get(id) ?? 0;
+      const rawScore = this.system.mass[id] * this.system.posW[id];
+      const score = rawScore / (1 + failures * failures);
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = id;
+      }
+    }
+    if (bestId < 0) return;
+
+    const tag = this._intentTagMap.get(bestId) ?? IntentTag.USER_UNKNOWN;
+    const topic =
+      this.atomizer.resolveScope(this.system.scope[bestId]) ?? "";
+
+    let success = false;
+    try {
+      switch (tag) {
+        case IntentTag.INQUIRY_GAP:
+          await this.drainInquiries(1);
+          success = true;
+          break;
+
+        case IntentTag.CONSTELLATION_GAP: {
+          if (topic) {
+            const probeIds = this.atomizer.ingestSequence(topic, this.system);
+            const result = await this.perceiveCoherent(probeIds, {
+              probeMode: true,
+              maxIterations: 3,
+            });
+            success =
+              result.diagnosis === "coherent" || result.diagnosis === "weak";
+          }
+          break;
+        }
+
+        case IntentTag.VAULT_PROMOTE: {
+          const candidates = await this.store.sampleForChallenge(1);
+          if (candidates.length > 0) {
+            await this.challenge(candidates[0]);
+            success = true;
+          }
+          break;
+        }
+
+        case IntentTag.USER_UNKNOWN: {
+          if (topic && this.unfolder) {
+            const content = await this.unfolder.fetchContent(topic);
+            if (content) {
+              this.unfolder.ingestContent(content, this.system);
+              success = true;
+            }
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      logger.warn(`[CLOOP] dispatch error for "${topic}":`, e);
+    }
+
+    if (success) {
+      decayIntent(this.system, bestId, 0.5);
+      this._intentFailureCount.delete(bestId);
+    } else {
+      decayIntent(this.system, bestId, 0.9);
+      this._intentFailureCount.set(
+        bestId,
+        (this._intentFailureCount.get(bestId) ?? 0) + 1
+      );
+    }
+  }
+
+  private async _scanVaultUnderexplored(): Promise<void> {
+    if (!this.store) return;
+    try {
+      const candidates = await this.store.sampleForChallenge(3);
+      for (const c of candidates) {
+        if (c.knowledgeState < 2) {
+          this.spawnIntent(
+            c.factText.split(" ")[0] ?? c.factText,
+            1.5,
+            IntentTag.VAULT_PROMOTE
+          );
+        }
+      }
+    } catch {}
+  }
+
+  // ---- Process (Phase 4 lightweight stub) ---------------------------------
+
+  /**
+   * The single public entry for all text input. Coordinates ingestion,
+   * skill election, execution, and learning.
+   */
+  public async process(text: string): Promise<string> {
+    logger.log(`[Mapper] process entry: "${text}"`);
+    if (!this.language || !this.atomizer) {
+      return "unknown";
+    }
+
+    // 1. Ingest text via Language boundary
+    const result = this.language.ingest(text);
+    const {
+      ids,
+      intent,
+      feedbackPolarity,
+      correction,
+      signature,
+      shifted,
+      isIdentityQuery,
+    } = result;
+
+    // 2. Handle synthesis trigger |-
+    if (text.includes("|-")) {
+      const parts = text.split("|-");
+      const lhs = parts[0].trim();
+      const rhs = parts[1].trim();
+
+      if (!rhs) {
+        // Synthesis mode (e.g. "function add |-")
+        const ids = this.atomizer.ingestSequence(text, this.system);
+        const res = await this.perceiveCoherent(ids);
+        const decoded = this.atomizer.decodeSequence(res.ids, this.system).trim();
+        this.language.respond(decoded);
+        return decoded;
+      } else {
+        // Ingestion mode
+        if (intent === "code") {
+          const handler = this.skills.get(this.electSkill(ids, "code"));
+          if (handler) {
+            const resp = await handler({
+              query: text,
+              queryIds: ids,
+              system: this.system,
+              store: this.store!,
+              atomizer: this.atomizer,
+              language: this.language,
+            });
+            this.language.respond(resp.answer);
+            return resp.answer;
+          }
+        }
+      }
+    }
+
+    // 3. Handle feedback intent
+    if (intent === "feedback" && feedbackPolarity) {
+      if (this.lastSignature && this.store) {
+        const adjustment = feedbackPolarity === "positive" ? 0.1 : -0.5;
+        const usageBoost =
+          feedbackPolarity === "positive"
+            ? DOPAT_CONFIG.memory.FEEDBACK_BOOST
+            : 0;
+        await this.store.adjustEnergy(this.lastSignature, adjustment);
+        await this.store.adjustUsageCount(this.lastSignature, usageBoost);
+
+        // Targeted feedback: also adjust the elected skill's mass
+        if (this.lastSkillElected > 0) {
+          const sys = this.system;
+          if (sys.isAllocated(this.lastSkillElected)) {
+            const currentMass = sys.mass[this.lastSkillElected];
+            sys.mass[this.lastSkillElected] =
+              feedbackPolarity === "positive"
+                ? currentMass * 1.05
+                : currentMass * 0.95;
+          }
+        }
+      }
+
+      if (correction) {
+        // Recursive call for correction ingestion (processed as assertion)
+        return this.process(correction).then(() => {
+          const resp = `Feedback acknowledged. Correction ingested: "${correction}"`;
+          this.language!.respond(resp);
+          return resp;
+        });
+      }
+
+      const resp = `Feedback acknowledged. Structural confidence ${
+        feedbackPolarity === "positive" ? "increased" : "reduced"
+      }.`;
+      this.language.respond(resp);
+      return resp;
+    }
+
+    // 4. Handle identity queries (direct response)
+    if (isIdentityQuery) {
+      const decoded = this.atomizer.decodeSequence(ids, this.system);
+      this.language.respond(decoded);
+      return decoded;
+    }
+
+    // 5. Elect a skill
+    const skillId = this.electSkill(ids, intent);
+    const handler = this.skills.get(skillId);
+
+    if (!handler) {
+      // Fallback to pure topology-only perception if no skill handler matches
+      const percResult = await this.perceive(ids);
+      const decoded = this.atomizer.decodeSequence(percResult, this.system).trim();
+      return decoded || "unknown";
+    }
+
+    this.lastSkillElected = skillId;
+    this.lastSignature = signature;
+
+    // 6. Execute skill handler
+    try {
+      const skillResult = await handler({
+        query: shifted,
+        queryIds: ids,
+        system: this.system,
+        store: this.store!,
+        atomizer: this.atomizer,
+        language: this.language!,
+        ingestResult: result,
+      });
+
+      logger.log(`[Mapper] Skill ${skillId} returned answer: ${skillResult.answer}`);
+
+      const { answer, confidence } = skillResult;
+
+      if (!answer || answer === "unknown") {
+        // Handle unknown by enqueuing inquiry
+        const topic = extractTopic(shifted);
+        if (topic && classifyOperatorToken(topic) === OperatorClass.None) {
+          this.enqueueInquiry(topic, shifted);
+        }
+        return "unknown";
+      }
+
+      // 7. Post-success learning: reinforce path
+      if (confidence > 0.5) {
+        // Reinforce the connection between the query and the skill
+        // This makes the skill "heavier" in the manifold for this query type.
+        this.reinforcePath(new Uint32Array([0, ...ids, skillId, 0]));
+      }
+
+      // 8. Record conclusion in Working Memory
+      // (This replaces logic scattered in LiveInference)
+      const conclusionId = this.lastDiagnostics?.sinkCandidates[0]?.id ?? 0;
+      const conclusionScope =
+        conclusionId > 0 && this.system.isAllocated(conclusionId)
+          ? this.system.scope[conclusionId]
+          : 0;
+
+      this.language.recordConclusion(
+        text,
+        answer,
+        conclusionScope,
+        conclusionId,
+        this.lastDiagnostics?.bridgeCandidates ?? []
+      );
+
+      this.language.respond(answer);
+      return answer;
+    } catch (e) {
+      logger.error(`[Mapper] process error in skill ${skillId}:`, e);
+      return "error";
+    }
+  }
+
+  // ---- Backward-compat aliases (deprecated) --------------------------------
+
+  /** @deprecated Use process(). */
+  async processIntent(text: string): Promise<string> { return this.process(text); }
+  /** @deprecated Use process(). */
+  async processQuestion(text: string): Promise<string> { return this.process(text); }
+  /** @deprecated Use process(). */
+  async processCommand(text: string): Promise<string> { return this.process(text); }
+  /** @deprecated Use process(). */
+  async processCode(text: string): Promise<string> { return this.process(text); }
+
+  /** @deprecated Set language.setRespond() directly. */
+  set respond(cb: (msg: string) => void) { this.language?.setRespond(cb); }
+  /** @deprecated Use language.getRespond() directly. */
+  get respond(): (msg: string) => void { return this.language?.getRespond() ?? (() => {}); }
+  /** @deprecated Set language.setRespond() directly. */
+  set onResponse(cb: (msg: string) => void) { this.language?.setRespond(cb); }
+
+  /** @deprecated Use learnCycle() directly. */
+  getLearner(): { runCycle: (n?: number) => Promise<Memory.ValidationReport> } {
+    return { runCycle: (n = 5) => this.learnCycle(n) };
+  }
+
+  /** @deprecated Access language.workingMemory directly. */
+  getWorkingMemory(): WorkingMemory | null {
+    return (this.language as any)?.workingMemory ?? null;
+  }
+
 }
 
 export default Mapper;

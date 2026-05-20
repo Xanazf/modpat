@@ -1,7 +1,6 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { DOPAT_CONFIG } from "@config";
-import type System from "@core_i/System";
 import { SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
@@ -254,7 +253,7 @@ export default class Unfolder {
   private wikiDelegate: ((topic: string) => Promise<string | null>) | null =
     null;
 
-  constructor(system: System | SystemRef, atomizer: Atomic.Engine) {
+  constructor(system: Root.ManifoldView | SystemRef, atomizer: Atomic.Engine) {
     this.systemRef =
       system instanceof SystemRef ? system : new SystemRef(system);
     this.atomizer = atomizer;
@@ -381,7 +380,7 @@ export default class Unfolder {
    * geodesic naturally traverses sentences in layer order, producing a
    * coherent step-by-step sequence rather than a word-salad blob.
    */
-  public ingestContent(text: string, system?: System): Uint32Array {
+  public ingestContent(text: string, system?: Root.ManifoldView): Uint32Array {
     const sys = system ?? this.systemRef.current;
     // S14 fix: score sentences by information density before capping at 30.
     // This prevents technical content (where the key fact is mid-document)

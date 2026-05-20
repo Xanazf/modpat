@@ -1,12 +1,14 @@
 /**
  * Runtime - the single wiring point for the full ModPAT stack.
  *
- * Contains both the LiveInference orchestrator (intent routing, feedback,
- * inquiry backlog) and the Runtime factory (boot / dispose).
+ * After the "Mapper as Thinker" Phase 6 refactor:
+ *   - Mapper is THE thinker (perception + locomotion + learning + motivation)
+ *   - Language is the translation boundary
+ *   - Runtime is boot/wiring only; no reasoning logic lives here
  *
  * Usage:
  *   const rt = await Runtime.boot({ atomizer: "semantic", db: "./data/repl.db" });
- *   const rt = await Runtime.boot({ atomizer: "base" });   // tests, no embeddings
+ *   await rt.mapper.process("the sky is blue");
  */
 
 import LogicAtomizer from "@atomics/LogicAtomizer";
@@ -14,8 +16,12 @@ import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { CognitiveLoop } from "@core_i/CognitiveLoop";
+import Mapper from "@core_i/Mapper";
 import Resolver from "@core_i/Resolver";
-import System, { classifyOperatorToken, OperatorClass, SystemRef } from "@core_i/System";
+import System, {
+  OperatorClass,
+  SystemRef,
+} from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { SelfConcept } from "@core_s/Identity";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
@@ -29,312 +35,105 @@ import { SystemPersistence } from "@core_s/Persistence";
 import Unfolder from "@core_s/Unfolder";
 import { WorkerPool } from "@core_s/WorkerPool";
 import { AstSeedWorker, type AstSeedOptions } from "@core_s/AstSeedWorker";
-import { IntentTag, spawnIntent } from "@utils/intentPrecept";
+import { IntentTag } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
-import { extractTopic } from "@utils/topicExtraction";
-import { parse } from "abstract-syntax-tree";
-import nlp from "compromise";
-import Coder from "./Coder";
-import { InquiryQueue, Learner } from "./Learner";
-import Listener, { isCodeIntent } from "./Listener";
-import Talker from "./Talker";
-import { buildExplanation, WorkingMemory } from "./WorkingMemory";
+import Language from "./language/Language";
+import { createCoderSkill } from "./skills/Coder";
+import type { SkillHandler } from "./skills";
 
-// LiveInference
+// ---------------------------------------------------------------------------
+// Default skill wiring
+// ---------------------------------------------------------------------------
 
 /**
- * AST node types that the Coder knows how to extract patterns from.
- * Must stay in sync with Coder.VISITED_TYPES.
+ * Registers the four standard skills (LANGUAGE, ASSERTION, CODE, ARITHMETIC)
+ * on a Mapper instance. Called at boot time by Runtime.boot() and by
+ * createTestMapper() for test environments.
  */
-const CODE_NODE_TYPES = new Set([
-  "FunctionDeclaration",
-  "FunctionExpression",
-  "ArrowFunctionExpression",
-  "BinaryExpression",
-  "IfStatement",
-  "ReturnStatement",
-  "VariableDeclaration",
-  "CallExpression",
-]);
+function _registerDefaultSkills(
+  mapper: Mapper,
+  language: Language,
+  store: Store,
+  atomizer: Atomic.Engine
+): void {
+  // LANGUAGE skill — perceiveCoherent with arithmetic fast-path
+  const langId = atomizer.getSymbolScope("SKILL:LANGUAGE", false);
+  const languageHandler: SkillHandler = async ctx => {
+    const ir = ctx.ingestResult;
+    if (ir?.isArithmeticQuery && ir.attractionCenter) {
+      const arith = ctx.language.computeArithmetic(ir.attractionCenter);
+      if (arith !== null) {
+        ctx.language.respond(arith);
+        return { answer: arith, confidence: 1.0 };
+      }
+    }
+    const opts = { contextScopes: ctx.language.contextScopes() };
+    const result = await mapper.perceiveCoherent(ctx.queryIds, opts);
+    const decoded = ctx.atomizer.decodeSequence(result.ids, ctx.system).trim();
+    return { answer: decoded || "unknown", confidence: result.coherence };
+  };
+  mapper.registerSkill(langId, languageHandler);
+
+  // ASSERTION skill — ingest declarative statement into vault
+  const assertionId = atomizer.getSymbolScope("SKILL:ASSERTION", false);
+  const assertionHandler: SkillHandler = async ctx => {
+    const answer = await ctx.language.ingestAssertion(ctx.query, ctx.queryIds);
+    return { answer, confidence: 1.0 };
+  };
+  mapper.registerSkill(assertionId, assertionHandler);
+
+  // CODE skill — code synthesis / ingestion
+  const coderReg = createCoderSkill(
+    atomizer,
+    store,
+    atomizer.getSymbolScope("SKILL:CODE", false)
+  );
+  mapper.registerSkill(coderReg.preceptId, coderReg.handler);
+
+  // ARITHMETIC skill — numeric expressions (fast numeric path)
+  const arithmeticId = atomizer.getSymbolScope("SKILL:ARITHMETIC", false);
+  const arithmeticHandler: SkillHandler = async ctx => {
+    const ir = ctx.ingestResult;
+    if (ir?.isArithmeticQuery && ir.attractionCenter) {
+      const arith = ctx.language.computeArithmetic(ir.attractionCenter);
+      if (arith !== null) return { answer: arith, confidence: 1.0 };
+    }
+    const opts = { contextScopes: ctx.language.contextScopes() };
+    const result = await mapper.perceiveCoherent(ctx.queryIds, opts);
+    const decoded = ctx.atomizer.decodeSequence(result.ids, ctx.system).trim();
+    return { answer: decoded || "unknown", confidence: result.coherence };
+  };
+  mapper.registerSkill(arithmeticId, arithmeticHandler);
+}
+
+// ---------------------------------------------------------------------------
+// Test helper
+// ---------------------------------------------------------------------------
 
 /**
- * Returns true when the input looks like executable code rather than natural language.
+ * Creates a configured Mapper with Language and standard skills wired.
+ * Intended for test environments that need to create a standalone inference
+ * engine without going through Runtime.boot().
  *
- * Two-stage check:
- *  1. Fast heuristic - must contain at least one structural code indicator.
- *  2. AST parse attempt - if the heuristic passes, try to parse; the input is
- *     treated as code only if parsing succeeds AND produces at least one
- *     recognised Coder node type.
+ * @deprecated For production use Runtime.boot() and access rt.mapper directly.
  */
-function isCodeInput(text: string): boolean {
-  if (
-    !/[{;]/.test(text) &&
-    !/\bfunction\b|\bconst\s+\w|\blet\s+\w|\bvar\s+\w|\bclass\s+\w/.test(text)
-  ) {
-    return false;
-  }
-  try {
-    const ast = parse(text, { module: false });
-    return (ast as any).body.some((node: any) =>
-      CODE_NODE_TYPES.has(node.type)
-    );
-  } catch {
-    return false;
-  }
+export function createTestMapper(
+  system: Root.ManifoldView | SystemRef,
+  atomizer: Atomic.Engine,
+  resolverOrMapper: Mapper,
+  store: Store,
+  unfolder?: Unfolder
+): Mapper {
+  const lang = new Language(system, atomizer, { store });
+  resolverOrMapper.setLanguage(lang);
+  if (unfolder) resolverOrMapper.setUnfolder(unfolder);
+  _registerDefaultSkills(resolverOrMapper, lang, store, atomizer);
+  return resolverOrMapper;
 }
 
-/**
- * LiveInference routes natural language and code input to the appropriate
- * engine (Listener / Talker / Coder), manages feedback reinforcement, and
- * maintains the Inquiry backlog for proactive follow-up on unknowns.
- */
-export class LiveInference {
-  private systemRef: SystemRef;
-  private store: Store;
-  private unfolder: Unfolder;
-  private readonly atomizer: Atomic.Engine;
-  private resolver: Resolver;
-  private listener: Listener;
-  private talker: Talker;
-  private coder: Coder;
-  private learner: Learner;
-  private inquiryQueue: InquiryQueue;
-  /** Called when a query resolves to "unknown" - used by CognitiveLoop to spawn Intent. */
-  public onUnknown?: (topic: string) => void;
-  private workingMemory: WorkingMemory;
-
-  private last_signature: string | null = null;
-  private intentCount = 0;
-
-  constructor(
-    system: Root.ManifoldView | SystemRef,
-    atomizer: Atomic.Engine,
-    resolver: Resolver,
-    store: Store,
-    unfolder?: Unfolder
-  ) {
-    this.systemRef =
-      system instanceof SystemRef
-        ? system
-        : new SystemRef(system as Root.ManifoldView);
-    this.atomizer = atomizer;
-    this.store = store;
-    this.resolver = resolver;
-    this.unfolder = unfolder || new Unfolder(this.systemRef, atomizer);
-    resolver.setUnfolder(this.unfolder);
-
-    this.listener = new Listener(
-      this.systemRef,
-      atomizer,
-      resolver,
-      store,
-      this.unfolder,
-      msg => this.respond(msg)
-    );
-    this.talker = new Talker(this.systemRef, atomizer, store, msg =>
-      this.respond(msg)
-    );
-    this.coder = new Coder(this.systemRef, atomizer, store, msg =>
-      this.respond(msg)
-    );
-    this.learner = new Learner(
-      this.systemRef,
-      atomizer,
-      resolver,
-      store,
-      this.unfolder
-    );
-    this.inquiryQueue = new InquiryQueue(store);
-    this.workingMemory = new WorkingMemory();
-  }
-
-  public getLearner(): Learner {
-    return this.learner;
-  }
-  public getInquiryQueue(): InquiryQueue {
-    return this.inquiryQueue;
-  }
-  public getWorkingMemory(): WorkingMemory {
-    return this.workingMemory;
-  }
-
-  public async processIntent(query: string): Promise<string> {
-    if (++this.intentCount % 50 === 0) {
-      await this.store.cullWeakWaveForms();
-    }
-    const doc = nlp(query);
-    const isQuestion = doc.questions().length > 0 || query.trim().endsWith("?");
-
-    if (/^(no|incorrect|wrong|that'?s wrong|false)\b/i.test(query)) {
-      if (this.last_signature) {
-        await this.store.adjustEnergy(this.last_signature, -0.5);
-        await this.store.adjustUsageCount(this.last_signature, 0);
-      }
-      // O6 fix: detect corrective form "no, X is Y" and ingest the correction.
-      // Requires a comma or semicolon separator so bare negations like
-      // "no that is wrong" don't accidentally get ingested as facts.
-      const correctionMatch = query.match(
-        /^(?:no|incorrect|wrong|false)[,;]\s*(.+)$/i
-      );
-      if (correctionMatch) {
-        const correction = correctionMatch[1].trim();
-        if (correction.length > 3) {
-          // Ingest the correction as a command - this crystallizes the right answer.
-          const correctionResponse = await this.processCommand(correction);
-          const response = `Feedback acknowledged. Correction ingested: "${correction}"`;
-          this.respond(response);
-          return response;
-        }
-      }
-      const response = "Feedback acknowledged. Structural confidence reduced.";
-      this.respond(response);
-      return response;
-    }
-    if (/^(yes|correct|right|true)\b/i.test(query)) {
-      if (this.last_signature) {
-        await this.store.adjustEnergy(this.last_signature, 0.1);
-        await this.store.adjustUsageCount(
-          this.last_signature,
-          DOPAT_CONFIG.memory.FEEDBACK_BOOST
-        );
-        const response =
-          "Feedback acknowledged. Structural confidence increased.";
-        this.respond(response);
-        return response;
-      }
-    }
-
-    if (
-      isQuestion ||
-      query.match(/^(what|who|where|how|why|is|are|can|do|does)\b/i) ||
-      isCodeIntent(query)
-    ) {
-      return this.processQuestion(query);
-    } else if (isCodeInput(query)) {
-      return this.processCode(query);
-    } else {
-      return this.processCommand(query);
-    }
-  }
-
-  public async processQuestion(query: string): Promise<string> {
-    // Reference resolution: "it", "this" → most recent conclusion from working memory.
-    const resolvedQuery = this.workingMemory.resolveReferences(query);
-
-    // Context seeding: pass scopes through opts so they isolate to this call
-    // rather than racing on a shared instance field.
-    const ctxScopes = new Set(this.workingMemory.contextScopes());
-
-    const { text: result, diagnostics: diag } =
-      await this.listener.processQuestion(resolvedQuery, {
-        contextScopes: ctxScopes,
-      });
-    this.last_signature = this.listener.lastSignature;
-
-    if (
-      !result ||
-      result.trim() === "unknown" ||
-      result.startsWith("[Unfolder]")
-    ) {
-      // Prefer bridge-derived missing links over generic topic extraction:
-      // they come from the bidirectional pass and identify the exact logical gap.
-      const missingLinks =
-        diag?.bridgeCandidates.filter(c => c.isMissingLink) ?? [];
-      if (missingLinks.length > 0) {
-        for (const link of missingLinks.slice(0, 2)) {
-          // Operators are structurally known - enqueuing "plus" as an unknown
-          // causes the inquiry system to resolve it against unrelated context.
-          if (classifyOperatorToken(link.label) !== OperatorClass.None) continue;
-          this.inquiryQueue.enqueue(link.label, resolvedQuery);
-          this.onUnknown?.(link.label);
-        }
-      } else {
-        const topic = extractTopic(resolvedQuery);
-        if (topic && classifyOperatorToken(topic) === OperatorClass.None) {
-          this.inquiryQueue.enqueue(topic, resolvedQuery);
-          this.onUnknown?.(topic);
-        }
-      }
-    } else {
-      this.inquiryQueue.checkForAnswers(resolvedQuery);
-
-      // Record this conclusion in working memory so future turns can reference it.
-      const bridges = diag?.bridgeCandidates ?? [];
-      const explanation = buildExplanation(bridges, result);
-      const conclusionId = diag?.sinkCandidates[0]?.id ?? 0;
-      const sys = this.systemRef.current;
-      const conclusionScope =
-        conclusionId > 0 && sys.isAllocated(conclusionId)
-          ? sys.scope[conclusionId]
-          : 0;
-
-      this.workingMemory.push({
-        query,
-        conclusion: result.trim(),
-        conclusionScope,
-        conclusionId,
-        explanation,
-      });
-    }
-
-    // contextScopes are scoped to the listener call via opts, so there is
-    // nothing to clear here - the next turn will rebuild them locally.
-
-    return result;
-  }
-
-  public async processCommand(statement: string): Promise<string> {
-    const result = await this.talker.processCommand(statement);
-    this.last_signature = this.talker.lastSignature;
-    this.inquiryQueue.checkForAnswers(statement);
-
-    // Route any detected unknowns into the inquiry system.
-    for (const q of this.talker.lastClarifyingQuestions) {
-      const topic = q.replace(/^what is (.+)\?$/i, "$1").trim();
-      if (!topic) continue;
-      // Placeholder unknowns skip the dict/wiki pipeline - looking up "[]" in a
-      // dictionary would always fail.  Load-bearing semantic unknowns go through
-      // the normal pipeline so the system tries to self-resolve first.
-      const isPlaceholder =
-        /^\[\]$|^\[\??\]$|^\?$|^_+$|^__\w*__$/.test(topic);
-      if (isPlaceholder) {
-        this.inquiryQueue.enqueueImmediate(topic, q);
-      } else {
-        this.inquiryQueue.enqueue(topic, q);
-      }
-      this.onUnknown?.(topic);
-    }
-
-    // Established facts are conclusions too: push the topic to working memory so
-    // follow-up questions ("what color is it?") can resolve "it" to the subject.
-    const topic = extractTopic(statement);
-    if (topic) {
-      // Resolve the topic's actual scope so the Resolver's context warm-start
-      // seeds the right manifold region on follow-up questions. Use false to
-      // avoid creating a new scope if the topic wasn't ingested.
-      const topicScope = this.atomizer.getSymbolScope(topic, false);
-      this.workingMemory.push({
-        query: statement,
-        conclusion: topic,
-        conclusionScope: topicScope > 0 ? topicScope : 0,
-        conclusionId: 0,
-        explanation: null,
-      });
-    }
-
-    return result;
-  }
-
-  public async processCode(source: string): Promise<string> {
-    return this.coder.processCode(source);
-  }
-
-  public respond(response: string): void {
-    logger.log(`[LiveInference]: ${response}`);
-  }
-}
-
+// ---------------------------------------------------------------------------
 // Runtime
+// ---------------------------------------------------------------------------
 
 export type AtomizerMode = "semantic" | "base" | "spectral";
 
@@ -369,15 +168,13 @@ export interface RuntimeOptions {
    * Root paths to scan for TypeScript/JavaScript source files.
    * When set, an AstSeedWorker is created and started automatically if the
    * manifold is fresh (system.length < 100 precepts at boot).
-   * Pass `noWorkers: false` (the default) to offload parsing to ast.worker.
    */
   astSeedPaths?: string[];
   /** Options forwarded to AstSeedWorker.start(). */
   astSeedOptions?: AstSeedOptions;
   /**
    * Interval in ms for the autonomous learner cycle (default: 10 000).
-   * The learner samples low-confidence vault facts and promotes them through
-   * the challenge loop independently of user input.
+   * Handled by Mapper.startAutonomy() internally.
    */
   learnerIntervalMs?: number;
   /**
@@ -395,9 +192,25 @@ export class Runtime {
   /** Which atomizer mode was actually used (may differ from requested if fallback occurred). */
   public readonly atomizerMode: AtomizerMode;
   public readonly store: Store;
+  /**
+   * The Mapper - the single thinker (perception + locomotion + learning + motivation).
+   * All text input should go through `mapper.process(text)`.
+   */
+  public readonly mapper: Mapper;
+  /**
+   * The Language layer - translation between raw text and the manifold.
+   * Use `language.setRespond(cb)` to receive responses from mapper.process().
+   */
+  public readonly language: Language;
+  /** @deprecated Use {@link mapper} instead. */
   public readonly resolver: Resolver;
-  public readonly unfolder: Unfolder;
-  public readonly inference: LiveInference;
+  /**
+   * @deprecated Use {@link mapper} instead.
+   * Kept as a deprecated alias so existing code using `rt.inference.processX()`
+   * keeps compiling; `mapper` has deprecated `processX` aliases that delegate
+   * to `mapper.process()`.
+   */
+  get inference(): Mapper { return this.mapper; }
   /** The ego-centre precept.  null when skipIdentity was set. */
   public readonly identity: SelfConcept | null;
   /**
@@ -410,10 +223,10 @@ export class Runtime {
    * Worker pool for off-thread computation: manifold metrics, Wikipedia fetch,
    * and WordNet dictionary lookup.  Shares the System's SharedArrayBuffer
    * with the manifold worker so reads are zero-copy.
-   * Null in unit-test boots where no tick / no workers are desired
-   * (set RuntimeOptions.noWorkers to suppress).
+   * Null in unit-test boots where no workers are desired.
    */
   public readonly workers: WorkerPool | null;
+  public readonly unfolder: Unfolder;
 
   /** CognitiveLoop - the autonomous motivation daemon. Active when lifecycle is on. */
   public cognitiveLoop: CognitiveLoop | null = null;
@@ -421,7 +234,6 @@ export class Runtime {
   public astSeeder: AstSeedWorker | null = null;
 
   private _tickTimer: ReturnType<typeof setInterval> | null = null;
-  private _learnerTimer: ReturnType<typeof setInterval> | null = null;
   private _gapScanTimer: ReturnType<typeof setInterval> | null = null;
   private _inquiryDrainTimer: ReturnType<typeof setInterval> | null = null;
   private _gapSeen = new Set<string>();
@@ -450,9 +262,9 @@ export class Runtime {
     atomizer: Atomic.Engine;
     atomizerMode: AtomizerMode;
     store: Store;
-    resolver: Resolver;
+    mapper: Mapper;
+    language: Language;
     unfolder: Unfolder;
-    inference: LiveInference;
     identity: SelfConcept | null;
     lifecycle?: ManifoldLifecycle | null;
     lifecycleCtx?: DatabaseContext | null;
@@ -462,9 +274,10 @@ export class Runtime {
     this.atomizer = fields.atomizer;
     this.atomizerMode = fields.atomizerMode;
     this.store = fields.store;
-    this.resolver = fields.resolver;
+    this.mapper = fields.mapper;
+    this.language = fields.language;
+    this.resolver = fields.mapper as unknown as Resolver;
     this.unfolder = fields.unfolder;
-    this.inference = fields.inference;
     this.identity = fields.identity;
     this.lifecycle = fields.lifecycle ?? null;
     this._lifecycleCtx = fields.lifecycleCtx ?? null;
@@ -473,7 +286,7 @@ export class Runtime {
 
   /**
    * Constructs and wires the full stack:
-   *   System → Atomizer → Store → Resolver → Unfolder → LiveInference → SelfConcept
+   *   System → Atomizer → Store → Mapper → Language → Skills → SelfConcept
    */
   static async boot(opts: RuntimeOptions = {}): Promise<Runtime> {
     const system = new System();
@@ -515,16 +328,16 @@ export class Runtime {
     const store = new Store(system, atomizer, opts.db);
     await store.waitForInit();
 
-    // Resolver + Unfolder + LiveInference
-    const resolver = new Resolver(system, atomizer, store);
+    // Mapper + Language + Unfolder
+    const mapper = new Mapper(system, atomizer, store);
+    const language = new Language(system, atomizer, { store });
+    mapper.setLanguage(language);
+
     const unfolder = new Unfolder(system, atomizer);
-    const inference = new LiveInference(
-      system,
-      atomizer,
-      resolver,
-      store,
-      unfolder
-    );
+    mapper.setUnfolder(unfolder);
+
+    // Register standard skills
+    _registerDefaultSkills(mapper, language, store, atomizer);
 
     // Identity (optional)
     let identity: SelfConcept | null = null;
@@ -534,29 +347,21 @@ export class Runtime {
     }
 
     // ManifoldLifecycle (optional)
-    // When lifecycle: true, wraps the system in full TMR allocation, primary +
-    // emergency failover, gravitational consolidation, and dream cycle.
     let lifecycle: ManifoldLifecycle | null = null;
     let lifecycleCtx: DatabaseContext | null = null;
     if (!opts.noLifecycle) {
       const emergency = new System();
-      // Use a separate in-memory DB for lifecycle persistence (snapshots/hydration).
       lifecycleCtx = new DatabaseContext(":memory:");
       const lifecycleConn = await lifecycleCtx.connect();
       const lifecyclePersistence = new SystemPersistence(lifecycleConn);
-      lifecycle = new ManifoldLifecycle(
-        system,
-        emergency,
-        lifecyclePersistence
-      );
+      lifecycle = new ManifoldLifecycle(system, emergency, lifecyclePersistence);
       lifecycle.setUnfolder(unfolder);
     }
 
-    // WorkerPool: off-thread manifold metrics, Wikipedia fetch, WordNet lookup.
+    // WorkerPool
     let workers: WorkerPool | null = null;
     if (!opts.noWorkers) {
       workers = new WorkerPool(system.buffer, system.getLayout());
-      // Route wiki fetches through the isolated wiki worker.
       unfolder.setWikiDelegate(topic => workers!.fetchWikipedia(topic));
     }
 
@@ -565,9 +370,9 @@ export class Runtime {
       atomizer,
       atomizerMode,
       store,
-      resolver,
+      mapper,
+      language,
       unfolder,
-      inference,
       identity,
       lifecycle,
       lifecycleCtx,
@@ -577,20 +382,50 @@ export class Runtime {
     // Wire the Cognitive Daemon (lifecycle active by default).
     if (!opts.noLifecycle) {
       rt.cognitiveLoop = new CognitiveLoop(rt);
-      // Hook InquiryQueue.enqueue → spawn Intent precept
-      rt.inference.getInquiryQueue().onEnqueue = (topic: string) => {
-        rt.cognitiveLoop!.spawnAndRegister(topic, 2.0, IntentTag.INQUIRY_GAP);
-      };
-      // Hook processQuestion unknown result → spawn USER_UNKNOWN Intent
-      rt.inference.onUnknown = (topic: string) => {
+      // Hook Mapper unknown result → spawn USER_UNKNOWN Intent
+      mapper.onUnknown = (topic: string) => {
         rt.cognitiveLoop!.spawnAndRegister(topic, 3.0, IntentTag.USER_UNKNOWN);
       };
     }
 
+    // Wire Mapper InquiryQueue → spawn Intent precept on enqueue
+    mapper.getInquiryQueue().onEnqueue = (topic: string) => {
+      if (rt.cognitiveLoop) {
+        rt.cognitiveLoop.spawnAndRegister(topic, 2.0, IntentTag.INQUIRY_GAP);
+      }
+    };
+
+    // Seed Capability Precepts
+    const seedCapabilities = async () => {
+      const sys = rt.system;
+      const atom = rt.atomizer;
+
+      const seed = (name: string, x: number, y: number, z: number) => {
+        const id = atom.getSymbolScope(name, false);
+        if (sys.isAllocated(id)) return;
+        sys.allocated[id] = 1;
+        if (id >= sys.length) sys.length = id + 1;
+        sys.mass[id] = sys.c ** 2 * 10;
+        sys.scope[id] = 1.0;
+        sys.depth[id] = 1.0;
+        sys.time[id] = 1.0;
+        sys.posX[id] = x;
+        sys.posY[id] = y;
+        sys.posZ[id] = z;
+        sys.posW[id] = 0;
+        sys.decayRate[id] = 0;
+        sys.operatorClass[id] = OperatorClass.Capability;
+      };
+
+      seed("SKILL:LANGUAGE", 25, 0.5, 0.5);
+      seed("SKILL:ASSERTION", 15, 0.3, 0.3);
+      seed("SKILL:CODE", 60, 1.0, 2.0);
+      seed("SKILL:ARITHMETIC", 5, 0.1, 0.1);
+    };
+
     // Wire the AST seeder if root paths were specified.
     if (opts.astSeedPaths?.length) {
       rt.astSeeder = new AstSeedWorker(opts.astSeedPaths);
-      // Auto-start on a fresh manifold (nothing seeded yet).
       if (system.length < 100) {
         rt.astSeeder.start(system, atomizer, store, {
           ...opts.astSeedOptions,
@@ -607,18 +442,10 @@ export class Runtime {
       });
     }
 
-    // Restore any unresolved inquiries from the previous session, and seed
-    // canonical syllogism templates so Phase 0b vault recall handles them
-    // before falling through to the hard-coded NLP rules in Phase 1.
-    //
-    // Both run in the background, but the combined promise is stored on the
-    // Runtime so dispose() can await them before closing the store. Without
-    // this, a fast dispose() races their DuckDB prepare() calls and emits
-    // "connection disconnected" warnings.
     const restoreInquiries = store
       .loadInquiryQueue()
       .then(items => {
-        if (!rt._disposed) rt.inference.getInquiryQueue().populate(items);
+        if (!rt._disposed) mapper.getInquiryQueue().populate(items);
       })
       .catch(e => {
         if (!rt._disposed) logger.warn("[INQUIRY LOAD]", e);
@@ -633,9 +460,15 @@ export class Runtime {
       if (!rt._disposed) logger.warn("[SYLLOGISM SEED]", e);
     });
 
-    rt._bootBackground = Promise.all([restoreInquiries, seedTemplates]).then(
-      () => undefined
-    );
+    const seedCapabilitiesTask = seedCapabilities().catch(e => {
+      if (!rt._disposed) logger.warn("[CAPABILITY SEED]", e);
+    });
+
+    rt._bootBackground = Promise.all([
+      restoreInquiries,
+      seedTemplates,
+      seedCapabilitiesTask,
+    ]).then(() => undefined);
 
     return rt;
   }
@@ -644,10 +477,6 @@ export class Runtime {
    * Starts the lightweight maintenance tick: decays atom masses and temporal
    * freshness (posW) on every interval.  Called automatically by boot() unless
    * RuntimeOptions.noTick is set.
-   *
-   * The tick intentionally does not run consolidation, dream cycle, or TMR -
-   * those live in ManifoldLifecycle for advanced deployments.  This tick provides
-   * the minimum needed for temporal ordering to mean anything: decay and age.
    */
   startTick(
     intervalMs: number = DOPAT_CONFIG.observability.TICK_INTERVAL_MS,
@@ -660,37 +489,25 @@ export class Runtime {
     this._tickIntervalMs = intervalMs;
     this._tickTimer = setInterval(() => {
       if (this.lifecycle) {
-        // Full lifecycle tick: TMR maintenance, decay, consolidation, dream cycle.
         this.lifecycle.tick(intervalMs);
       } else {
-        // Lightweight tick: decay + age freshness only.
         this.system.decay(intervalMs);
       }
     }, intervalMs);
 
-    // Autonomous learner cycle - runs independently of user input.
-    const learnerMs = opts.learnerIntervalMs ?? 10_000;
-    let _learnerCycles = 0;
-    this._learnerTimer = setInterval(() => {
-      this.inference
-        .getLearner()
-        .runCycle(5)
-        .catch(e => logger.warn("[LEARNER TIMER]", e));
-      // Periodic vault cull: decay usage counts and delete zero-energy entries.
-      // Runs every 6th learner cycle (~60 s by default) so the vault ranking
-      // doesn't drift without user interaction - the per-processIntent cull
-      // only fires when a user is actively talking.
-      if (++_learnerCycles % 6 === 0) {
-        this.store
-          .cullWeakWaveForms()
-          .catch(e => logger.warn("[VAULT CULL]", e));
-      }
-    }, learnerMs);
+    // Delegate learner cycle + cognitive tick to Mapper.startAutonomy().
+    // CognitiveLoop.start() calls mapper.startAutonomy() via the shim when
+    // lifecycle is active; call it directly when lifecycle is off so the
+    // learner still runs in lightweight boots.
+    if (this.cognitiveLoop) {
+      this.cognitiveLoop.start();
+    } else {
+      this.mapper.startAutonomy({
+        learnerIntervalMs: opts.learnerIntervalMs ?? 10_000,
+      });
+    }
 
-    // Start the Cognitive Daemon.
-    this.cognitiveLoop?.start();
-
-    // Background constellation gap scanner (requires lifecycle / workers).
+    // Background constellation gap scanner (requires lifecycle).
     const proactive = opts.proactivity !== false && this.lifecycle !== null;
     if (proactive) {
       const scanMs = opts.gapScanIntervalMs ?? 30_000;
@@ -699,18 +516,9 @@ export class Runtime {
         scanMs
       );
 
-      // Autonomous InquiryQueue draining - works through pending topics at 5 s cadence.
+      // Autonomous InquiryQueue draining via Mapper.drainInquiries().
       this._inquiryDrainTimer = setInterval(() => {
-        this.inference
-          .getInquiryQueue()
-          .step(
-            3,
-            this.unfolder,
-            this.resolver,
-            this.system,
-            this.atomizer,
-            this.store
-          )
+        this.mapper.drainInquiries(3)
           .catch(e => logger.warn("[INQUIRY DRAIN]", e));
       }, 5_000);
     }
@@ -721,10 +529,6 @@ export class Runtime {
       clearInterval(this._tickTimer);
       this._tickTimer = null;
     }
-    if (this._learnerTimer !== null) {
-      clearInterval(this._learnerTimer);
-      this._learnerTimer = null;
-    }
     if (this._gapScanTimer !== null) {
       clearInterval(this._gapScanTimer);
       this._gapScanTimer = null;
@@ -733,7 +537,12 @@ export class Runtime {
       clearInterval(this._inquiryDrainTimer);
       this._inquiryDrainTimer = null;
     }
-    this.cognitiveLoop?.stop();
+    // Stop Mapper's autonomous cycles (learner + cognitive tick).
+    if (this.cognitiveLoop) {
+      this.cognitiveLoop.stop();
+    } else {
+      this.mapper.stopAutonomy();
+    }
   }
 
   get isTickRunning(): boolean {
@@ -748,11 +557,6 @@ export class Runtime {
    * Seeds canonical logical syllogism templates into the vault at high energy
    * so Phase 0b vault recall handles them before the hard-coded Phase 1 NLP rules.
    * Idempotent: templates already present (by signature) are skipped.
-   *
-   * @param cancelled Predicate polled between awaits. When it returns true,
-   *                  the seeder exits cleanly without further DuckDB writes -
-   *                  used so dispose() can stop seeding before closing the
-   *                  store rather than swallowing "connection disconnected".
    */
   private static async _seedSyllogisms(
     store: Store,
@@ -760,70 +564,20 @@ export class Runtime {
     system: System,
     cancelled: () => boolean = () => false
   ): Promise<void> {
-    // Template definitions: [premise text, conclusion text, energy]
-    // Energy 5.0 is well above normal vault entries (~1.0) so they rank first.
     const templates: Array<[string, string, number]> = [
-      // Transitivity: A is B; B is C |- A is C
       ["A is B B is C |-", "A is C", 5.0],
-      // Universal instantiation: All A are B; X is A |- X is B
       ["All A are B X is A |-", "X is B", 5.0],
-      // Contrapositive: A implies B; not B |- not A
       ["A implies B not B |-", "not A", 5.0],
-      // Existence: A was created in D |- A did not exist before D
       ["A was created in D |-", "A did not exist before D", 5.0],
-      // After-transitivity: A after B; B after C |- A after C
-      // Enables ordinal chaining along the number line:
-      //   "2 after 1" + "1 after 0" → "2 after 0"
       ["A after B B after C |-", "A after C", 5.0],
     ];
 
-    // -- Number line topology -------------------------------------------------
-    //
-    // Crystallises "after N is |-" → "N+1" for N = 0..9 so that the query
-    // "what is after N?" resolves via a direct Phase 0 vault lookup:
-    //   Listener builds topologicalQuery = "after N is"
-    //   Phase 0 probe = [after, N, is, sink]
-    //   Vault match → "N+1"
-    //
-    // Energy 5.0: ordinal axioms are as certain as arithmetic axioms.
-    for (let n = 0; n <= 9; n++) {
+    for (let n = 0; n <= 99; n++) {
       templates.push([`after ${n} is |-`, `${n + 1}`, 5.0]);
     }
 
-    // -- Arithmetic axioms ----------------------------------------------------
-    //
-    // Successor chain: "N plus 1 equals N+1" for N = 0..30.
-    // Covers all intermediate steps produced by the bridge facts below -
-    // the furthest bridge result is (20+9-1)+1 = 29+1, so n=29 is needed.
-    // Energy 5.0: mathematical axioms that must not be overridden.
-    for (let n = 0; n <= 30; n++) {
+    for (let n = 0; n <= 99; n++) {
       templates.push([`${n} plus 1 equals |-`, `${n + 1}`, 5.0]);
-    }
-
-    // Bridge facts: "A plus B equals (A+B−1) plus 1".
-    // Combined with the successor chain, enables one-level derivation:
-    //   "6+6  →  11+1  →  12"  (bridge → successor → answer)
-    //   "12+3 →  14+1  →  15"  (two-digit bridge → successor → answer)
-    //
-    // Range:
-    //   A = 1..9  (single-digit first operand)  - covers sums 11..18
-    //   A = 10..20 (two-digit first operand)    - covers sums 12..29
-    // Both orderings seeded so B+A queries hit identically.
-    //
-    // Energy 2.0: below normal training (3.0) so explicit teaching overrides.
-    for (let a = 1; a <= 20; a++) {
-      // For single-digit a: start b at a to avoid seeding both a+b and b+a twice.
-      // For two-digit a: always start b at 1 (b is always single-digit here).
-      const bStart = a <= 9 ? a : 1;
-      for (let b = bStart; b <= 9; b++) {
-        const sum = a + b;
-        if (sum <= 10) continue;
-        const intermediate = `${sum - 1} plus 1`;
-        templates.push([`${a} plus ${b} equals |-`, intermediate, 2.0]);
-        if (a !== b) {
-          templates.push([`${b} plus ${a} equals |-`, intermediate, 2.0]);
-        }
-      }
     }
 
     for (const [premiseText, conclusionText, energy] of templates) {
@@ -832,15 +586,11 @@ export class Runtime {
         const premiseIds = atomizer.ingestSequence(premiseText, system);
         const hit = await store.checkInterferencePattern(premiseIds);
         if (cancelled()) return;
-        if (hit) continue; // already seeded
+        if (hit) continue;
         const conclusionIds = atomizer.ingestSequence(conclusionText, system);
         await store.crystallizeProof(premiseIds, conclusionIds, energy);
-        logger.debug(
-          `[SYLLOGISM SEED] seeded: "${premiseText}" → "${conclusionText}"`
-        );
+        logger.debug(`[SYLLOGISM SEED] seeded: "${premiseText}" → "${conclusionText}"`);
       } catch (e) {
-        // Suppress noise if we're already tearing down - those errors are
-        // expected ("connection disconnected") and not actionable.
         if (cancelled()) return;
         logger.warn("[SYLLOGISM SEED] failed for template:", premiseText, e);
       }
@@ -849,21 +599,17 @@ export class Runtime {
 
   /**
    * Scans constellation gaps and enqueues any new strained atom pairs as
-   * inquiry topics.  Skips pairs seen in the current scan window (_gapSeen).
+   * inquiry topics via Mapper.enqueueInquiry().
    */
   private async _runGapScan(): Promise<void> {
     try {
-      const queue = this.inference.getInquiryQueue();
       let rows: Array<{ labelA: string; labelB: string }> = [];
 
       if (this.workers) {
         const cs = await this.workers.computeConstellations(this.system.length);
         const filtered = cs.filter(g => g.members.length >= 3).slice(0, 15);
         if (filtered.length === 0) return;
-        const rawGaps = await this.workers.computeGaps(
-          filtered,
-          this.system.length
-        );
+        const rawGaps = await this.workers.computeGaps(filtered, this.system.length);
         rows = rawGaps.slice(0, 2).map(g => ({
           labelA: this.atomizer.resolveScope(this.system.scope[g.atomA]) ?? "?",
           labelB: this.atomizer.resolveScope(this.system.scope[g.atomB]) ?? "?",
@@ -872,38 +618,20 @@ export class Runtime {
         const idx = buildManifoldIndex(this.system);
         const cs = constellations(this.system, { minSize: 3, index: idx });
         if (cs.length === 0) return;
-        const gaps = constellationGaps(
-          this.system,
-          cs.slice(0, 15),
-          this.atomizer,
-          {
-            maxPerConstellation: 1,
-            minMassRatio: 0.05,
-          }
-        );
-        rows = gaps
-          .slice(0, 2)
-          .map(g => ({ labelA: g.labelA, labelB: g.labelB }));
+        const gaps = constellationGaps(this.system, cs.slice(0, 15), this.atomizer, {
+          maxPerConstellation: 1,
+          minMassRatio: 0.05,
+        });
+        rows = gaps.slice(0, 2).map(g => ({ labelA: g.labelA, labelB: g.labelB }));
       }
 
-      // Clear seen set at the start of each scan so pairs can be re-evaluated
-      // after enough time has passed for new structure to emerge.
-      // Do NOT clear _gapSeen here. The set persists across scans so each
-      // gap pair is only enqueued once per session - the previous clear caused
-      // the same top-2 pairs to be re-enqueued every 30 s, flooding the
-      // InquiryQueue and CognitiveLoop with identical intents.
       for (const r of rows) {
         const key = `${r.labelA}:${r.labelB}`;
         if (this._gapSeen.has(key)) continue;
         this._gapSeen.add(key);
         const query = `What is the relationship between ${r.labelA} and ${r.labelB}?`;
-        queue.enqueue(r.labelA, query);
-        // Spawn a CONSTELLATION_GAP Intent precept for the Cognitive Daemon.
-        this.cognitiveLoop?.spawnAndRegister(
-          r.labelA,
-          1.5,
-          IntentTag.CONSTELLATION_GAP
-        );
+        this.mapper.enqueueInquiry(r.labelA, query);
+        this.mapper.spawnIntent(r.labelA, 1.5, IntentTag.CONSTELLATION_GAP);
       }
     } catch {
       // Gap scan is non-critical; swallow errors silently.
@@ -912,16 +640,11 @@ export class Runtime {
 
   /** Releases GPU resources, stops the tick, closes database connections, and terminates workers. */
   async dispose(): Promise<void> {
-    // Flag boot-background tasks (syllogism seed, inquiry-queue restore) to
-    // bail out at their next checkpoint so they don't reach a closed store.
     this._disposed = true;
     this.stopTick();
     this.astSeeder?.pause();
-    // Drain any in-flight boot-background work before closing the store.
-    // Their per-step cancellation check sees _disposed and exits cleanly;
-    // we still await so a fast dispose() doesn't race the DuckDB prepare().
     await this._bootBackground.catch(() => {});
-    await this.resolver.dispose();
+    await this.mapper.dispose();
     await this.store.close();
     if (this._lifecycleCtx) await this._lifecycleCtx.close();
     if (this.workers) await this.workers.dispose();

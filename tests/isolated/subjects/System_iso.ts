@@ -283,6 +283,9 @@ class System implements Root.ManifoldView {
   /** Maximum possible number in any context (Maxilon). */
   public readonly maxilon: number = DOPAT_CONFIG.MAXILON;
 
+  /** Monotonically-increasing system clock (seconds elapsed since boot). */
+  public systemAge = 0.0;
+
   /** Cache for reactive property signals to prevent redundant allocations. */
   private viewCache: (Root.Signal | undefined)[] = [];
 
@@ -810,7 +813,8 @@ class System implements Root.ManifoldView {
 
   public refreshConceptAge(scope: number): void {
     for (const id of this.scopeIndex.get(scope) ?? []) {
-      this.posW[id] = 1.0;
+      if (this.decayRate[id] === 0) continue;
+      this.posW[id] = this.systemAge;
       this.update(id);
     }
   }
@@ -819,7 +823,8 @@ class System implements Root.ManifoldView {
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       if (!this.isAllocated(id)) continue;
-      this.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
+      if (this.decayRate[id] === 0) continue;
+      this.posW[id] = this.systemAge;
       this.update(id);
     }
   }
