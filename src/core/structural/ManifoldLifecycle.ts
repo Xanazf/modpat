@@ -1,4 +1,5 @@
 import { DOPAT_CONFIG } from "@config";
+import { random } from "@utils/seededRandom";
 import System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import { OperatorClass, SystemRef } from "@core_i/System";
@@ -676,7 +677,7 @@ export class ManifoldLifecycle {
           if (!this.activeSystem.isAllocated(id)) continue;
           this.activeSystem.decayRate[id] = 0.05;
           if (delta.basePosX !== 0 || delta.basePosY !== 0) {
-            const j = (Math.random() - 0.5) * jitter;
+            const j = (random() - 0.5) * jitter;
             this.activeSystem.posX[id] = delta.basePosX + j;
             this.activeSystem.posY[id] += delta.basePosY;
             this.activeSystem.posZ[id] += delta.factDisplacementZ;

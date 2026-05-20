@@ -16,7 +16,9 @@ import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { CognitiveLoop } from "@core_i/CognitiveLoop";
-import Mapper from "@core_i/Mapper";
+import Traveler from "@core_i/Traveler";
+/** @deprecated Use Traveler */
+type Mapper = Traveler;
 import Resolver from "@core_i/Resolver";
 import System, { OperatorClass, SystemRef } from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
@@ -33,6 +35,7 @@ import Unfolder from "@core_s/Unfolder";
 import { WorkerPool } from "@core_s/WorkerPool";
 import { AstSeedWorker, type AstSeedOptions } from "@core_s/AstSeedWorker";
 import { IntentTag } from "@utils/intentPrecept";
+import { seedRandom } from "@utils/seededRandom";
 import logger from "@utils/SpectralLogger";
 import Language from "./language/Language";
 import { createCoderSkill } from "./skills/Coder";
@@ -304,6 +307,7 @@ export class Runtime {
    *   System → Atomizer → Store → Mapper → Language → Skills → SelfConcept
    */
   static async boot(opts: RuntimeOptions = {}): Promise<Runtime> {
+    seedRandom(DOPAT_CONFIG.SEED);
     const system = new System();
 
     // Atomizer
@@ -344,7 +348,7 @@ export class Runtime {
     await store.waitForInit();
 
     // Mapper + Language + Unfolder
-    const mapper = new Mapper(system, atomizer, store);
+    const mapper = new Traveler(system, atomizer, store);
     const language = new Language(system, atomizer, { store });
     mapper.setLanguage(language);
 

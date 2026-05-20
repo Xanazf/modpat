@@ -5,6 +5,7 @@ import { SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { extractTriples } from "@utils/tripleExtract";
+import { random } from "@utils/seededRandom";
 import axios from "axios";
 import wiki from "wikipedia";
 
@@ -332,7 +333,7 @@ export default class Unfolder {
       // Concept-centroid posX with small jitter: keeps dreamt facts near their parent
       // concept for geodesic reachability while giving each fact a distinct position
       // so semantic diversity is not collapsed to a single coordinate.
-      const jitter = (Math.random() - 0.5) * jitterRange;
+      const jitter = (random() - 0.5) * jitterRange;
       this.system.posX[id] = basePosX + jitter;
       this.system.posY[id] = this.system.posY[id] + basePosY;
       this.system.posZ[id] = this.system.posZ[id] + factDisplacementZ;

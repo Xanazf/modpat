@@ -1,4 +1,6 @@
 const DOPAT_CONFIG = {
+  /** Seed for the seeded PRNG (seededRandom.ts). 0 = deterministic default. */
+  SEED: 0,
   STRIDE_COMPLEX: 2,
   MAX_PRECEPTS: 1_000_000,
   INFLUENCE_ZONES: 16,
@@ -45,6 +47,36 @@ const DOPAT_CONFIG = {
     BODY_SLOT_ATTRACTION: 80.0,
     /** Additive influence boost for Condition-slot precepts during path relaxation. */
     COND_SLOT_ATTRACTION: 60.0,
+    /**
+     * Hard upper bound for φ (local semantic density sum) to prevent numerical
+     * blow-up in the conformal factor e^{-2φ} when many atoms overlap.
+     * P2 safety gate: increments Mapper.phiClippedCount when triggered.
+     */
+    PHI_MAX: 50.0,
+    /**
+     * When true, the conformal metric correction e^{-2φ} is applied to path
+     * relaxation.  Set false to run plain geodesic (no conformal weighting) for
+     * A2 A/B comparisons.
+     */
+    CONFORMAL_ENABLED: true,
+    /**
+     * When true, getMetricForce includes the inner derivative of φ w.r.t.
+     * position (full gradient through the conformal factor).  False uses the
+     * simplified approximation that treats φ as spatially constant — valid for
+     * φ ≪ 1 and ~4× cheaper.  A1 design decision: keep simplified, expose
+     * full version behind this flag for A/B testing only.
+     */
+    A_B_FULL_GRADIENT: false,
+    /**
+     * Decay constant for the smooth temporal suppression factor:
+     *   temporal_weight = exp(-PHI_TEMPORAL_DECAY × max(0, pw_probe - pw_atom))
+     * Replaces the previous hard 0.01 cutoff.  Composes multiplicatively with
+     * the conformal e^{-2φ} factor.  PHI_TEMPORAL_DECAY = 3.0 gives:
+     *   Δw = 0   → weight 1.0   (no suppression)
+     *   Δw = 0.5 → weight ≈ 0.22
+     *   Δw = 1.0 → weight ≈ 0.05
+     */
+    PHI_TEMPORAL_DECAY: 3.0,
   },
 
   resolver: {
