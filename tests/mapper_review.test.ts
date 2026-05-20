@@ -64,10 +64,18 @@ export async function runMapperReviewTest() {
 
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        px[i] = env.system.posX[alphaId] + t * (env.system.posX[betaId] - env.system.posX[alphaId]);
-        py[i] = env.system.posY[alphaId] + t * (env.system.posY[betaId] - env.system.posY[alphaId]);
-        pe[i] = env.system.posZ[alphaId] + t * (env.system.posZ[betaId] - env.system.posZ[alphaId]);
-        pa[i] = env.system.posW[alphaId] + t * (env.system.posW[betaId] - env.system.posW[alphaId]);
+        px[i] =
+          env.system.posX[alphaId] +
+          t * (env.system.posX[betaId] - env.system.posX[alphaId]);
+        py[i] =
+          env.system.posY[alphaId] +
+          t * (env.system.posY[betaId] - env.system.posY[alphaId]);
+        pe[i] =
+          env.system.posZ[alphaId] +
+          t * (env.system.posZ[betaId] - env.system.posZ[alphaId]);
+        pa[i] =
+          env.system.posW[alphaId] +
+          t * (env.system.posW[betaId] - env.system.posW[alphaId]);
       }
 
       function calculateDiscreteAction(): number {
@@ -80,7 +88,14 @@ export async function runMapperReviewTest() {
           action += dx * dx + dy * dy + de * de + da * da;
         }
         for (let i = 1; i < steps; i++) {
-          const [V] = (mapper as any).getMetricForce(px[i], py[i], pe[i], pa[i], [], undefined);
+          const [V] = (mapper as any).getMetricForce(
+            px[i],
+            py[i],
+            pe[i],
+            pa[i],
+            [],
+            undefined
+          );
           action += 2.0 * V;
         }
         return action;
