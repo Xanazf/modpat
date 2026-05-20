@@ -19,11 +19,13 @@ import { InquiryQueue, type InquiryItem } from "./InquiryQueue";
 import type { SkillHandler } from "./skills";
 import type { Language } from "./language/Language";
 import type { WorkingMemory } from "./language/WorkingMemory";
+import { MapperWorkspace, MapperWorkspacePool } from "./ResolverSlot";
 import {
-  MapperWorkspace,
-  MapperWorkspacePool,
-} from "./ResolverSlot";
-import { classifyOperatorToken, OperatorClass, SlotType, SystemRef } from "./System";
+  classifyOperatorToken,
+  OperatorClass,
+  SlotType,
+  SystemRef,
+} from "./System";
 
 /**
  * Per-call inputs to perceive / perceiveCoherent / probe.
@@ -330,7 +332,7 @@ class Mapper implements Mapping.Engine {
         if (label?.toLowerCase() === "skill:code") return id;
       }
     }
-    
+
     if (intent === "assertion") {
       for (const id of this.skills.keys()) {
         const label = this.atomizer.resolveScope(id);
@@ -1709,7 +1711,11 @@ class Mapper implements Mapping.Engine {
       const contextTokens = Array.from(sequenceIds)
         .filter(id => {
           const cls = this.system.operatorClass[id];
-          return cls === OperatorClass.None || cls === OperatorClass.Action || cls === OperatorClass.Arithmetic;
+          return (
+            cls === OperatorClass.None ||
+            cls === OperatorClass.Action ||
+            cls === OperatorClass.Arithmetic
+          );
         })
         .map(id =>
           this.atomizer
@@ -1864,7 +1870,11 @@ class Mapper implements Mapping.Engine {
 
   public async perceiveCoherent(
     sequenceIds: Uint32Array,
-    opts: { probeMode?: boolean; maxIterations?: number; contextScopes?: Set<number> } = {}
+    opts: {
+      probeMode?: boolean;
+      maxIterations?: number;
+      contextScopes?: Set<number>;
+    } = {}
   ): Promise<CoherentResult> {
     const maxIter =
       opts.maxIterations ?? DOPAT_CONFIG.resolver.COHERENCE_MAX_ITERS;
@@ -2393,12 +2403,20 @@ class Mapper implements Mapping.Engine {
       // [subject... op sink] → [object], so a query [subject... op] won't match
       // without the sink suffix.  Append the first available Sink precept and retry.
       const N = sequenceIds.length;
-      const lastClass = N > 0 ? this.system.operatorClass[sequenceIds[N - 1]] : OperatorClass.None;
-      if (lastClass === OperatorClass.IdentityShift || lastClass === OperatorClass.Action) {
+      const lastClass =
+        N > 0
+          ? this.system.operatorClass[sequenceIds[N - 1]]
+          : OperatorClass.None;
+      if (
+        lastClass === OperatorClass.IdentityShift ||
+        lastClass === OperatorClass.Action
+      ) {
         const sinkScope = this.atomizer?.getSymbolScope("|-", false) ?? 0;
         if (sinkScope > 0) {
           const sinkId = [...this.system.getIdsByScope(sinkScope)].find(
-            id => this.system.isAllocated(id) && this.system.operatorClass[id] === OperatorClass.Sink
+            id =>
+              this.system.isAllocated(id) &&
+              this.system.operatorClass[id] === OperatorClass.Sink
           );
           if (sinkId !== undefined) {
             const probe = new Uint32Array([...sequenceIds, sinkId]);
@@ -2484,7 +2502,6 @@ class Mapper implements Mapping.Engine {
   // SKILLS / PROCESS / LEARNING / MOTIVATION / INQUIRY (Phase 3+4)
   // =========================================================================
 
-
   // ---- Learner internals --------------------------------------------------
 
   private static readonly NOISE_PROBES = [
@@ -2525,7 +2542,10 @@ class Mapper implements Mapping.Engine {
     return s.toLowerCase().replace(/\|-/g, "").replace(/\s+/g, " ").trim();
   }
 
-  private _resultMatchesExpected(reproduced: string, expected: string): boolean {
+  private _resultMatchesExpected(
+    reproduced: string,
+    expected: string
+  ): boolean {
     const r = this._normaliseLearned(reproduced);
     const e = this._normaliseLearned(expected);
     if (r === e) return true;
@@ -2574,7 +2594,8 @@ class Mapper implements Mapping.Engine {
 
     const success =
       this._normaliseLearned(reproduced).length > 0 &&
-      this._normaliseLearned(reproduced) !== this._normaliseLearned(probeText) &&
+      this._normaliseLearned(reproduced) !==
+        this._normaliseLearned(probeText) &&
       this._normaliseLearned(reproduced) !== "unknown" &&
       this._resultMatchesExpected(reproduced, candidate.targetPattern);
 
@@ -2853,10 +2874,13 @@ class Mapper implements Mapping.Engine {
   /** Hook for external listeners (LiveInference compatibility). */
   public onUnknown?: (topic: string) => void;
 
-  public startAutonomy(opts: { intervalMs?: number; learnerIntervalMs?: number } = {}): void {
+  public startAutonomy(
+    opts: { intervalMs?: number; learnerIntervalMs?: number } = {}
+  ): void {
     const cogTick =
       opts.intervalMs ??
-      ((DOPAT_CONFIG.observability as any).COGNITIVE_TICK_MS ?? 5_000);
+      (DOPAT_CONFIG.observability as any).COGNITIVE_TICK_MS ??
+      5_000;
     const learnerMs = opts.learnerIntervalMs ?? 10_000;
 
     if (this._cogTimer === null) {
@@ -2925,8 +2949,7 @@ class Mapper implements Mapping.Engine {
     if (bestId < 0) return;
 
     const tag = this._intentTagMap.get(bestId) ?? IntentTag.USER_UNKNOWN;
-    const topic =
-      this.atomizer.resolveScope(this.system.scope[bestId]) ?? "";
+    const topic = this.atomizer.resolveScope(this.system.scope[bestId]) ?? "";
 
     let success = false;
     try {
@@ -3035,7 +3058,9 @@ class Mapper implements Mapping.Engine {
         // Synthesis mode (e.g. "function add |-")
         const ids = this.atomizer.ingestSequence(text, this.system);
         const res = await this.perceiveCoherent(ids);
-        const decoded = this.atomizer.decodeSequence(res.ids, this.system).trim();
+        const decoded = this.atomizer
+          .decodeSequence(res.ids, this.system)
+          .trim();
         this.language.respond(decoded);
         return decoded;
       } else {
@@ -3112,7 +3137,9 @@ class Mapper implements Mapping.Engine {
     if (!handler) {
       // Fallback to pure topology-only perception if no skill handler matches
       const percResult = await this.perceive(ids);
-      const decoded = this.atomizer.decodeSequence(percResult, this.system).trim();
+      const decoded = this.atomizer
+        .decodeSequence(percResult, this.system)
+        .trim();
       return decoded || "unknown";
     }
 
@@ -3131,7 +3158,9 @@ class Mapper implements Mapping.Engine {
         ingestResult: result,
       });
 
-      logger.log(`[Mapper] Skill ${skillId} returned answer: ${skillResult.answer}`);
+      logger.log(
+        `[Mapper] Skill ${skillId} returned answer: ${skillResult.answer}`
+      );
 
       const { answer, confidence } = skillResult;
 
@@ -3179,20 +3208,34 @@ class Mapper implements Mapping.Engine {
   // ---- Backward-compat aliases (deprecated) --------------------------------
 
   /** @deprecated Use process(). */
-  async processIntent(text: string): Promise<string> { return this.process(text); }
+  async processIntent(text: string): Promise<string> {
+    return this.process(text);
+  }
   /** @deprecated Use process(). */
-  async processQuestion(text: string): Promise<string> { return this.process(text); }
+  async processQuestion(text: string): Promise<string> {
+    return this.process(text);
+  }
   /** @deprecated Use process(). */
-  async processCommand(text: string): Promise<string> { return this.process(text); }
+  async processCommand(text: string): Promise<string> {
+    return this.process(text);
+  }
   /** @deprecated Use process(). */
-  async processCode(text: string): Promise<string> { return this.process(text); }
+  async processCode(text: string): Promise<string> {
+    return this.process(text);
+  }
 
   /** @deprecated Set language.setRespond() directly. */
-  set respond(cb: (msg: string) => void) { this.language?.setRespond(cb); }
+  set respond(cb: (msg: string) => void) {
+    this.language?.setRespond(cb);
+  }
   /** @deprecated Use language.getRespond() directly. */
-  get respond(): (msg: string) => void { return this.language?.getRespond() ?? (() => {}); }
+  get respond(): (msg: string) => void {
+    return this.language?.getRespond() ?? (() => {});
+  }
   /** @deprecated Set language.setRespond() directly. */
-  set onResponse(cb: (msg: string) => void) { this.language?.setRespond(cb); }
+  set onResponse(cb: (msg: string) => void) {
+    this.language?.setRespond(cb);
+  }
 
   /** @deprecated Use learnCycle() directly. */
   getLearner(): { runCycle: (n?: number) => Promise<Memory.ValidationReport> } {
@@ -3203,7 +3246,6 @@ class Mapper implements Mapping.Engine {
   getWorkingMemory(): WorkingMemory | null {
     return (this.language as any)?.workingMemory ?? null;
   }
-
 }
 
 export default Mapper;

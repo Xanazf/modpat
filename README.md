@@ -97,7 +97,7 @@ A thin **Language** layer sits at the boundary: it converts raw text into System
 ```
 Natural language → Language.ingest() → Manifold (DOPAT) → Mapper.perceive() + traverse()
                          ↑                                          ↕
-                  Language.express() ←── Mapper.process() ──  Memory Vault (DuckDB)
+                  Language.express() ←-- Mapper.process() --  Memory Vault (DuckDB)
 ```
 
 ### Contiguous Memory Manifold (DOPAT)

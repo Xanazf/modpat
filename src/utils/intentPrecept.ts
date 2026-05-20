@@ -28,13 +28,20 @@ export function spawnIntent(
   return id;
 }
 
-export function decayIntent(system: Root.ManifoldView, id: number, factor: number): void {
+export function decayIntent(
+  system: Root.ManifoldView,
+  id: number,
+  factor: number
+): void {
   system.mass[id] *= factor;
   system.update(id);
 }
 
-export function boostIntent(system: Root.ManifoldView, id: number, factor: number): void {
+export function boostIntent(
+  system: Root.ManifoldView,
+  id: number,
+  factor: number
+): void {
   system.mass[id] *= factor;
   system.update(id);
 }
-

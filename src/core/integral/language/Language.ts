@@ -19,7 +19,11 @@ import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
 import nlp from "compromise";
 import type { BridgeCandidate } from "../Mapper";
-import { WorkingMemory, buildExplanation, type MemoryFrame } from "./WorkingMemory";
+import {
+  WorkingMemory,
+  buildExplanation,
+  type MemoryFrame,
+} from "./WorkingMemory";
 
 // ---- Intent classification ------------------------------------------------
 
@@ -169,14 +173,14 @@ export class Language {
     } = {}
   ) {
     const { SystemRef: SysRef } = require("@core_i/System");
-    this.systemRef =
-      system instanceof SysRef ? system : new SysRef(system);
+    this.systemRef = system instanceof SysRef ? system : new SysRef(system);
     this.atomizer = atomizer;
     this.store = opts.store ?? null;
     this.workingMemory = opts.workingMemory ?? new WorkingMemory();
-    this._respond = opts.respond ?? ((msg: string) => logger.log(`[Language]: ${msg}`));
+    this._respond =
+      opts.respond ?? ((msg: string) => logger.log(`[Language]: ${msg}`));
   }
-  
+
   public setRespond(respond: (msg: string) => void): void {
     this._respond = respond;
   }
@@ -251,8 +255,12 @@ export class Language {
     }
 
     // Build topological query form
-    const { topologicalQuery, attractionCenter, isArithmeticQuery, isOrdinalQuery } =
-      this.extractTopologicalQuery(shifted, text);
+    const {
+      topologicalQuery,
+      attractionCenter,
+      isArithmeticQuery,
+      isOrdinalQuery,
+    } = this.extractTopologicalQuery(shifted, text);
 
     // Extract heat nodes for keyword matching
     const heatNodes = this.extractHeatNodes(text);
@@ -370,7 +378,8 @@ export class Language {
   // ---- Assertion ingestion ------------------------------------------------
 
   /** Tokens that signal a syntactic placeholder. */
-  private static readonly PLACEHOLDER_RE = /^\[\]$|^\[\??\]$|^\?$|^_+$|^__\w*__$/;
+  private static readonly PLACEHOLDER_RE =
+    /^\[\]$|^\[\??\]$|^\?$|^_+$|^__\w*__$/;
 
   /**
    * Ingests a declarative assertion into the manifold and vault.
@@ -380,7 +389,10 @@ export class Language {
    * Assumes `ids` are already the ingested quanta for `text` (provided by
    * Language.ingest → passed through the ASSERTION skill context).
    */
-  public async ingestAssertion(text: string, ids: Uint32Array): Promise<string> {
+  public async ingestAssertion(
+    text: string,
+    ids: Uint32Array
+  ): Promise<string> {
     if (!this.store) return `Ignored (no store): "${text}"`;
 
     const statement_ = shiftPerspective(text);
@@ -404,7 +416,10 @@ export class Language {
       }
     }
 
-    const quanta = ids.length > 0 ? ids : this.atomizer.ingestSequence(statement_, this.system);
+    const quanta =
+      ids.length > 0
+        ? ids
+        : this.atomizer.ingestSequence(statement_, this.system);
 
     if (quanta.length === 0) {
       const response = `Ignored (Unprocessable Input): "${text}"`;
@@ -420,12 +435,19 @@ export class Language {
     // SVO split crystallization
     {
       const sinkScope = this.atomizer.getSymbolScope("|-", false);
-      const sinkCandidates = sinkScope > 0 ? [...this.system.getIdsByScope(sinkScope)] : [];
+      const sinkCandidates =
+        sinkScope > 0 ? [...this.system.getIdsByScope(sinkScope)] : [];
       let sinkId = sinkCandidates.find(
-        id => this.system.isAllocated(id) && this.system.operatorClass[id] === OperatorClass.Sink
+        id =>
+          this.system.isAllocated(id) &&
+          this.system.operatorClass[id] === OperatorClass.Sink
       );
       if (sinkId === undefined && sinkScope > 0) {
-        sinkId = this.system.createLocation(this.system.c ** 2, sinkScope, "language_sink_init");
+        sinkId = this.system.createLocation(
+          this.system.c ** 2,
+          sinkScope,
+          "language_sink_init"
+        );
         this.system.operatorClass[sinkId] = OperatorClass.Sink;
         this.system.posW[sinkId] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS;
         this.system.update(sinkId);
@@ -434,13 +456,19 @@ export class Language {
         let opIdx = -1;
         for (let i = 0; i < quanta.length; i++) {
           const cls = this.system.operatorClass[quanta[i]];
-          if (cls === OperatorClass.IdentityShift || cls === OperatorClass.Action) {
+          if (
+            cls === OperatorClass.IdentityShift ||
+            cls === OperatorClass.Action
+          ) {
             opIdx = i;
             break;
           }
         }
         if (opIdx > 0 && opIdx < quanta.length - 1) {
-          const probeIds = new Uint32Array([...quanta.subarray(0, opIdx + 1), sinkId]);
+          const probeIds = new Uint32Array([
+            ...quanta.subarray(0, opIdx + 1),
+            sinkId,
+          ]);
           const objectIds = quanta.subarray(opIdx + 1);
           const hasArithmetic = Array.from(quanta.subarray(0, opIdx + 1)).some(
             id => this.system.operatorClass[id] === OperatorClass.Arithmetic
@@ -451,14 +479,32 @@ export class Language {
           // Commutative arithmetic: crystallize reversed operands for + and *
           if (hasArithmetic && opIdx === 3 && quanta.length >= 5) {
             const arithmeticOpId = quanta[1];
-            if (this.system.operatorClass[arithmeticOpId] === OperatorClass.Arithmetic) {
-              const opLabel = this.atomizer.resolveScope(this.system.scope[arithmeticOpId]) ?? "";
+            if (
+              this.system.operatorClass[arithmeticOpId] ===
+              OperatorClass.Arithmetic
+            ) {
+              const opLabel =
+                this.atomizer.resolveScope(this.system.scope[arithmeticOpId]) ??
+                "";
               const isCommutative = opLabel === "plus" || opLabel === "times";
               const leftId = quanta[0];
               const rightId = quanta[2];
-              if (isCommutative && this.system.scope[leftId] !== this.system.scope[rightId]) {
-                const reversedProbe = new Uint32Array([rightId, arithmeticOpId, leftId, quanta[3], sinkId]);
-                await this.store.crystallizeProof(reversedProbe, objectIds, energy);
+              if (
+                isCommutative &&
+                this.system.scope[leftId] !== this.system.scope[rightId]
+              ) {
+                const reversedProbe = new Uint32Array([
+                  rightId,
+                  arithmeticOpId,
+                  leftId,
+                  quanta[3],
+                  sinkId,
+                ]);
+                await this.store.crystallizeProof(
+                  reversedProbe,
+                  objectIds,
+                  energy
+                );
               }
             }
           }
@@ -481,7 +527,10 @@ export class Language {
     }
 
     // Detect clarification needs
-    const clarifyingQuestions = await this._detectClarificationNeeds(quanta, statement_);
+    const clarifyingQuestions = await this._detectClarificationNeeds(
+      quanta,
+      statement_
+    );
     for (const q of clarifyingQuestions) {
       this.respond(q);
     }
@@ -494,7 +543,10 @@ export class Language {
     return decodedMeaning;
   }
 
-  private async _detectClarificationNeeds(quanta: Uint32Array, statement: string): Promise<string[]> {
+  private async _detectClarificationNeeds(
+    quanta: Uint32Array,
+    statement: string
+  ): Promise<string[]> {
     if (!this.store) return [];
     const questions: string[] = [];
     const seen = new Set<string>();
@@ -513,8 +565,16 @@ export class Language {
       const isPlaceholder = Language.PLACEHOLDER_RE.test(label);
       const occurrences = scopeCounts.get(this.system.scope[id]) ?? 0;
       let opNeighbors = 0;
-      if (i > 0 && this.system.operatorClass[quanta[i - 1]] !== OperatorClass.None) opNeighbors++;
-      if (i < quanta.length - 1 && this.system.operatorClass[quanta[i + 1]] !== OperatorClass.None) opNeighbors++;
+      if (
+        i > 0 &&
+        this.system.operatorClass[quanta[i - 1]] !== OperatorClass.None
+      )
+        opNeighbors++;
+      if (
+        i < quanta.length - 1 &&
+        this.system.operatorClass[quanta[i + 1]] !== OperatorClass.None
+      )
+        opNeighbors++;
       let shouldAsk = false;
       if (isPlaceholder && opNeighbors >= 1) {
         shouldAsk = true;
@@ -568,14 +628,21 @@ export class Language {
 
     let result: number;
     switch (op) {
-      case "+": result = a + b; break;
-      case "-": result = a - b; break;
-      case "*": result = a * b; break;
+      case "+":
+        result = a + b;
+        break;
+      case "-":
+        result = a - b;
+        break;
+      case "*":
+        result = a * b;
+        break;
       case "/":
         if (b === 0) return null;
         result = a / b;
         break;
-      default: return null;
+      default:
+        return null;
     }
 
     if (!Number.isFinite(result)) return null;
@@ -661,7 +728,12 @@ export class Language {
       }
     }
 
-    return { topologicalQuery, attractionCenter, isArithmeticQuery, isOrdinalQuery };
+    return {
+      topologicalQuery,
+      attractionCenter,
+      isArithmeticQuery,
+      isOrdinalQuery,
+    };
   }
 
   /**

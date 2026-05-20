@@ -12,7 +12,13 @@ export async function executeE2ETest() {
     system.reset();
 
     const unfolder = new Unfolder(system, atomizer);
-    const inference = createTestMapper(system, atomizer, resolver, store, unfolder);
+    const inference = createTestMapper(
+      system,
+      atomizer,
+      resolver,
+      store,
+      unfolder
+    );
 
     // Step 1, crystallize a set of code patterns into the vault.
     const source = `

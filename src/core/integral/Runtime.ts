@@ -18,10 +18,7 @@ import { DOPAT_CONFIG } from "@config";
 import { CognitiveLoop } from "@core_i/CognitiveLoop";
 import Mapper from "@core_i/Mapper";
 import Resolver from "@core_i/Resolver";
-import System, {
-  OperatorClass,
-  SystemRef,
-} from "@core_i/System";
+import System, { OperatorClass, SystemRef } from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { SelfConcept } from "@core_s/Identity";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
@@ -78,7 +75,9 @@ function _registerDefaultSkills(
     if (decoded && decoded !== "unknown" && result.ids.length > 0) {
       const querySet = new Set(Array.from(ctx.queryIds));
       let overlap = 0;
-      for (const id of result.ids) { if (querySet.has(id)) overlap++; }
+      for (const id of result.ids) {
+        if (querySet.has(id)) overlap++;
+      }
       if (overlap / result.ids.length > 0.5) {
         return { answer: "unknown", confidence: 0 };
       }
@@ -224,7 +223,9 @@ export class Runtime {
    * keeps compiling; `mapper` has deprecated `processX` aliases that delegate
    * to `mapper.process()`.
    */
-  get inference(): Mapper { return this.mapper; }
+  get inference(): Mapper {
+    return this.mapper;
+  }
   /** The ego-centre precept.  null when skipIdentity was set. */
   public readonly identity: SelfConcept | null;
   /**
@@ -368,7 +369,11 @@ export class Runtime {
       lifecycleCtx = new DatabaseContext(":memory:");
       const lifecycleConn = await lifecycleCtx.connect();
       const lifecyclePersistence = new SystemPersistence(lifecycleConn);
-      lifecycle = new ManifoldLifecycle(system, emergency, lifecyclePersistence);
+      lifecycle = new ManifoldLifecycle(
+        system,
+        emergency,
+        lifecyclePersistence
+      );
       lifecycle.setUnfolder(unfolder);
     }
 
@@ -532,7 +537,8 @@ export class Runtime {
 
       // Autonomous InquiryQueue draining via Mapper.drainInquiries().
       this._inquiryDrainTimer = setInterval(() => {
-        this.mapper.drainInquiries(3)
+        this.mapper
+          .drainInquiries(3)
           .catch(e => logger.warn("[INQUIRY DRAIN]", e));
       }, 5_000);
     }
@@ -603,7 +609,9 @@ export class Runtime {
         if (hit) continue;
         const conclusionIds = atomizer.ingestSequence(conclusionText, system);
         await store.crystallizeProof(premiseIds, conclusionIds, energy);
-        logger.debug(`[SYLLOGISM SEED] seeded: "${premiseText}" → "${conclusionText}"`);
+        logger.debug(
+          `[SYLLOGISM SEED] seeded: "${premiseText}" → "${conclusionText}"`
+        );
       } catch (e) {
         if (cancelled()) return;
         logger.warn("[SYLLOGISM SEED] failed for template:", premiseText, e);
@@ -623,7 +631,10 @@ export class Runtime {
         const cs = await this.workers.computeConstellations(this.system.length);
         const filtered = cs.filter(g => g.members.length >= 3).slice(0, 15);
         if (filtered.length === 0) return;
-        const rawGaps = await this.workers.computeGaps(filtered, this.system.length);
+        const rawGaps = await this.workers.computeGaps(
+          filtered,
+          this.system.length
+        );
         rows = rawGaps.slice(0, 2).map(g => ({
           labelA: this.atomizer.resolveScope(this.system.scope[g.atomA]) ?? "?",
           labelB: this.atomizer.resolveScope(this.system.scope[g.atomB]) ?? "?",
@@ -632,11 +643,18 @@ export class Runtime {
         const idx = buildManifoldIndex(this.system);
         const cs = constellations(this.system, { minSize: 3, index: idx });
         if (cs.length === 0) return;
-        const gaps = constellationGaps(this.system, cs.slice(0, 15), this.atomizer, {
-          maxPerConstellation: 1,
-          minMassRatio: 0.05,
-        });
-        rows = gaps.slice(0, 2).map(g => ({ labelA: g.labelA, labelB: g.labelB }));
+        const gaps = constellationGaps(
+          this.system,
+          cs.slice(0, 15),
+          this.atomizer,
+          {
+            maxPerConstellation: 1,
+            minMassRatio: 0.05,
+          }
+        );
+        rows = gaps
+          .slice(0, 2)
+          .map(g => ({ labelA: g.labelA, labelB: g.labelB }));
       }
 
       for (const r of rows) {

@@ -15,7 +15,12 @@ export async function executeLiveInferenceSuite() {
     } catch {}
 
     const env = await TestHarness.getEnvironment("semantic", testDbPath);
-    const inference = createTestMapper(env.system, env.atomizer, env.resolver, env.store);
+    const inference = createTestMapper(
+      env.system,
+      env.atomizer,
+      env.resolver,
+      env.store
+    );
 
     const responses: string[] = [];
     inference.respond = (response: string) => {

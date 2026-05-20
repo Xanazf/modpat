@@ -168,7 +168,12 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Pre-ingestion resonance check detects logical contradiction", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(primary, atomizer, resolver, localStore);
+      const localInference = createTestMapper(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       await localInference.processIntent("gravity is strong");
       const response = await localInference.processIntent(
@@ -185,7 +190,12 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Negative feedback reduces crystallized wave form energy", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(primary, atomizer, resolver, localStore);
+      const localInference = createTestMapper(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       // Crystallize one wave form with energy 1.0
       await localInference.processCommand("nitrogen is a gas");
@@ -225,7 +235,12 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Positive feedback increases crystallized wave form energy", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(primary, atomizer, resolver, localStore);
+      const localInference = createTestMapper(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       await localInference.processCommand("the sun is a star");
 
@@ -260,7 +275,12 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Repeated negative feedback drives energy to zero; cullWeakWaveForms removes it", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(primary, atomizer, resolver, localStore);
+      const localInference = createTestMapper(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       // 3× "no" drives energy: 1.0 → 0.5 → 0.0 → -0.5
       await localInference.processCommand("the moon is made of cheese");
@@ -298,7 +318,12 @@ export async function executeContinuousLearningSuite() {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
       // Fresh inference - last_signature starts null
-      const localInference = createTestMapper(primary, atomizer, resolver, localStore);
+      const localInference = createTestMapper(
+        primary,
+        atomizer,
+        resolver,
+        localStore
+      );
 
       // With last_signature = null, "no" would fall through to processCommand instead of
       // entering the feedback branch. After the fix, processQuestion sets last_signature,

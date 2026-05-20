@@ -284,9 +284,18 @@ export async function processCode(
         const extracted = extractPatternFromNode(node);
         if (extracted) {
           const intentQuanta = atomizer.ingestSequence(lhs, system);
-          const patternQuanta = atomizer.ingestPattern(extracted.pattern, extracted.slotTypes, system);
+          const patternQuanta = atomizer.ingestPattern(
+            extracted.pattern,
+            extracted.slotTypes,
+            system
+          );
           const slotFlags = store.packSlotFlags(extracted.slotTypes);
-          await store.crystallizeProof(intentQuanta, patternQuanta, 1.0, slotFlags);
+          await store.crystallizeProof(
+            intentQuanta,
+            patternQuanta,
+            1.0,
+            slotFlags
+          );
           const msg = `Manual pattern ingested: "${lhs}" → "${extracted.pattern}"`;
           respond(msg);
           return msg;
@@ -337,11 +346,17 @@ export async function processCode(
   for (const { intentPhrase, extracted } of collected) {
     try {
       const intentQuanta = atomizer.ingestSequence(intentPhrase, system);
-      const patternQuanta = atomizer.ingestPattern(extracted.pattern, extracted.slotTypes, system);
+      const patternQuanta = atomizer.ingestPattern(
+        extracted.pattern,
+        extracted.slotTypes,
+        system
+      );
       const slotFlags = store.packSlotFlags(extracted.slotTypes);
       await store.crystallizeProof(intentQuanta, patternQuanta, 1.0, slotFlags);
       count++;
-      logger.debug(`[processCode] +pattern: "${intentPhrase}" → "${extracted.pattern}"`);
+      logger.debug(
+        `[processCode] +pattern: "${intentPhrase}" → "${extracted.pattern}"`
+      );
     } catch (e: any) {
       logger.error("[processCode] Failed to crystallize pattern:", e.message);
     }
