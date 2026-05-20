@@ -777,11 +777,23 @@ class Mapper implements Mapping.Engine {
         const SLOT_BODY: u32      = 2u;
         const SLOT_CONDITION: u32 = 4u;
 
-        struct GradResult { V: f32, gx: f32, gy: f32, gz: f32, gw: f32 };
+        struct MetricForceResult { V: f32, fx: f32, fy: f32, fz: f32, fw: f32 };
 
-        fn getGradientAt(p: vec4<f32>) -> GradResult {
-            var V = 1.0; var gx = 0.0; var gy = 0.0; var gz = 0.0; var gw = 0.0;
+        fn getMetricForceAt(p: vec4<f32>) -> MetricForceResult {
+            var V = 1.0; var fx = 0.0; var fy = 0.0; var fz = 0.0; var fw = 0.0;
             let F = params.iF;
+
+            // First pass: compute local semantic density sum phi(p)
+            var phi = 0.0;
+            for (var j = 0u; j < params.sysLength; j = j + 1u) {
+                let diff = p - sysPos[j];
+                let distSq = dot(diff, diff);
+                if (distSq >= params.iR) { continue; }
+                let infl_j = sysInfluence[j];
+                phi = phi + infl_j * exp(-distSq / F);
+            }
+
+            // Second pass: compute potential V and metric forces
             for (var j = 0u; j < params.sysLength; j = j + 1u) {
                 let diff = p - sysPos[j];
                 let distSq = dot(diff, diff);
@@ -790,14 +802,16 @@ class Mapper implements Mapping.Engine {
                 let st = sysSlotType[j];
                 if ((st & SLOT_BODY) != 0u)      { infl = infl + params.bodyAttr; }
                 if ((st & SLOT_CONDITION) != 0u)  { infl = infl + params.condAttr; }
-                let dw = diff.w;
-                infl = infl * exp(-(dw * 50.0) * (dw * 50.0));
+
+                // Conformal correction instead of age-gaussian
+                infl = infl * exp(-2.0 * phi);
+
                 if (sysPos[j].w < p.w - 0.01) { infl = infl * 0.01; }
                 let e = infl * exp(-distSq / F);
                 V = V - e;
                 let f = 2.0 * e / F;
-                gx = gx + f * diff.x; gy = gy + f * diff.y;
-                gz = gz + f * diff.z; gw = gw + f * diff.w;
+                fx = fx + f * diff.x; fy = fy + f * diff.y;
+                fz = fz + f * diff.z; fw = fw + f * diff.w;
             }
             for (var k = 0u; k < params.penCount; k = k + 1u) {
                 let diff = p - penalties[k].pos;
@@ -806,11 +820,11 @@ class Mapper implements Mapping.Engine {
                 let e = penalties[k].strength * exp(-distSq / params.pF);
                 V = V + e;
                 let f = -2.0 * e / params.pF;
-                gx = gx + f * diff.x; gy = gy + f * diff.y;
-                gz = gz + f * diff.z; gw = gw + f * diff.w;
+                fx = fx + f * diff.x; fy = fy + f * diff.y;
+                fz = fz + f * diff.z; fw = fw + f * diff.w;
             }
             V = max(0.01, V);
-            return GradResult(V, gx, gy, gz, gw);
+            return MetricForceResult(V, fx, fy, fz, fw);
         }
 
         @compute @workgroup_size(64)
@@ -819,10 +833,10 @@ class Mapper implements Mapping.Engine {
             for (var it = 0u; it < params.iter; it = it + 1u) {
                 if (i > 0u && i < params.steps) {
                     let curr = pathData[i];
-                    let gr = getGradientAt(curr);
-                    let grad = vec4<f32>(gr.gx, gr.gy, gr.gz, gr.gw);
+                    let gr = getMetricForceAt(curr);
+                    let force = vec4<f32>(gr.fx, gr.fy, gr.fz, gr.fw);
                     let spring = (pathData[i-1u] + pathData[i+1u])/2.0 - curr;
-                    let displacement = params.lr * (spring * 2.0 - grad);
+                    let displacement = params.lr * (spring * 2.0 - force);
 
                     var next = curr + displacement;
                     let ageDiff = next.w - pathData[i-1u].w;
@@ -867,7 +881,7 @@ class Mapper implements Mapping.Engine {
   ): void {
     for (let iter = 0; iter < maxIterations; iter++) {
       for (let i = 1; i < steps; i++) {
-        const [, gx, gy, gz, gw] = this.getGradient(
+        const [, fx, fy, fz, fw] = this.getMetricForce(
           px[i],
           py[i],
           pe[i],
@@ -881,11 +895,11 @@ class Mapper implements Mapping.Engine {
         const se = (pe[i - 1] + pe[i + 1]) / 2 - pe[i];
         const sa = (pa[i - 1] + pa[i + 1]) / 2 - pa[i];
 
-        px[i] += lr * (sx * 2.0 - gx);
-        py[i] += lr * (sy * 2.0 - gy);
-        pe[i] += lr * (se * 2.0 - gz);
+        px[i] += lr * (sx * 2.0 - fx);
+        py[i] += lr * (sy * 2.0 - fy);
+        pe[i] += lr * (se * 2.0 - fz);
 
-        const da_move = lr * (sa * 2.0 - gw);
+        const da_move = lr * (sa * 2.0 - fw);
         pa[i] += da_move;
 
         const ageDiff = pa[i] - pa[i - 1];
@@ -898,21 +912,32 @@ class Mapper implements Mapping.Engine {
     }
   }
 
-  private getGradient(
+  /**
+   * Computes the metric potential V and the spatial metric force (fx, fy, fz, fw).
+   *
+   * In the ModPAT differential geometry paradigm:
+   *   - Space has a conformal metric: g_ij = \Phi(p) * \delta_ij
+   *   - The conformal factor is \Phi(p) = V_0 - V(p), where V_0 = 1.0 (vacuum potential)
+   *     and V(p) is the potential computed here.
+   *   - \Phi(p) = \sum e_j, which directly encodes local semantic density/influence.
+   *   - The spatial force vector (fx, fy, fz, fw) is the gradient of the potential,
+   *     driving path relaxation towards semantic density maxima.
+   */
+  private getMetricForce(
     px: number,
     py: number,
     pz: number,
     pw: number,
     pens: any[],
     boost: Set<number> | undefined
-  ): [V: number, gx: number, gy: number, gz: number, gw: number] {
+  ): [V: number, fx: number, fy: number, fz: number, fw: number] {
     const phys = DOPAT_CONFIG.PHYSICS;
     const F = phys.INFLUENCE_FALLOFF;
     let V = 1.0,
-      gx = 0.0,
-      gy = 0.0,
-      gz = 0.0,
-      gw = 0.0;
+      fx = 0.0,
+      fy = 0.0,
+      fz = 0.0,
+      fw = 0.0;
 
     const actualRadius = Math.sqrt(phys.INFLUENCE_RADIUS);
     const candidates = this.gridIndex.candidatesInRadius(
@@ -923,6 +948,27 @@ class Mapper implements Mapping.Engine {
       actualRadius
     );
 
+    // First pass: compute local semantic density sum phi(p)
+    let phi = 0.0;
+    for (const j of candidates) {
+      const dx = px - this.system.posX[j],
+        dy = py - this.system.posY[j],
+        dz = pz - this.system.posZ[j],
+        dw = pw - this.system.posW[j];
+      const d2 = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (d2 >= phys.INFLUENCE_RADIUS) continue;
+
+      let infl_j =
+        this.system.density[j] * 2.0 + this.system.intensity[j] * 1.5 + 5.0;
+      if (boost?.has(this.system.scope[j])) infl_j += 50.0;
+      const st = this.system.slotType[j];
+      if (st & SlotType.Body) infl_j += phys.BODY_SLOT_ATTRACTION;
+      if (st & SlotType.Condition) infl_j += phys.COND_SLOT_ATTRACTION;
+
+      phi += infl_j * Math.exp(-d2 / F);
+    }
+
+    // Second pass: compute potential V and metric forces
     for (const j of candidates) {
       const dx = px - this.system.posX[j],
         dy = py - this.system.posY[j],
@@ -937,16 +983,19 @@ class Mapper implements Mapping.Engine {
       const st = this.system.slotType[j];
       if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
       if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
-      infl *= Math.exp(-((dw * 50.0) ** 2));
+
+      // Conformal correction instead of localized age-gaussian
+      infl *= Math.exp(-2.0 * phi);
+
       if (this.system.posW[j] < pw - 0.01) infl *= 0.01;
 
       const e = infl * Math.exp(-d2 / F);
       V -= e;
       const f = (2.0 * e) / F;
-      gx += f * dx;
-      gy += f * dy;
-      gz += f * dz;
-      gw += f * dw;
+      fx += f * dx;
+      fy += f * dy;
+      fz += f * dz;
+      fw += f * dw;
     }
 
     if (pens) {
@@ -961,14 +1010,14 @@ class Mapper implements Mapping.Engine {
         const e = p.strength * Math.exp(-d2 / Fp);
         V += e;
         const f = (-2.0 * e) / Fp;
-        gx += f * dx;
-        gy += f * dy;
-        gz += f * dz;
-        gw += f * dw;
+        fx += f * dx;
+        fy += f * dy;
+        fz += f * dz;
+        fw += f * dw;
       }
     }
 
-    return [Math.max(0.01, V), gx, gy, gz, gw];
+    return [Math.max(0.01, V), fx, fy, fz, fw];
   }
 
   private getPotentialAndNearest(
@@ -989,7 +1038,7 @@ class Mapper implements Mapping.Engine {
       nearRadius,
       this.system
     );
-    const [potential] = this.getGradient(x, y, z, w, pens, boost);
+    const [potential] = this.getMetricForce(x, y, z, w, pens, boost);
     return { potential, nearestId };
   }
 
