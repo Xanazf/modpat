@@ -1,5 +1,5 @@
 /**
- * A3 — Manifold visualizer.
+ * A3 - Manifold visualizer.
  *
  * Usage:
  *   tsx scripts/dev/visualize_manifold.ts [--snapshot path] [--path "source text" "target text"]
@@ -8,7 +8,7 @@
  * atoms + optional traversal path to the tldraw MCP canvas.
  *
  * PCA is performed on the N×4 position matrix using power iteration for the
- * top-2 eigenvectors — no external dependency.
+ * top-2 eigenvectors - no external dependency.
  */
 
 import { program } from "commander";
@@ -60,8 +60,10 @@ function powerIterate(
     const w = new Array<number>(d).fill(0);
     for (let i = 0; i < n; i++) {
       let dot = 0;
-      for (let col = 0; col < d; col++) dot += (mat[col][i] - mean[col]) * v[col];
-      for (let col = 0; col < d; col++) w[col] += (mat[col][i] - mean[col]) * dot;
+      for (let col = 0; col < d; col++)
+        dot += (mat[col][i] - mean[col]) * v[col];
+      for (let col = 0; col < d; col++)
+        w[col] += (mat[col][i] - mean[col]) * dot;
     }
     for (let col = 0; col < d; col++) w[col] /= n;
 
@@ -94,17 +96,18 @@ function pca2d(
   posW: Float64Array,
   n: number
 ): Array<[number, number]> {
-  const mat: Float64Array[] = [posX, posY, posZ, posW].map(
-    a => a.subarray(0, n)
+  const mat: Float64Array[] = [posX, posY, posZ, posW].map(a =>
+    a.subarray(0, n)
   );
   const mean = colMean(mat, n);
   const pc1 = powerIterate(mat, mean, n);
   const pc2 = powerIterate(mat, mean, n, pc1);
 
   return Array.from({ length: n }, (_, i) => {
-    let x = 0, y = 0;
+    let x = 0,
+      y = 0;
     for (let col = 0; col < 4; col++) {
-      const v = (mat[col][i] - mean[col]);
+      const v = mat[col][i] - mean[col];
       x += v * pc1[col];
       y += v * pc2[col];
     }
@@ -135,21 +138,21 @@ async function main() {
   const n = Math.min(system.length, parseInt(opts.top));
   console.log(`Projecting ${n} atoms to 2D via PCA…`);
 
-  const points = pca2d(
-    system.posX,
-    system.posY,
-    system.posZ,
-    system.posW,
-    n
-  );
+  const points = pca2d(system.posX, system.posY, system.posZ, system.posW, n);
 
   // Scale to canvas space (600 × 600 px)
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
   for (const [x, y] of points) {
-    if (x < minX) minX = x; if (x > maxX) maxX = x;
-    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
   }
-  const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
+  const rangeX = maxX - minX || 1,
+    rangeY = maxY - minY || 1;
   const scale = (v: number, min: number, range: number) =>
     ((v - min) / range) * 600 - 300;
 
@@ -190,10 +193,14 @@ async function main() {
     if (srcIds.length > 0 && tgtIds.length > 0) {
       console.log(`Computing path: "${opts.src}" → "${opts.tgt}"…`);
       rt.mapper.setGPUEnabled(false);
-      const pathIds = await rt.mapper.traverse(srcIds[0], tgtIds[tgtIds.length - 1], {
-        steps: 16,
-        maxIterations: 60,
-      });
+      const pathIds = await rt.mapper.traverse(
+        srcIds[0],
+        tgtIds[tgtIds.length - 1],
+        {
+          steps: 16,
+          maxIterations: 60,
+        }
+      );
 
       const pathPoints = Array.from(pathIds)
         .filter(id => id < n)
@@ -240,9 +247,14 @@ async function main() {
   // The tldraw MCP exec tool is invoked via the Claude Code MCP integration at runtime.
   // In standalone mode, log the shapes count for verification.
   console.log(`Rendered ${shapes.length} shapes (atoms + path)`);
-  console.log("Open Claude Code and run this script via the tldraw MCP exec tool.");
+  console.log(
+    "Open Claude Code and run this script via the tldraw MCP exec tool."
+  );
 
   await rt.dispose();
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch(e => {
+  console.error(e);
+  process.exit(1);
+});

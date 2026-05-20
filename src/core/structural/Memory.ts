@@ -214,7 +214,7 @@ export default class Store implements Memory.Vault {
     // posW is intentionally excluded from the centroid anchor.  Non-numeric
     // operator tokens receive posW = systemAge at ingestion, so a vault entry
     // stored at systemAge=0 has anchor_w≈0 while the same query at
-    // systemAge=100 has qw≈100 — Δw²=10000 >> VAULT_QUERY_THRESHOLD, causing
+    // systemAge=100 has qw≈100 - Δw²=10000 >> VAULT_QUERY_THRESHOLD, causing
     // every cross-time lookup to miss.  posX already encodes numeric value
     // (value * 2) with a wider spread than posW (value * 0.1), so no
     // discriminating power is lost.  The W dimension of the grid key was

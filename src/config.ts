@@ -62,7 +62,7 @@ const DOPAT_CONFIG = {
     /**
      * When true, getMetricForce includes the inner derivative of φ w.r.t.
      * position (full gradient through the conformal factor).  False uses the
-     * simplified approximation that treats φ as spatially constant — valid for
+     * simplified approximation that treats φ as spatially constant - valid for
      * φ ≪ 1 and ~4× cheaper.  A1 design decision: keep simplified, expose
      * full version behind this flag for A/B testing only.
      */

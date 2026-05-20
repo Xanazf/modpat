@@ -23,7 +23,7 @@ export interface SkillContext {
   atomizer: Atomic.Engine;
   /** The language boundary for translation and memory. */
   language: Language;
-  /** Full result from Language.ingest() — includes isArithmeticQuery, attractionCenter, etc. */
+  /** Full result from Language.ingest() - includes isArithmeticQuery, attractionCenter, etc. */
   ingestResult?: IngestResult;
 }
 

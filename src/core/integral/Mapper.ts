@@ -1,5 +1,5 @@
 /**
- * Mapper — back-compat shim.
+ * Mapper - back-compat shim.
  *
  * The inferential traveler was renamed to Traveler (B0) to free the name
  * "Mapper" for the TDA Mapper algorithm (Phase B).  All existing imports

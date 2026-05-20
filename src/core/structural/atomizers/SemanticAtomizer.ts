@@ -274,7 +274,7 @@ export default class SemanticAtomizer
         system.posX[id] = numVal * 2;
         // Encode numeric value as a stable temporal coordinate on the number line.
         // posW(n) = n * 0.1 so addition is linear: posW(a+b) = posW(a) + posW(b).
-        // decayRate=0 marks this precept as eternal — posW never drifts, and the
+        // decayRate=0 marks this precept as eternal - posW never drifts, and the
         // Resolver always treats it as fully fresh regardless of systemAge.
         system.posW[id] = numVal * 0.1;
         system.decayRate[id] = 0;

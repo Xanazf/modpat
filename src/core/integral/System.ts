@@ -930,7 +930,7 @@ class System implements Root.ManifoldView {
 
       // Temporal freshness decay: posW fades so stale concepts lose their
       // energy advantage in the Resolver's forward pass over time.
-      // Eternal (decayRate=0) precepts are skipped above — their posW encodes
+      // Eternal (decayRate=0) precepts are skipped above - their posW encodes
       // a stable coordinate (the number line) and must not drift.
       this.posW[i] = Math.max(0, this.posW[i] * ageFactor);
 
@@ -957,7 +957,7 @@ class System implements Root.ManifoldView {
    */
   public refreshConceptAge(scope: number): void {
     for (const id of this.scopeIndex.get(scope) ?? []) {
-      if (this.decayRate[id] === 0) continue; // eternal — number-line coordinate is stable
+      if (this.decayRate[id] === 0) continue; // eternal - number-line coordinate is stable
       this.posW[id] = this.systemAge;
       this.update(id);
     }
@@ -973,7 +973,7 @@ class System implements Root.ManifoldView {
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       if (!this.isAllocated(id)) continue;
-      if (this.decayRate[id] === 0) continue; // eternal — number-line coordinate is stable
+      if (this.decayRate[id] === 0) continue; // eternal - number-line coordinate is stable
       this.posW[id] = this.systemAge;
       this.update(id);
     }

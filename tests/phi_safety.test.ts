@@ -5,12 +5,12 @@ import System from "@core_i/System";
 import { describe, it } from "./utils/harness";
 
 export async function runPhiSafetyTests() {
-  await describe("P2 — φ clamping and numerical safety", async () => {
+  await describe("P2 - φ clamping and numerical safety", async () => {
     await it("1000 atoms at the origin produce no NaN and increment phiClippedCount", async () => {
       const system = new System();
       const N = 1000;
 
-      // All atoms at exactly the same position — pathological density
+      // All atoms at exactly the same position - pathological density
       for (let i = 0; i < N; i++) {
         const id = system.createLocation(1.0, 1.0);
         system.posX[id] = 0;
@@ -25,13 +25,17 @@ export async function runPhiSafetyTests() {
 
       // Place source and target atoms apart from the pile
       const src = system.createLocation(1.0, 1.0);
-      system.posX[src] = -200; system.posY[src] = 0;
-      system.posZ[src] = 0;   system.posW[src] = 0.5;
+      system.posX[src] = -200;
+      system.posY[src] = 0;
+      system.posZ[src] = 0;
+      system.posW[src] = 0.5;
       system.update(src);
 
       const tgt = system.createLocation(1.0, 1.0);
-      system.posX[tgt] = 200; system.posY[tgt] = 0;
-      system.posZ[tgt] = 0;  system.posW[tgt] = 0.5;
+      system.posX[tgt] = 200;
+      system.posY[tgt] = 0;
+      system.posZ[tgt] = 0;
+      system.posW[tgt] = 0.5;
       system.update(tgt);
 
       const path = await traveler.traverse(src, tgt, {

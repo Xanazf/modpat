@@ -89,8 +89,8 @@ Rules and axioms are not stored as a list, but as a topography.
 
 The integral layer has exactly two conceptual residents:
 
-* **System** — the world. Precepts are terrain. The topology encodes everything the system knows.
-* **Mapper** — the traveler. It observes the terrain (perception), moves through it (locomotion), and leaves trails (learning). Thinking IS movement. `mapper.process(text)` is the single entry point for all input.
+* **System** - the world. Precepts are terrain. The topology encodes everything the system knows.
+* **Mapper** - the traveler. It observes the terrain (perception), moves through it (locomotion), and leaves trails (learning). Thinking IS movement. `mapper.process(text)` is the single entry point for all input.
 
 A thin **Language** layer sits at the boundary: it converts raw text into System precepts (ingest direction) and decodes a Mapper terminal position back into text (express direction). This is translation, not thinking.
 
@@ -124,11 +124,11 @@ Deduction is performed by finding the "geodesic" (the shortest logical path) thr
 
 * **Iterative Relaxation:** The system uses gradient descent to move path nodes toward high-density logic attractors while maintaining path smoothness through simulated spring forces.
 * **Monotonic Age Traversal:** Paths are constrained by the Temporal Anisotropy, ensuring temporal consistency in derivations.
-* **Trap Detection:** A self-review mechanism identifies "Logic Traps" — zones of high mass but low entropy that indicate circular reasoning or semantic dead-ends.
+* **Trap Detection:** A self-review mechanism identifies "Logic Traps" - zones of high mass but low entropy that indicate circular reasoning or semantic dead-ends.
 
 ### Skill Registry
 
-The Mapper has an open-ended skill registry. A **skill** is an external behaviour the Mapper can elect to invoke when a query's manifold position is attracted to a capability precept. Skills are registered at boot time and elected at query time via potential-field proximity — no routing table needed.
+The Mapper has an open-ended skill registry. A **skill** is an external behaviour the Mapper can elect to invoke when a query's manifold position is attracted to a capability precept. Skills are registered at boot time and elected at query time via potential-field proximity - no routing table needed.
 
 ```typescript
 // Seed a capability precept at a characteristic manifold position
@@ -142,20 +142,20 @@ mapper.registerSkill(preceptId, async (ctx) => {
 });
 ```
 
-As a skill is used successfully, `reinforcePath` grows the capability precept's mass, making it a stronger attractor for similar future queries — routing by physics, not code.
+As a skill is used successfully, `reinforcePath` grows the capability precept's mass, making it a stronger attractor for similar future queries - routing by physics, not code.
 
 ## Implementation Details
 
 ### Core Components
 
-* **Mapper** (`src/core/integral/Mapper.ts`) — the single thinker. Owns perception (resonance propagation, Phase 0–7 pipeline), locomotion (geodesic traversal via gradient descent), learning (`learnCycle`), and autonomous motivation (`startAutonomy`). The entry point for all input is `mapper.process(text)`.
-* **Language** (`src/core/integral/language/Language.ts`) — the translation boundary. `ingest(text)` tokenizes and classifies input; `ingestAssertion()` crystallizes declarative facts into the vault; `express(ids)` decodes precept sequences back to text.
-* **System** (`src/core/integral/System.ts`) — defines the DOPAT manifold, `TargetBuffer` enum (14 property buffers), `OperatorClass` enum (12 types). This is the topology schema.
-* **Skills** (`src/core/integral/skills/`) — open-ended skill registry. `Coder.ts` registers the code-synthesis handler.
-* **Synthesizer** (`src/core/integral/Coder.ts`) — collapses `Uint32Array` geodesic paths into executable TypeScript code. Used internally by the Mapper perception pipeline.
-* **Atomizers** (`src/core/structural/atomizers/`) — convert natural language or external signals into atomic logical quanta, mapping them to specific coordinates in the manifold. `SemanticAtomizer` uses 50D GloVe vectors projected to 192-dim manifold coordinates.
-* **Memory Vault** (`src/core/structural/Memory.ts`) — uses DuckDB to crystallize proven logical paths, allowing them to be recalled by their topological signature.
-* **Runtime** (`src/core/integral/Runtime.ts`) — boot/wiring only. `Runtime.boot(opts)` creates System → Atomizer → Store → Mapper → Language → Skills. Exposes `rt.mapper`, `rt.language`, `rt.store`.
+* **Mapper** (`src/core/integral/Mapper.ts`) - the single thinker. Owns perception (resonance propagation, Phase 0–7 pipeline), locomotion (geodesic traversal via gradient descent), learning (`learnCycle`), and autonomous motivation (`startAutonomy`). The entry point for all input is `mapper.process(text)`.
+* **Language** (`src/core/integral/language/Language.ts`) - the translation boundary. `ingest(text)` tokenizes and classifies input; `ingestAssertion()` crystallizes declarative facts into the vault; `express(ids)` decodes precept sequences back to text.
+* **System** (`src/core/integral/System.ts`) - defines the DOPAT manifold, `TargetBuffer` enum (14 property buffers), `OperatorClass` enum (12 types). This is the topology schema.
+* **Skills** (`src/core/integral/skills/`) - open-ended skill registry. `Coder.ts` registers the code-synthesis handler.
+* **Synthesizer** (`src/core/integral/Coder.ts`) - collapses `Uint32Array` geodesic paths into executable TypeScript code. Used internally by the Mapper perception pipeline.
+* **Atomizers** (`src/core/structural/atomizers/`) - convert natural language or external signals into atomic logical quanta, mapping them to specific coordinates in the manifold. `SemanticAtomizer` uses 50D GloVe vectors projected to 192-dim manifold coordinates.
+* **Memory Vault** (`src/core/structural/Memory.ts`) - uses DuckDB to crystallize proven logical paths, allowing them to be recalled by their topological signature.
+* **Runtime** (`src/core/integral/Runtime.ts`) - boot/wiring only. `Runtime.boot(opts)` creates System → Atomizer → Store → Mapper → Language → Skills. Exposes `rt.mapper`, `rt.language`, `rt.store`.
 
 ### Computation
 

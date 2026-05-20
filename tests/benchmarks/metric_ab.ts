@@ -1,16 +1,16 @@
 /**
- * A2 — Conformal metric A/B benchmark.
+ * A2 - Conformal metric A/B benchmark.
  * Run: tsx tests/benchmarks/metric_ab.ts
  *
  * Toggles DOPAT_CONFIG.PHYSICS.CONFORMAL_ENABLED and, optionally,
  * A_B_FULL_GRADIENT, measuring per-query quality and perf.
  *
  * Metrics per query:
- *   answerOn   — result text with conformal ON
- *   answerOff  — result text with conformal OFF
- *   match      — whether answers agree
- *   timeOnMs   — wall time conformal ON
- *   timeOffMs  — wall time conformal OFF
+ *   answerOn   - result text with conformal ON
+ *   answerOff  - result text with conformal OFF
+ *   match      - whether answers agree
+ *   timeOnMs   - wall time conformal ON
+ *   timeOffMs  - wall time conformal OFF
  *
  * On first run the per-query results are written to metric_ab.baseline.json.
  * Subsequent runs compare against the baseline; a regression exits with code 1.
@@ -33,50 +33,86 @@ import { createTestMapper } from "@core_i/Runtime";
 
 const CORPUS: Array<{ id: string; source: string; expected: string }> = [
   // Identity / basic IS
-  { id: "sky_blue",     source: "the sky is blue",            expected: "blue" },
-  { id: "grass_green",  source: "grass is green",             expected: "green" },
-  { id: "water_wet",    source: "water is wet",               expected: "wet" },
+  { id: "sky_blue", source: "the sky is blue", expected: "blue" },
+  { id: "grass_green", source: "grass is green", expected: "green" },
+  { id: "water_wet", source: "water is wet", expected: "wet" },
 
   // Transitive chains
-  { id: "trans_2hop",   source: "a is b && b is c |-",        expected: "c" },
-  { id: "trans_3hop",   source: "a is b && b is c && c is d |-", expected: "d" },
+  { id: "trans_2hop", source: "a is b && b is c |-", expected: "c" },
+  { id: "trans_3hop", source: "a is b && b is c && c is d |-", expected: "d" },
 
   // Quantifier
-  { id: "quant_all",    source: "all birds are animals. tweety is a bird. tweety |-", expected: "animal" },
-  { id: "quant_inst",   source: "all dogs are mammals. rex is a dog. rex |-",          expected: "mammal" },
+  {
+    id: "quant_all",
+    source: "all birds are animals. tweety is a bird. tweety |-",
+    expected: "animal",
+  },
+  {
+    id: "quant_inst",
+    source: "all dogs are mammals. rex is a dog. rex |-",
+    expected: "mammal",
+  },
 
   // Modus ponens
-  { id: "mp_1",         source: "if it rains then the ground is wet. it rains. the ground |-", expected: "wet" },
-  { id: "mp_2",         source: "if P then Q. P is true. Q |-",                               expected: "true" },
+  {
+    id: "mp_1",
+    source: "if it rains then the ground is wet. it rains. the ground |-",
+    expected: "wet",
+  },
+  { id: "mp_2", source: "if P then Q. P is true. Q |-", expected: "true" },
 
   // Negation / contradiction detection
-  { id: "neg_1",        source: "cats are not fish. felix is a cat. felix |-",         expected: "cat" },
+  {
+    id: "neg_1",
+    source: "cats are not fish. felix is a cat. felix |-",
+    expected: "cat",
+  },
 
   // Verb-frame / action
-  { id: "verb_1",       source: "newton discovered gravity",                           expected: "newton" },
-  { id: "verb_2",       source: "einstein developed relativity",                       expected: "einstein" },
+  { id: "verb_1", source: "newton discovered gravity", expected: "newton" },
+  {
+    id: "verb_2",
+    source: "einstein developed relativity",
+    expected: "einstein",
+  },
 
   // Temporal ordering (past vs future)
-  { id: "temp_past",    source: "rome was founded in 753 bc",                          expected: "753" },
-  { id: "temp_fut",     source: "the meeting will happen tomorrow",                    expected: "tomorrow" },
+  { id: "temp_past", source: "rome was founded in 753 bc", expected: "753" },
+  {
+    id: "temp_fut",
+    source: "the meeting will happen tomorrow",
+    expected: "tomorrow",
+  },
 
   // Conjunction
-  { id: "conj_1",       source: "alice is tall && alice is smart. alice |-",           expected: "alice" },
+  {
+    id: "conj_1",
+    source: "alice is tall && alice is smart. alice |-",
+    expected: "alice",
+  },
 
   // Disjunction
-  { id: "disj_1",       source: "either the cat is inside or the cat is outside. the cat |-", expected: "cat" },
+  {
+    id: "disj_1",
+    source: "either the cat is inside or the cat is outside. the cat |-",
+    expected: "cat",
+  },
 
-  // Verbose logic traps — expect engine to not time out or loop
-  { id: "trap_abbrev",  source: "a is b && b is a |-",                                 expected: "" },
+  // Verbose logic traps - expect engine to not time out or loop
+  { id: "trap_abbrev", source: "a is b && b is a |-", expected: "" },
 
   // Long chain (5 hops)
-  { id: "chain_5hop",   source: "p is q && q is r && r is s && s is t && t is u |-",  expected: "u" },
+  {
+    id: "chain_5hop",
+    source: "p is q && q is r && r is s && s is t && t is u |-",
+    expected: "u",
+  },
 
   // Self-reference guard
-  { id: "self_ref",     source: "x is x",                                              expected: "x" },
+  { id: "self_ref", source: "x is x", expected: "x" },
 
   // Number
-  { id: "num_1",        source: "three plus four equals",                              expected: "" },
+  { id: "num_1", source: "three plus four equals", expected: "" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -114,7 +150,10 @@ async function runQuery(
   const t0 = performance.now();
   const ids = atomizer.ingestSequence(source, system);
   const resultIds = await traveler.perceive(ids, {});
-  const answer = atomizer.decodeSequence(resultIds, system).toLowerCase().trim();
+  const answer = atomizer
+    .decodeSequence(resultIds, system)
+    .toLowerCase()
+    .trim();
   return { answer, ms: performance.now() - t0 };
 }
 
@@ -172,9 +211,9 @@ async function run() {
 
     console.log(
       `[${match ? "=" : "≠"}] ${item.id.padEnd(14)} ` +
-      `ON=${on.answer.slice(0, 30).padEnd(32)} ` +
-      `OFF=${off.answer.slice(0, 30).padEnd(32)} ` +
-      `${on.ms.toFixed(0)}ms / ${off.ms.toFixed(0)}ms`
+        `ON=${on.answer.slice(0, 30).padEnd(32)} ` +
+        `OFF=${off.answer.slice(0, 30).padEnd(32)} ` +
+        `${on.ms.toFixed(0)}ms / ${off.ms.toFixed(0)}ms`
     );
   }
 
@@ -195,12 +234,20 @@ async function run() {
   };
 
   console.log("\n--- Summary ---");
-  console.log(`  Answers match ON/OFF: ${matchCount}/${total} (${(summary.matchRate * 100).toFixed(1)}%)`);
-  console.log(`  Expected met (ON):    ${expectedMetCount}/${total} (${(summary.expectedMetOn * 100).toFixed(1)}%)`);
+  console.log(
+    `  Answers match ON/OFF: ${matchCount}/${total} (${(summary.matchRate * 100).toFixed(1)}%)`
+  );
+  console.log(
+    `  Expected met (ON):    ${expectedMetCount}/${total} (${(summary.expectedMetOn * 100).toFixed(1)}%)`
+  );
   console.log(`  Avg time ON:  ${avgOn.toFixed(1)} ms`);
   console.log(`  Avg time OFF: ${avgOff.toFixed(1)} ms`);
 
-  const baseline: Baseline = { date: new Date().toISOString(), results, summary };
+  const baseline: Baseline = {
+    date: new Date().toISOString(),
+    results,
+    summary,
+  };
 
   if (!existsSync(BASELINE_PATH)) {
     writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
@@ -212,7 +259,7 @@ async function run() {
       const old = prev.results.find(p => p.id === r.id);
       if (!old) continue;
       if (old.expectedMet && !r.expectedMet) {
-        console.error(`REGRESSION: ${r.id} — was correct, now fails`);
+        console.error(`REGRESSION: ${r.id} - was correct, now fails`);
         regressions++;
       }
     }
@@ -225,4 +272,7 @@ async function run() {
   }
 }
 
-run().catch(e => { console.error(e); process.exit(1); });
+run().catch(e => {
+  console.error(e);
+  process.exit(1);
+});

@@ -56,7 +56,7 @@ function _registerDefaultSkills(
   store: Store,
   atomizer: Atomic.Engine
 ): void {
-  // LANGUAGE skill — perceiveCoherent with arithmetic fast-path
+  // LANGUAGE skill - perceiveCoherent with arithmetic fast-path
   const langId = atomizer.getSymbolScope("SKILL:LANGUAGE", false);
   const languageHandler: SkillHandler = async ctx => {
     const ir = ctx.ingestResult;
@@ -73,7 +73,7 @@ function _registerDefaultSkills(
 
     // Detect physics echo: when perception can't converge, the physics pass
     // returns the input tokens as sinkCandidates. If the result IDs heavily
-    // overlap with the query IDs, there's no real answer — return "unknown"
+    // overlap with the query IDs, there's no real answer - return "unknown"
     // so the Mapper's inquiry path can take over (mirrors old Listener behaviour).
     if (decoded && decoded !== "unknown" && result.ids.length > 0) {
       const querySet = new Set(Array.from(ctx.queryIds));
@@ -90,7 +90,7 @@ function _registerDefaultSkills(
   };
   mapper.registerSkill(langId, languageHandler);
 
-  // ASSERTION skill — ingest declarative statement into vault
+  // ASSERTION skill - ingest declarative statement into vault
   const assertionId = atomizer.getSymbolScope("SKILL:ASSERTION", false);
   const assertionHandler: SkillHandler = async ctx => {
     const answer = await ctx.language.ingestAssertion(ctx.query, ctx.queryIds);
@@ -98,7 +98,7 @@ function _registerDefaultSkills(
   };
   mapper.registerSkill(assertionId, assertionHandler);
 
-  // CODE skill — code synthesis / ingestion
+  // CODE skill - code synthesis / ingestion
   const coderReg = createCoderSkill(
     atomizer,
     store,
@@ -106,7 +106,7 @@ function _registerDefaultSkills(
   );
   mapper.registerSkill(coderReg.preceptId, coderReg.handler);
 
-  // ARITHMETIC skill — numeric expressions (fast numeric path)
+  // ARITHMETIC skill - numeric expressions (fast numeric path)
   const arithmeticId = atomizer.getSymbolScope("SKILL:ARITHMETIC", false);
   const arithmeticHandler: SkillHandler = async ctx => {
     const ir = ctx.ingestResult;

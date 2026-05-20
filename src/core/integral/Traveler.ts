@@ -999,14 +999,14 @@ class Traveler implements Mapping.Engine {
       if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
       if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
 
-      // A1: smooth temporal suppression — composable multiplicative factor on top of
+      // A1: smooth temporal suppression - composable multiplicative factor on top of
       // the conformal correction.  Replaces the hard 0.01 cutoff.
       // weight = exp(-PHI_TEMPORAL_DECAY × max(0, pw_probe − pw_atom))
       infl *= Math.exp(
         -phys.PHI_TEMPORAL_DECAY * Math.max(0, pw - this.system.posW[j])
       );
 
-      // A1: conformal correction e^{-2φ}; simplified — φ treated as spatially constant
+      // A1: conformal correction e^{-2φ}; simplified - φ treated as spatially constant
       // (inner derivative ∂φ/∂x omitted).  Valid for φ ≪ 1; see getMetricForceFullGradient
       // for the exact version.
       if (phys.CONFORMAL_ENABLED) infl *= Math.exp(-2.0 * phi);
@@ -1044,7 +1044,10 @@ class Traveler implements Mapping.Engine {
       // ∇φ(p) = Σ_k infl_k × exp(−d²_k/F) × (−2/F) × (p − k)
       // force correction_i = 2 × V_sum × ∂φ/∂p_i
       const V_sum = 1.0 - Math.max(0.01, V); // clamp mirrors the return below
-      let gpx = 0.0, gpy = 0.0, gpz = 0.0, gpw = 0.0;
+      let gpx = 0.0,
+        gpy = 0.0,
+        gpz = 0.0,
+        gpw = 0.0;
       for (const j of candidates) {
         const dx = px - this.system.posX[j],
           dy = py - this.system.posY[j],
@@ -1060,7 +1063,10 @@ class Traveler implements Mapping.Engine {
         if (st & SlotType.Condition) infl_j += phys.COND_SLOT_ATTRACTION;
         const ek = infl_j * Math.exp(-d2 / F);
         const gk = ek * (-2.0 / F);
-        gpx += gk * dx; gpy += gk * dy; gpz += gk * dz; gpw += gk * dw;
+        gpx += gk * dx;
+        gpy += gk * dy;
+        gpz += gk * dz;
+        gpw += gk * dw;
       }
       fx += 2.0 * V_sum * gpx;
       fy += 2.0 * V_sum * gpy;
@@ -3348,6 +3354,6 @@ class Traveler implements Mapping.Engine {
   }
 }
 
-/** Back-compat alias — import Traveler from "@core_i/Traveler" for new code. */
+/** Back-compat alias - import Traveler from "@core_i/Traveler" for new code. */
 export type { Traveler as Mapper };
 export default Traveler;

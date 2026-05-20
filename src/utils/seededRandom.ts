@@ -1,5 +1,5 @@
 /**
- * Mulberry32 — fast 32-bit seeded PRNG.
+ * Mulberry32 - fast 32-bit seeded PRNG.
  *
  * Replaces bare Math.random() calls so CI runs are deterministic:
  * same DOPAT_CONFIG.SEED + same corpus → identical traversal paths.
