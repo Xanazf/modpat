@@ -8,6 +8,7 @@ import {
   SystemRef,
 } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
+import { topoSignatureJaccard } from "@core_s/TopologyMapper";
 import {
   type DuckDBConnection,
   DuckDBInstance,
@@ -135,6 +136,7 @@ export default class Store implements Memory.Vault {
       "knowledge_state INTEGER DEFAULT 0",
       "reproduction_count INTEGER DEFAULT 0",
       "context_hash VARCHAR DEFAULT ''",
+      "topo_signature VARCHAR DEFAULT ''",
     ]) {
       try {
         await this._connection.run(
@@ -365,7 +367,8 @@ export default class Store implements Memory.Vault {
     inputSequence: Uint32Array,
     outputSequence: Uint32Array,
     energy: number,
-    slotFlags: bigint = 0n
+    slotFlags: bigint = 0n,
+    topoSignature: string = ""
   ) {
     const { signature, varMap } = this.abstractSequence(inputSequence);
     const targetPattern = this.abstractTarget(outputSequence, varMap);
@@ -404,7 +407,8 @@ export default class Store implements Memory.Vault {
         SET net_energy = ?,
             target_pattern = ?,
             anchor_x = ?, anchor_y = ?, anchor_z = ?, anchor_w = ?,
-            grid_x = ?, grid_y = ?, grid_z = ?, grid_w = ?
+            grid_x = ?, grid_y = ?, grid_z = ?, grid_w = ?,
+            topo_signature = CASE WHEN ? != '' THEN ? ELSE topo_signature END
         WHERE signature = ?
           AND ABS(anchor_x - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
           AND ABS(anchor_y - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
@@ -421,9 +425,11 @@ export default class Store implements Memory.Vault {
         upd.bindInteger(8, this.gridKey(ay));
         upd.bindInteger(9, this.gridKey(az));
         upd.bindInteger(10, this.gridKey(aw));
-        upd.bindVarchar(11, signature);
-        upd.bindDouble(12, ax);
-        upd.bindDouble(13, ay);
+        upd.bindVarchar(11, topoSignature);
+        upd.bindVarchar(12, topoSignature);
+        upd.bindVarchar(13, signature);
+        upd.bindDouble(14, ax);
+        upd.bindDouble(15, ay);
         await upd.run();
       } finally {
         upd.destroySync();
@@ -435,8 +441,8 @@ export default class Store implements Memory.Vault {
     const stmt = await this._connection.prepare(`
       INSERT INTO wave_forms
         (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w, slot_flags,
-         grid_x, grid_y, grid_z, grid_w)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         grid_x, grid_y, grid_z, grid_w, topo_signature)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
@@ -452,6 +458,7 @@ export default class Store implements Memory.Vault {
       stmt.bindInteger(10, this.gridKey(ay));
       stmt.bindInteger(11, this.gridKey(az));
       stmt.bindInteger(12, this.gridKey(aw));
+      stmt.bindVarchar(13, topoSignature);
       await stmt.run();
     } finally {
       stmt.destroySync();
@@ -470,7 +477,8 @@ export default class Store implements Memory.Vault {
    * @returns The reconstructed output quanta, or null if no matching pattern is cached.
    */
   public async checkInterferencePattern(
-    inputSequence: Uint32Array
+    inputSequence: Uint32Array,
+    topoSignature?: string
   ): Promise<{ ids: Uint32Array; slotFlags: bigint; energy: number } | null> {
     const { signature, varMap } = this.abstractSequence(inputSequence);
     const [qx, qy, qz, qw] = this.calculateCentroid(inputSequence);
@@ -499,18 +507,20 @@ export default class Store implements Memory.Vault {
       gz = this.gridKey(qz);
 
     const uw = DOPAT_CONFIG.memory.USAGE_WEIGHT;
+    // Fetch up to 10 candidates when a topoSignature is provided for re-ranking.
+    const limit = topoSignature ? 10 : 1;
     const stmt = await this._connection.prepare(`
       SELECT target_pattern, slot_flags, signature AS matched_sig,
              (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2)) as resonance,
              net_energy * (1 + LN(1 + COALESCE(usage_count, 0)) * ${uw}) AS combined_score,
-             net_energy
+             net_energy, COALESCE(topo_signature, '') AS topo_sig
       FROM wave_forms
       WHERE signature = ?
         AND (grid_x IS NULL OR grid_x BETWEEN ? AND ?)
         AND (grid_y IS NULL OR grid_y BETWEEN ? AND ?)
         AND (grid_z IS NULL OR grid_z BETWEEN ? AND ?)
       ORDER BY resonance ASC, combined_score DESC
-      LIMIT 1
+      LIMIT ${limit}
     `);
     try {
       stmt.bindDouble(1, qx);
@@ -527,17 +537,34 @@ export default class Store implements Memory.Vault {
       const res = await stmt.runAndReadAll();
       const rows = res.getRows();
       if (rows && rows.length > 0) {
-        const resonance = Number(rows[0][3]);
-        // Tight Resonance Threshold:
-        // A distance < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD indicates the query is physically targeting the same logical entity.
-        // A larger distance suggests a structural coincidence but a different topological identity.
-        if (resonance < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD) {
-          targetPattern = rows[0][0]?.toString() || null;
-          slotFlags = BigInt(String(rows[0][1] ?? "0"));
-          vaultEnergy = Number(rows[0][5] ?? 0);
-          const matchedSig = rows[0][2]?.toString() ?? null;
+        // Filter to resonance threshold, then optionally re-rank by topo overlap.
+        const candidates = rows.filter(
+          row => Number(row[3]) < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD
+        );
+
+        let chosen = candidates[0];
+        if (topoSignature && candidates.length > 1) {
+          // Re-rank: primary key = topo Jaccard (descending), tiebreak = combined_score.
+          let bestJaccard = -1;
+          let bestScore = -1;
+          for (const row of candidates) {
+            const rowTopo = row[6]?.toString() ?? "";
+            const j = topoSignatureJaccard(topoSignature, rowTopo);
+            const score = Number(row[4]);
+            if (j > bestJaccard || (j === bestJaccard && score > bestScore)) {
+              bestJaccard = j;
+              bestScore = score;
+              chosen = row;
+            }
+          }
+        }
+
+        if (chosen) {
+          targetPattern = chosen[0]?.toString() || null;
+          slotFlags = BigInt(String(chosen[1] ?? "0"));
+          vaultEnergy = Number(chosen[5] ?? 0);
+          const matchedSig = chosen[2]?.toString() ?? null;
           if (matchedSig) {
-            // Fire-and-forget: increment usage count without blocking the retrieval.
             const conn = this._connection;
             const sig = matchedSig;
             (async () => {

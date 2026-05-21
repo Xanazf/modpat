@@ -3,11 +3,18 @@ import { random } from "@utils/seededRandom";
 import System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import { OperatorClass, SystemRef } from "@core_i/System";
+import type { InquiryQueue } from "@core_i/InquiryQueue";
 import { DeltaQueue } from "@core_s/DeltaQueue";
 import { metrics } from "@core_s/Metrics";
 import type Unfolder from "@core_s/Unfolder";
 import { GridIndex4D } from "@src/core/structural/GridIndex4D";
+import { computeCurvature } from "@core_s/Curvature";
 import type { SystemPersistence } from "./Persistence";
+import {
+  type NerveGraph,
+  type PersistenceBar,
+  buildNerveGraph,
+} from "./TopologyMapper";
 
 function arraysEqual(a: number[], b: number[]): boolean {
   if (a.length !== b.length) return false;
@@ -238,6 +245,26 @@ export class ManifoldLifecycle {
   /** External knowledge expansion engine for Phase 4 (Subconscious Void Expansion). */
   private unfolder: Unfolder | null = null;
 
+  // ── B3: Topology tick ──────────────────────────────────────────────────────
+  /** How often (in ticks) to run the full topology analysis. Budget-capped. */
+  private static readonly TOPO_TICK_INTERVAL = 100;
+  private _topoTick = 0;
+  /** Guard preventing concurrent topology analyses (like isDreaming for dreamCycle). */
+  private _isTopoRunning = false;
+  /** Latest TDA Mapper nerve graph, refreshed every TOPO_TICK_INTERVAL ticks. */
+  private _nerveGraph: NerveGraph | null = null;
+  /** H₁ bars from the last topology snapshot, used to prioritise dreamCycle. */
+  private _h1Bars: PersistenceBar[] = [];
+  /** H₀ bars (all filtration levels) from the last topology snapshot. */
+  private _prevH0: PersistenceBar[] = [];
+  /** Atom IDs in persistent H₁ bars → preferred expansion targets. */
+  private _dreamPriorityAtoms: Set<number> = new Set();
+  /** InquiryQueue for routing component_birth curiosity events. */
+  private _inquiryQueue: InquiryQueue | null = null;
+
+  // ── C3: Ricci flow tick ────────────────────────────────────────────────────
+  private _ricciTick = 0;
+
   /**
    * Initializes the Manifold Manager with primary and emergency systems.
    *
@@ -440,6 +467,138 @@ export class ManifoldLifecycle {
     this._threatCursor = batchEnd >= sys.length ? 0 : batchEnd;
   }
 
+  /** Wire an InquiryQueue so component_birth topology events spawn curiosity entries. */
+  public setInquiryQueue(queue: InquiryQueue): void {
+    this._inquiryQueue = queue;
+  }
+
+  /** Latest TDA Mapper nerve graph, or null before the first topology tick. */
+  public getNerveGraph(): NerveGraph | null {
+    return this._nerveGraph;
+  }
+
+  /**
+   * Low-frequency topology tick: persistent homology + TDA Mapper.
+   * Runs asynchronously (fire-and-forget) so it never blocks the tick loop.
+   * A running guard prevents concurrent analyses.
+   * Routes events to three consumers:
+   *   1. _dreamPriorityAtoms  – high-persistence H₁ atoms for dreamCycle
+   *   2. Vault tagging         – nerve graph exposed via getNerveGraph()
+   *   3. InquiryQueue          – component_birth events with high persistence
+   */
+  private async runTopologyTick(): Promise<void> {
+    if (this._isTopoRunning) return;
+    this._isTopoRunning = true;
+    try {
+      this._runTopologyTickBody();
+    } finally {
+      this._isTopoRunning = false;
+    }
+  }
+
+  private _runTopologyTickBody(): void {
+    const sys = this.activeSystem;
+    const prevH1 = this._h1Bars;
+
+    try {
+      this._nerveGraph = buildNerveGraph(sys, {
+        topK: 200,
+        maxRadius: DOPAT_CONFIG.orbital.BASE_RADIUS,
+      });
+    } catch {
+      return;
+    }
+
+    const { h0, h1 } = this._nerveGraph.diagram;
+
+    // ── dream prioritisation ──────────────────────────────────────────────
+    const MIN_PERSISTENCE = DOPAT_CONFIG.orbital.BASE_RADIUS * 0.1;
+    this._dreamPriorityAtoms = new Set(
+      h1
+        .filter(bar => bar.death - bar.birth > MIN_PERSISTENCE)
+        .map(bar => bar.generatorAtomId)
+    );
+    this._h1Bars = h1;
+
+    // ── emit TopologyEvents ───────────────────────────────────────────────
+    const prevH1Atoms = new Set(prevH1.map(b => b.generatorAtomId));
+    const newH1Atoms = new Set(h1.map(b => b.generatorAtomId));
+
+    // Component births/deaths track changes in the set of *essential* components
+    // (bars with death=Infinity, i.e. connected components that persist to the
+    // maximum filtration radius).  Finite-death bars are historical merge events
+    // that exist at every snapshot — comparing them between ticks is meaningless.
+    const prevH0InfiniteAtoms = new Set(
+      this._prevH0.filter(b => b.death === Infinity).map(b => b.generatorAtomId)
+    );
+    const currH0InfiniteAtoms = new Set(
+      h0.filter(b => b.death === Infinity).map(b => b.generatorAtomId)
+    );
+    this._prevH0 = h0;
+
+    const events: Topology.Event[] = [];
+
+    for (const atomId of currH0InfiniteAtoms) {
+      if (!prevH0InfiniteAtoms.has(atomId)) {
+        events.push({
+          type: "component_birth",
+          persistence: Infinity,
+          atomId,
+        });
+      }
+    }
+    for (const atomId of prevH0InfiniteAtoms) {
+      if (!currH0InfiniteAtoms.has(atomId)) {
+        events.push({
+          type: "component_death",
+          persistence: Infinity,
+          atomId,
+        });
+      }
+    }
+
+    for (const bar of h1) {
+      if (!prevH1Atoms.has(bar.generatorAtomId)) {
+        events.push({
+          type: "loop_appeared",
+          persistence: bar.death - bar.birth,
+          atomId: bar.generatorAtomId,
+        });
+      }
+    }
+    for (const bar of prevH1) {
+      if (!newH1Atoms.has(bar.generatorAtomId) && bar.death !== Infinity) {
+        events.push({
+          type: "loop_collapsed",
+          persistence: bar.death - bar.birth,
+          atomId: bar.generatorAtomId,
+        });
+      }
+    }
+
+    // ── route to InquiryQueue ─────────────────────────────────────────────
+    if (this._inquiryQueue) {
+      for (const ev of events) {
+        if (ev.type === "component_birth" && ev.persistence > MIN_PERSISTENCE) {
+          const scope = sys.scope[ev.atomId];
+          const label = (this.unfolder as any)?.resolveScope(scope) as
+            | string
+            | undefined;
+          if (label && label.length > 2) {
+            this._inquiryQueue.enqueue(
+              label,
+              `topology:component_birth:${ev.atomId}`
+            );
+          }
+        }
+      }
+    }
+
+    if (events.length > 0) {
+      metrics.increment("topology.events", events.length);
+    }
+  }
+
   /**
    * Wires the knowledge expansion engine for Phase 4 (Subconscious Void Expansion).
    * Must be called before tick() for dreamCycle to activate.
@@ -449,6 +608,56 @@ export class ManifoldLifecycle {
     // Wire the delta sink so Unfolder.expand() posts through the DeltaQueue
     // instead of writing to the manifold directly.
     unfolder.setDeltaSink(delta => this.deltaQueue.post(delta));
+  }
+
+  /**
+   * C3 - Discrete Ricci flow maintenance tick.
+   *
+   * Applies φ̇ = −R to the manifold by nudging each atom's density proportional
+   * to −clamp(R_i, ±RICCI_BLOWUP_THRESHOLD).  Runs synchronously (the curvature
+   * computation is O(n · neighbours)), guarded by the Ricci tick counter.
+   *
+   * "Clamp the input R, not the result" per ROADMAP: the raw curvature value is
+   * clamped before the density update so a single pathological atom cannot
+   * produce an unbounded density spike.
+   */
+  private runRicciFlowTick(): void {
+    const sys = this.activeSystem;
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const thresh = phys.RICCI_BLOWUP_THRESHOLD;
+    const lr = phys.RICCI_LR;
+    const actualRadius = Math.sqrt(phys.INFLUENCE_RADIUS);
+
+    // Build a lightweight grid for the curvature neighbourhood queries.
+    const grid = new GridIndex4D(Math.max(actualRadius, 0.5));
+    for (let i = 0; i < sys.length; i++) {
+      if (sys.isAllocated(i)) {
+        grid.insert(i, sys.posX[i], sys.posY[i], sys.posZ[i], sys.posW[i]);
+      }
+    }
+
+    let updated = 0;
+    for (let i = 0; i < sys.length; i++) {
+      if (!sys.isAllocated(i)) continue;
+      const { R } = computeCurvature(
+        sys,
+        grid,
+        sys.posX[i],
+        sys.posY[i],
+        sys.posZ[i],
+        sys.posW[i]
+      );
+      // Clamp R before using it — prevents runaway updates in dense/pathological regions.
+      const R_clamped = Math.max(-thresh, Math.min(thresh, R));
+      if (R_clamped === 0) continue;
+      const delta = -lr * R_clamped;
+      sys.density[i] = Math.max(0, sys.density[i] + delta);
+      sys.mass[i] += delta;
+      sys.update(i);
+      updated++;
+    }
+
+    if (updated > 0) metrics.increment("ricci.atoms_updated", updated);
   }
 
   /**
@@ -495,8 +704,39 @@ export class ManifoldLifecycle {
       }
       if (actionAnchors.length === 0) return;
 
-      // Find a tension zone: isolated high-entropy operand near an action anchor
+      // C2: Build a grid and rank candidates by absolute scalar curvature |R|.
+      // High-curvature zones are under-resolved - expansion effort goes there first.
+      // Falls back to topology-priority + linear scan when fewer than 10 atoms exist.
+      const actualRadius = Math.sqrt(DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS);
+      const curvGrid = new GridIndex4D(Math.max(actualRadius, 0.5));
       for (let i = 0; i < sys.length; i++) {
+        if (sys.isAllocated(i)) {
+          curvGrid.insert(
+            i,
+            sys.posX[i],
+            sys.posY[i],
+            sys.posZ[i],
+            sys.posW[i]
+          );
+        }
+      }
+      const ranked = this.unfolder.rankExpansionCandidates(curvGrid, 500);
+      const scanOrder: number[] = ranked.map(c => c.id);
+
+      // Append any topology-priority atoms not already in the ranked set (covers low-population manifolds).
+      const rankedSet = new Set(scanOrder);
+      for (const id of this._dreamPriorityAtoms) {
+        if (
+          id >= 0 &&
+          id < sys.length &&
+          sys.isAllocated(id) &&
+          !rankedSet.has(id)
+        ) {
+          scanOrder.push(id);
+        }
+      }
+
+      for (const i of scanOrder) {
         if (!sys.isAllocated(i)) continue;
         if (sys.operatorClass[i] !== OperatorClass.None) continue;
         if (
@@ -756,6 +996,25 @@ export class ManifoldLifecycle {
     this.dreamCycle().catch(err => {
       console.error("[ManifoldLifecycle] Error during dream cycle:", err);
     });
+
+    // B3: Low-frequency topology tick (every TOPO_TICK_INTERVAL ticks).
+    // Fire-and-forget: the running guard inside prevents overlap.
+    if (++this._topoTick >= ManifoldLifecycle.TOPO_TICK_INTERVAL) {
+      this._topoTick = 0;
+      this.runTopologyTick().catch(err => {
+        console.error("[ManifoldLifecycle] Error during topology tick:", err);
+      });
+    }
+
+    // C3: Discrete Ricci flow maintenance (every RICCI_TICK_INTERVAL ticks).
+    if (++this._ricciTick >= DOPAT_CONFIG.PHYSICS.RICCI_TICK_INTERVAL) {
+      this._ricciTick = 0;
+      try {
+        this.runRicciFlowTick();
+      } catch (err) {
+        console.error("[ManifoldLifecycle] Error during Ricci flow tick:", err);
+      }
+    }
 
     // Scan for destabilizing anomalies
     this.monitorThreats().catch(err => {

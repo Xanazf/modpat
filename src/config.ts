@@ -78,6 +78,34 @@ const DOPAT_CONFIG = {
      *   Δw = 1.0 → weight ≈ 0.05
      */
     PHI_TEMPORAL_DECAY: 3.0,
+    /**
+     * C3 - Discrete Ricci flow: hard cap on the curvature value fed into the
+     * Ricci tick update.  Clamps the *input* R, not the resulting density delta,
+     * preventing runaway φ-nudges in pathologically curved regions.
+     */
+    RICCI_BLOWUP_THRESHOLD: 10.0,
+    /**
+     * C3 - Per-tick learning rate for the Ricci flow density nudge.
+     * density[i] -= RICCI_LR × clamp(R_i, ±RICCI_BLOWUP_THRESHOLD)
+     * Kept deliberately small so topology changes remain gradual.
+     */
+    RICCI_LR: 0.001,
+    /**
+     * C3 - Ricci flow maintenance tick frequency (every N ManifoldLifecycle ticks).
+     * Runs at the same cadence as the topology tick by default.
+     */
+    RICCI_TICK_INTERVAL: 100,
+    /**
+     * C4 - Per-update learning rate for the learned Christoffel correction ΔΓᵢⱼᵏ.
+     * Applied on vault hits (positive) and traps / contradictions (negative).
+     */
+    CHRISTOFFEL_LR: 0.001,
+    /**
+     * C4 - Per-learnCycle decay toward zero for ΔΓᵢⱼᵏ.
+     * Regularizes the learned correction so the prescribed conformal metric
+     * dominates until sufficient supervised signal accrues.
+     */
+    CHRISTOFFEL_REGULARIZATION: 0.01,
   },
 
   resolver: {

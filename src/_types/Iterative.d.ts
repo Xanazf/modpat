@@ -34,6 +34,19 @@ declare namespace Delta {
   type Any = Ingest | Update | Free;
 }
 
+/**
+ * Topological lifecycle events emitted by ManifoldLifecycle during its
+ * low-frequency topology tick.  Consumers: dream-cycle prioritisation,
+ * vault tagging, InquiryQueue curiosity seeding.
+ */
+declare namespace Topology {
+  type Event =
+    | { type: "component_birth"; persistence: number; atomId: number }
+    | { type: "component_death"; persistence: number; atomId: number }
+    | { type: "loop_appeared"; persistence: number; atomId: number }
+    | { type: "loop_collapsed"; persistence: number; atomId: number };
+}
+
 declare namespace Wave {
   /**
    * Represents a single quantum of a logical signal.

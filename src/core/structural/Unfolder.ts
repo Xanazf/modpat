@@ -6,6 +6,8 @@ import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { extractTriples } from "@utils/tripleExtract";
 import { random } from "@utils/seededRandom";
+import { computeCurvature } from "@core_s/Curvature";
+import type { GridIndex4D } from "@core_s/GridIndex4D";
 import axios from "axios";
 import wiki from "wikipedia";
 
@@ -442,6 +444,40 @@ export default class Unfolder {
    */
   public resolveScope(scope: number): string | undefined {
     return this.atomizer.resolveScope(scope);
+  }
+
+  /**
+   * C2 - Rank allocated atoms by absolute scalar curvature |R|, descending.
+   *
+   * High-curvature zones are under-resolved: the manifold's geometry deviates
+   * most from flat Euclidean space there, so expansion effort is highest-value.
+   * The dreamCycle uses this ranking instead of random/tension-zone selection.
+   *
+   * @param gridIndex - Spatial index of the current manifold (built by caller).
+   * @param topK      - Maximum candidates to return (default 200).
+   */
+  public rankExpansionCandidates(
+    gridIndex: GridIndex4D,
+    topK = 200
+  ): Array<{ id: number; absR: number }> {
+    const sys = this.systemRef.current;
+    const candidates: Array<{ id: number; absR: number }> = [];
+
+    for (let i = 0; i < sys.length; i++) {
+      if (!sys.isAllocated(i)) continue;
+      const { R } = computeCurvature(
+        sys,
+        gridIndex,
+        sys.posX[i],
+        sys.posY[i],
+        sys.posZ[i],
+        sys.posW[i]
+      );
+      candidates.push({ id: i, absR: Math.abs(R) });
+    }
+
+    candidates.sort((a, b) => b.absR - a.absR);
+    return candidates.slice(0, topK);
   }
 
   /** Fetches encyclopedic context from Wikipedia with a hard timeout. */

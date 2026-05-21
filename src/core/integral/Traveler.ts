@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import { metrics } from "@core_s/Metrics";
+import { CURVATURE_WGSL } from "@core_s/Curvature";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
 import logger from "@utils/SpectralLogger";
@@ -214,6 +215,17 @@ class Traveler implements Mapping.Engine {
   public lastDiscoveredOperators: DiscoveredOperator[] = [];
   /** P2: times φ was clamped to PHI_MAX; non-zero means a pathologically dense region was hit. */
   public phiClippedCount = 0;
+
+  // ── C4: Learned Christoffel corrections ────────────────────────────────────
+  /**
+   * ΔΓᵢⱼᵏ: learned correction tensor (4×4×4 = 64 floats, indexed [i*16+j*4+k]).
+   * Applied as an additional geodesic deviation force during relaxPath.
+   * Initialised to zero; the prescribed conformal metric dominates until
+   * sufficient vault-hit / trap training signal accrues.
+   */
+  public readonly deltaGamma = new Float64Array(64);
+  /** Mean unit-velocity direction of the most recently relaxed path (used for training). */
+  private _lastPathVelocity: [number, number, number, number] = [0, 0, 0, 0];
 
   /**
    * Set of scopes from working memory used as warm-start context for the
@@ -534,6 +546,8 @@ class Traveler implements Mapping.Engine {
           options.preExpandLength || 0,
           targetId
         );
+        // C4: reinforce the Christoffel correction for this successful traversal.
+        this._updateChristoffels(1.0);
         break;
       } else if (report.trapIndex !== undefined) {
         penalties.push({
@@ -543,6 +557,8 @@ class Traveler implements Mapping.Engine {
           w: pa[report.trapIndex],
           strength: DOPAT_CONFIG.mapper.TRAP_PENALTY,
         });
+        // C4: penalize the Christoffel correction — this direction led to a trap.
+        this._updateChristoffels(-1.0);
       }
     }
 
@@ -778,6 +794,7 @@ class Traveler implements Mapping.Engine {
         struct Params { steps: u32, sysLength: u32, lr: f32, penCount: u32, iter: u32, h: f32, iR: f32, iF: f32, pR: f32, pF: f32, bodyAttr: f32, condAttr: f32, temporalDecay: f32, conformalEnabled: u32, phiMax: f32, _pad: u32 };
         @group(0) @binding(4) var<uniform> params: Params;
         @group(0) @binding(5) var<storage, read> sysSlotType: array<u32>;
+        ${CURVATURE_WGSL}
 
         const SLOT_BODY: u32      = 2u;
         const SLOT_CONDITION: u32 = 4u;
@@ -904,11 +921,19 @@ class Traveler implements Mapping.Engine {
         const se = (pe[i - 1] + pe[i + 1]) / 2 - pe[i];
         const sa = (pa[i - 1] + pa[i + 1]) / 2 - pa[i];
 
-        px[i] += lr * (sx * 2.0 - fx);
-        py[i] += lr * (sy * 2.0 - fy);
-        pe[i] += lr * (se * 2.0 - fz);
+        // C4: add Christoffel correction using local step velocity.
+        const [cfx, cfy, cfz, cfw] = this._christoffelForce(
+          px[i] - px[i - 1],
+          py[i] - py[i - 1],
+          pe[i] - pe[i - 1],
+          pa[i] - pa[i - 1]
+        );
 
-        const da_move = lr * (sa * 2.0 - fw);
+        px[i] += lr * (sx * 2.0 - fx - cfx);
+        py[i] += lr * (sy * 2.0 - fy - cfy);
+        pe[i] += lr * (se * 2.0 - fz - cfz);
+
+        const da_move = lr * (sa * 2.0 - fw - cfw);
         pa[i] += da_move;
 
         const ageDiff = pa[i] - pa[i - 1];
@@ -919,6 +944,21 @@ class Traveler implements Mapping.Engine {
         }
       }
     }
+
+    // C4: Record mean unit velocity of the final relaxed path for training.
+    let tvx = 0,
+      tvy = 0,
+      tvz = 0,
+      tvw = 0;
+    for (let i = 1; i <= steps; i++) {
+      tvx += px[i] - px[i - 1];
+      tvy += py[i] - py[i - 1];
+      tvz += pe[i] - pe[i - 1];
+      tvw += pa[i] - pa[i - 1];
+    }
+    const vMag =
+      Math.sqrt(tvx * tvx + tvy * tvy + tvz * tvz + tvw * tvw) + 1e-12;
+    this._lastPathVelocity = [tvx / vMag, tvy / vMag, tvz / vMag, tvw / vMag];
   }
 
   /**
@@ -1075,6 +1115,65 @@ class Traveler implements Mapping.Engine {
     }
 
     return [Math.max(0.01, V), fx, fy, fz, fw];
+  }
+
+  /**
+   * C4 - Compute the learned Christoffel correction force for one path step.
+   *
+   * The geodesic deviation from ΔΓᵢⱼᵏ is:
+   *   f_correction_i = Σ_{j,k} ΔΓ_{ijk} · v_j · v_k
+   *
+   * where v is the local path velocity (step direction).
+   */
+  private _christoffelForce(
+    vx: number,
+    vy: number,
+    vz: number,
+    vw: number
+  ): [fx: number, fy: number, fz: number, fw: number] {
+    const v = [vx, vy, vz, vw];
+    const f = [0, 0, 0, 0];
+    const dG = this.deltaGamma;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        const base = i * 16 + j * 4;
+        for (let k = 0; k < 4; k++) {
+          f[i] += dG[base + k] * v[j] * v[k];
+        }
+      }
+    }
+    return [f[0], f[1], f[2], f[3]];
+  }
+
+  /**
+   * C4 - Update ΔΓᵢⱼᵏ using the last path's mean velocity direction.
+   *
+   * Positive scale reinforces (vault hit, successful challenge);
+   * negative scale penalises (trap, contradiction).
+   */
+  private _updateChristoffels(scale: number): void {
+    const [vx, vy, vz, vw] = this._lastPathVelocity;
+    const v = [vx, vy, vz, vw];
+    const lr = DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_LR;
+    const delta = lr * scale;
+    const dG = this.deltaGamma;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        const base = i * 16 + j * 4;
+        for (let k = 0; k < 4; k++) {
+          dG[base + k] += delta * v[i] * v[j] * v[k];
+        }
+      }
+    }
+  }
+
+  /**
+   * C4 - Decay ΔΓ toward zero (called from learnCycle).
+   * Regularizes the learned correction so the prescribed metric always dominates.
+   */
+  public regularizeChristoffels(): void {
+    const decay = 1.0 - DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_REGULARIZATION;
+    for (let i = 0; i < 64; i++) this.deltaGamma[i] *= decay;
   }
 
   private getPotentialAndNearest(
@@ -2800,6 +2899,8 @@ class Traveler implements Mapping.Engine {
       let repCount = candidate.reproductionCount;
 
       const result1 = await this.challenge(candidate);
+      // C4: update Christoffel correction based on challenge outcome.
+      this._updateChristoffels(result1.success ? 1.0 : -0.5);
       let bestResult = result1;
       if (result1.success && !existingHashes.has(result1.contextHash)) {
         repCount++;
@@ -2902,6 +3003,9 @@ class Traveler implements Mapping.Engine {
         report.failed++;
       }
     }
+
+    // C4: decay Christoffel corrections toward zero once per learnCycle.
+    this.regularizeChristoffels();
 
     report.summary = await this.store.getKnowledgeSummary();
     return report;
