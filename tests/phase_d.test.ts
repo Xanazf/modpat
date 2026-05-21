@@ -84,8 +84,8 @@ export async function runPhaseDTests() {
     await it("detects high-score singularity near a dense cluster", async () => {
       const sys = makeSystem();
 
-      // 25 atoms tightly packed at the origin - creates a steep ∇φ field nearby.
-      for (let i = 0; i < 25; i++) addAtom(sys, 0, 0, 0, 0.5);
+      // 25 atoms tightly packed near the origin (slightly perturbed to prevent perfect overlap) - creates a steep ∇φ field nearby.
+      for (let i = 0; i < 25; i++) addAtom(sys, 0.001 * (i - 12), 0, 0, 0.5);
 
       // Probe atom 5 units away from the cluster - sits in the high-gradient zone.
       addAtom(sys, 5, 0, 0, 0.5);
@@ -123,6 +123,25 @@ export async function runPhaseDTests() {
       );
     });
 
+    await it("detects singularity for perfectly overlapping atoms", async () => {
+      const sys = makeSystem();
+      // Add two atoms at the exact same coordinates.
+      addAtom(sys, 0, 0, 0, 0.5);
+      addAtom(sys, 0, 0, 0, 0.5);
+
+      const grid = buildGrid(sys);
+      const candidates = detectSingularities(sys, grid);
+
+      assert.ok(
+        candidates.length >= 2,
+        `Expected both overlapping atoms to be flagged, got ${candidates.length}`
+      );
+      assert.ok(
+        candidates.every(c => c.score === 1000.0),
+        "Expected score to be exactly 1000.0 for perfectly overlapping atoms"
+      );
+    });
+
     await it("remediation creates a sibling atom and separates positions", async () => {
       const pers = await makePersistence();
       const primary = makeSystem();
@@ -131,8 +150,8 @@ export async function runPhaseDTests() {
 
       const sys = lifecycle.getActiveSystem();
 
-      // Dense cluster + probe (same fixture as the detection test above).
-      for (let i = 0; i < 25; i++) addAtom(sys, 0, 0, 0, 0.5);
+      // Dense cluster (slightly perturbed to prevent perfect overlap) + probe.
+      for (let i = 0; i < 25; i++) addAtom(sys, 0.001 * (i - 12), 0, 0, 0.5);
       const probeId = addAtom(sys, 5, 0, 0, 0.5);
       const preX = sys.posX[probeId];
       const lengthBefore = sys.length;
@@ -161,7 +180,7 @@ export async function runPhaseDTests() {
       const lifecycle = new ManifoldLifecycle(primary, emergency, pers);
       const sys = lifecycle.getActiveSystem();
 
-      for (let i = 0; i < 25; i++) addAtom(sys, 0, 0, 0, 0.5);
+      for (let i = 0; i < 25; i++) addAtom(sys, 0.001 * (i - 12), 0, 0, 0.5);
       addAtom(sys, 5, 0, 0, 0.5);
 
       const before =
@@ -601,6 +620,50 @@ export async function runPhaseDTests() {
       } finally {
         (ManifoldLifecycle as any).TOPO_TICK_INTERVAL = saved;
       }
+    });
+
+    await it("survives reboot / hydrates history from persistence", async () => {
+      const ctx = new DatabaseContext(":memory:");
+      const conn = await ctx.connect();
+      const pers = new SystemPersistence(conn);
+
+      const primary = makeSystem();
+      const emergency = makeSystem();
+      const lifecycle = new ManifoldLifecycle(primary, emergency, pers);
+
+      // Save a mock record
+      const mockRecord = {
+        tickIndex: 42,
+        h0ComponentCount: 5,
+        h1BarCount: 3,
+        totalH1Persistence: 12.5,
+      };
+
+      await pers.saveCobordismRecord(mockRecord);
+
+      // Instantiate a new lifecycle over the same persistence (simulating system restart)
+      const primary2 = makeSystem();
+      const emergency2 = makeSystem();
+      const lifecycle2 = new ManifoldLifecycle(primary2, emergency2, pers);
+
+      await lifecycle2.loadHistoryFromPersistence();
+
+      const history = lifecycle2.getCobordismHistory();
+      assert.strictEqual(history.length, 1, "Should have 1 hydrated record");
+      assert.strictEqual(history[0].tickIndex, 42, "TickIndex mismatch");
+      assert.strictEqual(
+        history[0].h0ComponentCount,
+        5,
+        "h0ComponentCount mismatch"
+      );
+      assert.strictEqual(history[0].h1BarCount, 3, "h1BarCount mismatch");
+      assert.strictEqual(
+        history[0].totalH1Persistence,
+        12.5,
+        "totalH1Persistence mismatch"
+      );
+
+      await ctx.close();
     });
   });
 }

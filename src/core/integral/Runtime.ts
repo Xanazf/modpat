@@ -378,6 +378,7 @@ export class Runtime {
         emergency,
         lifecyclePersistence
       );
+      await lifecycle.loadHistoryFromPersistence();
       lifecycle.setUnfolder(unfolder);
     }
 

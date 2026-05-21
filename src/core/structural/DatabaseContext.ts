@@ -75,6 +75,13 @@ export class DatabaseContext {
         key VARCHAR PRIMARY KEY,
         value VARCHAR
       );
+
+      CREATE TABLE IF NOT EXISTS cobordism_history (
+        tick_index UINTEGER PRIMARY KEY,
+        h0_component_count UINTEGER,
+        h1_bar_count UINTEGER,
+        total_h1_persistence DOUBLE
+      );
     `);
   }
 

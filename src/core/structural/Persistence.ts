@@ -1,6 +1,7 @@
 import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import type { DuckDBConnection } from "@duckdb/node-api";
+import type { CobordismRecord } from "./ManifoldLifecycle";
 
 /**
  * Increment SCHEMA_VERSION when:
@@ -284,6 +285,43 @@ export class SystemPersistence {
     } finally {
       stmt.destroySync();
     }
+  }
+
+  /**
+   * Saves a cobordism record to the persistent store.
+   * @param record - The cobordism record to persist.
+   */
+  public async saveCobordismRecord(record: CobordismRecord): Promise<void> {
+    const stmt = await this.connection.prepare(
+      "INSERT OR REPLACE INTO cobordism_history (tick_index, h0_component_count, h1_bar_count, total_h1_persistence) VALUES (?, ?, ?, ?)"
+    );
+    try {
+      stmt.bindInteger(1, record.tickIndex);
+      stmt.bindInteger(2, record.h0ComponentCount);
+      stmt.bindInteger(3, record.h1BarCount);
+      stmt.bindDouble(4, record.totalH1Persistence);
+      await stmt.run();
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /**
+   * Retrieves all persisted cobordism records, sorted by tick_index ASC.
+   * @returns A list of cobordism records.
+   */
+  public async loadCobordismHistory(): Promise<CobordismRecord[]> {
+    const res = await this.connection.run(
+      "SELECT tick_index, h0_component_count, h1_bar_count, total_h1_persistence FROM cobordism_history ORDER BY tick_index ASC"
+    );
+    const rows = await res.getRows();
+    if (!rows) return [];
+    return rows.map(r => ({
+      tickIndex: Number(r[0]),
+      h0ComponentCount: Number(r[1]),
+      h1BarCount: Number(r[2]),
+      totalH1Persistence: Number(r[3]),
+    }));
   }
 }
 

@@ -400,11 +400,12 @@ export class ManifoldLifecycle {
 
       this.stabilityPromise = newSystem
         .hydrate(this.persistence)
-        .then(() => {
+        .then(async () => {
           console.log(`[ManifoldLifecycle] Self-healing complete.`);
           this.activeSystem = newSystem;
           this.activeAllocator = newAllocator;
           this.systemRef.swap(newSystem);
+          await this.loadHistoryFromPersistence();
         })
         .finally(() => {
           this.isHydrating = false;
@@ -442,7 +443,7 @@ export class ManifoldLifecycle {
 
     this.stabilityPromise = targetSystem
       .hydrate(this.persistence)
-      .then(() => {
+      .then(async () => {
         console.log(
           `[ManifoldLifecycle] Emergency Manifold hydrated successfully.`
         );
@@ -450,6 +451,7 @@ export class ManifoldLifecycle {
         this.activeAllocator = targetAllocator;
         // Atomically redirect all SystemRef holders to the emergency system.
         this.systemRef.swap(targetSystem);
+        await this.loadHistoryFromPersistence();
       })
       .catch(err => {
         console.error(
@@ -639,6 +641,12 @@ export class ManifoldLifecycle {
     ) {
       this._cobordismHistory.shift();
     }
+    this.persistence.saveCobordismRecord(record).catch(err => {
+      console.error(
+        `[ManifoldLifecycle] Failed to persist cobordism record:`,
+        err
+      );
+    });
   }
 
   /**
@@ -800,9 +808,24 @@ export class ManifoldLifecycle {
     });
   }
 
-  /** D4 – All recorded cobordism snapshots, most recent first. */
+  /** D4 - All recorded cobordism snapshots, most recent first. */
   public getCobordismHistory(): CobordismRecord[] {
     return [...this._cobordismHistory].reverse();
+  }
+
+  /** Hydrates cobordism history from the persistent database. */
+  public async loadHistoryFromPersistence(): Promise<void> {
+    const history = await this.persistence.loadCobordismHistory();
+    this._cobordismHistory = history;
+    if (history.length > 0) {
+      let maxTick = -1;
+      for (const r of history) {
+        if (r.tickIndex > maxTick) {
+          maxTick = r.tickIndex;
+        }
+      }
+      this._globalTickIndex = maxTick + 1;
+    }
   }
 
   /**

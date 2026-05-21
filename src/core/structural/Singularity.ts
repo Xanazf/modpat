@@ -28,17 +28,39 @@ export function detectSingularities(
   for (let i = 0; i < system.length; i++) {
     if (!system.isAllocated(i)) continue;
 
-    const { phi, gradPhiSq } = computeCurvature(
-      system,
-      grid,
-      system.posX[i],
-      system.posY[i],
-      system.posZ[i],
-      system.posW[i]
-    );
+    const px = system.posX[i];
+    const py = system.posY[i];
+    const pz = system.posZ[i];
+    const pw = system.posW[i];
 
-    const score = gradPhiSq / (1.0 + phi * phi);
-    if (score > threshold) candidates.push({ atomId: i, score });
+    // Check if there is another allocated atom at the exact same coordinates.
+    const neighbors = grid.candidatesInRadius(px, py, pz, pw, 0.1);
+    let hasExactOverlap = false;
+    for (const j of neighbors) {
+      if (i === j) continue;
+      if (!system.isAllocated(j)) continue;
+      const dx = px - system.posX[j];
+      const dy = py - system.posY[j];
+      const dz = pz - system.posZ[j];
+      const dw = pw - system.posW[j];
+      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
+      if (distSq < 1e-9) {
+        hasExactOverlap = true;
+        break;
+      }
+    }
+
+    let score = 0;
+    if (hasExactOverlap) {
+      score = 1000.0; // Guaranteed to exceed threshold
+    } else {
+      const { phi, gradPhiSq } = computeCurvature(system, grid, px, py, pz, pw);
+      score = gradPhiSq / (1.0 + phi * phi);
+    }
+
+    if (score > threshold) {
+      candidates.push({ atomId: i, score });
+    }
   }
 
   return candidates;
