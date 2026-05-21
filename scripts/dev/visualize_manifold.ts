@@ -2,15 +2,23 @@
  * A3 - Manifold visualizer.
  *
  * Usage:
- *   tsx scripts/dev/visualize_manifold.ts [--snapshot path] [--path "source text" "target text"]
+ *   tsx scripts/dev/visualize_manifold.ts [options]
  *
- * Loads a Runtime, PCA-projects the 4D atom positions to 2D, then pushes
- * atoms + optional traversal path to the tldraw MCP canvas.
+ * Options:
+ *   --db <path>   DuckDB path (default: ./data/repl.db)
+ *   --src <text>  Source text for path overlay
+ *   --tgt <text>  Target text for path overlay
+ *   --top <n>     Max atoms to render (default: 2000)
+ *   --out <path>  Output HTML file (default: manifold.html)
+ *   --open        Open the HTML file in the default browser after writing
+ *
+ * Writes a self-contained HTML file.  No Claude Code dependency.
  *
  * PCA is performed on the N×4 position matrix using power iteration for the
  * top-2 eigenvectors - no external dependency.
  */
 
+import { writeFileSync } from "node:fs";
 import { program } from "commander";
 import { DOPAT_CONFIG } from "@config";
 import Runtime from "@core_i/Runtime";
@@ -20,6 +28,8 @@ program
   .option("--src <text>", "Source text for path overlay")
   .option("--tgt <text>", "Target text for path overlay")
   .option("--top <n>", "Max atoms to render", "2000")
+  .option("--out <path>", "Output HTML file", "manifold.html")
+  .option("--open", "Open in default browser after writing")
   .parse();
 
 const opts = program.opts<{
@@ -27,6 +37,8 @@ const opts = program.opts<{
   src?: string;
   tgt?: string;
   top: string;
+  out: string;
+  open?: boolean;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -156,35 +168,28 @@ async function main() {
   const scale = (v: number, min: number, range: number) =>
     ((v - min) / range) * 600 - 300;
 
-  // Build tldraw shapes
-  const shapes: any[] = [];
+  // Internal flat shape representation used by the SVG writer below
+  interface AtomShape {
+    _cx: number;
+    _cy: number;
+    _r: number;
+    _fill: string;
+  }
+  const shapes: AtomShape[] = [];
 
   for (let i = 0; i < n; i++) {
     const [px, py] = points[i];
-    const cx = scale(px, minX, rangeX);
-    const cy = scale(py, minY, rangeY);
     const m = Math.abs(system.mass[i]);
-    const radius = Math.max(2, Math.min(12, Math.sqrt(m) * 0.5));
-    const phi = system.density[i] * 2 + system.intensity[i] * 1.5 + 5;
-    const color = phiColor(phi);
-
     shapes.push({
-      type: "geo",
-      x: cx - radius,
-      y: cy - radius,
-      props: {
-        geo: "ellipse",
-        w: radius * 2,
-        h: radius * 2,
-        fill: "solid",
-        color: "black",
-        opacity: "0.7",
-      },
-      meta: { fillColor: color },
+      _cx: scale(px, minX, rangeX),
+      _cy: scale(py, minY, rangeY),
+      _r: Math.max(2, Math.min(12, Math.sqrt(m) * 0.5)),
+      _fill: phiColor(system.density[i] * 2 + system.intensity[i] * 1.5 + 5),
     });
   }
 
   // Optional path overlay
+  const pathSegments: Array<[number, number]> = [];
   if (opts.src && opts.tgt) {
     const srcResult = rt.language!.ingest(opts.src);
     const tgtResult = rt.language!.ingest(opts.tgt);
@@ -196,60 +201,97 @@ async function main() {
       const pathIds = await rt.mapper.traverse(
         srcIds[0],
         tgtIds[tgtIds.length - 1],
-        {
-          steps: 16,
-          maxIterations: 60,
-        }
+        { steps: 16, maxIterations: 60 }
       );
-
-      const pathPoints = Array.from(pathIds)
-        .filter(id => id < n)
-        .map(id => {
+      for (const id of pathIds) {
+        if (id < n) {
           const [px, py] = points[id];
-          return [scale(px, minX, rangeX), scale(py, minY, rangeY)];
-        });
-
-      if (pathPoints.length >= 2) {
-        shapes.push({
-          type: "draw",
-          x: 0,
-          y: 0,
-          props: {
-            segments: [
-              {
-                type: "free",
-                points: pathPoints.map(([x, y]) => ({ x, y, z: 0.5 })),
-              },
-            ],
-            color: "orange",
-            size: "m",
-          },
-        });
+          pathSegments.push([scale(px, minX, rangeX), scale(py, minY, rangeY)]);
+        }
       }
     }
   }
 
-  // Send to tldraw
-  const { execSync } = await import("node:child_process");
-  const payload = JSON.stringify({
-    script: `
-      editor.selectAll();
-      editor.deleteShapes(editor.getSelectedShapeIds());
-      const shapes = ${JSON.stringify(shapes)};
-      editor.createShapes(shapes.map(s => ({
-        ...s,
-        id: editor.createShapeId ? editor.createShapeId() : \`shape:\${Math.random()}\`,
-      })));
-      editor.zoomToFit();
-    `,
-  });
-  console.log("Sending to tldraw MCP…");
-  // The tldraw MCP exec tool is invoked via the Claude Code MCP integration at runtime.
-  // In standalone mode, log the shapes count for verification.
-  console.log(`Rendered ${shapes.length} shapes (atoms + path)`);
-  console.log(
-    "Open Claude Code and run this script via the tldraw MCP exec tool."
-  );
+  // ---------------------------------------------------------------------------
+  // Build SVG elements
+  // ---------------------------------------------------------------------------
+  const W = 900,
+    H = 900,
+    PAD = 40;
+  const innerW = W - PAD * 2,
+    innerH = H - PAD * 2;
+
+  const svgAtoms = shapes
+    .map(s => {
+      const cx = (s._cx * innerW) / 600 + W / 2;
+      const cy = (s._cy * innerH) / 600 + H / 2;
+      return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${s._r.toFixed(1)}" fill="${s._fill}" fill-opacity="0.75" stroke="none"/>`;
+    })
+    .join("\n    ");
+
+  const svgPath =
+    pathSegments.length >= 2
+      ? `<polyline points="${pathSegments.map(([x, y]) => `${((x * innerW) / 600 + W / 2).toFixed(1)},${((y * innerH) / 600 + H / 2).toFixed(1)}`).join(" ")}" fill="none" stroke="#ff8800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`
+      : "";
+
+  const legendGrad = `<defs>
+    <linearGradient id="phiGrad" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#0000ff"/>
+      <stop offset="100%" stop-color="#ff0000"/>
+    </linearGradient>
+  </defs>`;
+
+  const title =
+    opts.src && opts.tgt
+      ? `${opts.src} → ${opts.tgt}`
+      : `ModPAT manifold (${n} atoms)`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>ModPAT manifold</title>
+<style>
+  body { margin: 0; background: #0e0e14; display: flex; flex-direction: column; align-items: center; font-family: monospace; color: #ccc; }
+  h1 { font-size: 13px; margin: 10px 0 2px; opacity: 0.7; }
+  svg { display: block; }
+  .legend { display: flex; align-items: center; gap: 8px; font-size: 11px; margin: 4px 0 10px; }
+  .legend rect { display: block; }
+</style>
+</head>
+<body>
+<h1>${title}</h1>
+<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  ${legendGrad}
+  <rect width="${W}" height="${H}" fill="#0e0e14"/>
+  ${svgAtoms}
+  ${svgPath}
+</svg>
+<div class="legend">
+  <span>φ:&nbsp;</span>
+  <svg width="100" height="12"><rect width="100" height="12" fill="url(#phiGrad)"/></svg>
+  <span>low → high</span>
+  &nbsp;&nbsp;
+  <svg width="24" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#ff8800" stroke-width="2.5"/></svg>
+  <span>traversal path</span>
+</div>
+<p style="font-size:10px;opacity:0.4">atom radius ∝ √mass · atoms: ${n} · seed: ${DOPAT_CONFIG.SEED}</p>
+</body>
+</html>`;
+
+  writeFileSync(opts.out, html, "utf8");
+  console.log(`Written: ${opts.out}`);
+
+  if (opts.open) {
+    const { spawn } = await import("node:child_process");
+    const opener =
+      process.platform === "darwin"
+        ? "open"
+        : process.platform === "win32"
+          ? "start"
+          : "xdg-open";
+    spawn(opener, [opts.out], { detached: true, stdio: "ignore" }).unref();
+  }
 
   await rt.dispose();
 }

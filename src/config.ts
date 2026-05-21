@@ -14,6 +14,7 @@ const DOPAT_CONFIG = {
   DECAY_RATE: 0.95,
   USE_GPU: true,
   DRIFT_THRESHOLD: 100.0,
+  /** PHYSICS is uppercase by convention: these are invariant physical laws, not a component config. All other sub-namespaces (resolver, mapper, structural…) configure runtime components and use lowercase. */
   PHYSICS: {
     /**
      * Normalization constant for derived physical properties (density, entropyRate, intensity).

@@ -19,7 +19,7 @@ import { InquiryQueue, type InquiryItem } from "./InquiryQueue";
 import type { SkillHandler } from "./skills";
 import type { Language } from "./language/Language";
 import type { WorkingMemory } from "./language/WorkingMemory";
-import { MapperWorkspace, MapperWorkspacePool } from "./ResolverSlot";
+import { TravelerWorkspace, TravelerWorkspacePool } from "./TravelerWorkspace";
 import {
   classifyOperatorToken,
   OperatorClass,
@@ -195,7 +195,7 @@ class Traveler implements Mapping.Engine {
   /** Default workspace pool size. */
   private static DEFAULT_POOL_SIZE = 8;
   /** Per-call workspace pool. */
-  private readonly workspacePool: MapperWorkspacePool;
+  private readonly workspacePool: TravelerWorkspacePool;
   /** 4D spatial index reused across fuzzy-centroid lookups in perception. */
   private readonly spatialIndex = new GridIndex4D();
   private lastIndexedLength = -1;
@@ -252,7 +252,7 @@ class Traveler implements Mapping.Engine {
     this.unfolder = unfolder;
     this.synthesizer = new Synthesizer();
 
-    this.workspacePool = new MapperWorkspacePool(
+    this.workspacePool = new TravelerWorkspacePool(
       Traveler.DEFAULT_POOL_SIZE,
       Traveler.MAX_SEQUENCE_LENGTH
     );
@@ -1322,7 +1322,7 @@ class Traveler implements Mapping.Engine {
 
   private async _perceiveWithSlot(
     sequenceIds: Uint32Array,
-    slot: MapperWorkspace
+    slot: TravelerWorkspace
   ): Promise<Uint32Array> {
     const N = sequenceIds.length;
     slot.sinkStrength = 0;
