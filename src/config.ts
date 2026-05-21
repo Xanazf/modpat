@@ -106,6 +106,23 @@ const DOPAT_CONFIG = {
      * dominates until sufficient supervised signal accrues.
      */
     CHRISTOFFEL_REGULARIZATION: 0.01,
+    /**
+     * D1 - Singularity detection threshold: |∇φ|² / (1 + φ²) > this value
+     * marks an atom as a singularity candidate.  Regions above this threshold
+     * have a rank-deficient local geometry (many concepts colliding).
+     */
+    SINGULARITY_THRESHOLD: 0.1,
+    /**
+     * D1 - How often (in ManifoldLifecycle ticks) to run the singularity scan.
+     * Less frequent than Ricci/topology ticks - remediation is disruptive.
+     */
+    SINGULARITY_TICK_INTERVAL: 500,
+    /**
+     * D1 - Displacement radius used when splitting a singularity atom into two.
+     * The original atom and its sibling are nudged apart by fractions of this value
+     * along the XY plane and the W (temporal) axis.
+     */
+    SINGULARITY_SPLIT_RADIUS: 5.0,
   },
 
   resolver: {

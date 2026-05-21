@@ -15,6 +15,7 @@ import {
 import { extractTopic } from "@utils/topicExtraction";
 import nlp from "compromise";
 import { GridIndex4D } from "../structural/GridIndex4D";
+import type { PersistenceBar } from "@core_s/PersistentHomology";
 import { type CodePattern, Synthesizer } from "./Coder";
 import { InquiryQueue, type InquiryItem } from "./InquiryQueue";
 import type { SkillHandler } from "./skills";
@@ -146,6 +147,45 @@ export interface PerceptionCapture {
 }
 
 /**
+ * D3 – Result of a path homotopy check between two traversals.
+ */
+export interface HomotopyResult {
+  /** True if the loop path₁ + reversed(path₂) encloses no persistent H₁ generator. */
+  homotopic: boolean;
+  /** H₁ bars whose generator atoms are enclosed by the loop. */
+  straddledH1Bars: PersistenceBar[];
+  /** [0, 1] - 0 = homotopic, 1 = all qualified generators straddled. */
+  analogyScore: number;
+}
+
+/**
+ * Integer winding number of the 2D polygon `loop` around the point (gx, gy).
+ * Uses the non-zero rule: +1 for upward crossings left of the point, −1 for downward.
+ */
+function windingNumber(
+  loop: [number, number][],
+  gx: number,
+  gy: number
+): number {
+  let wn = 0;
+  const n = loop.length;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = loop[i];
+    const [x2, y2] = loop[(i + 1) % n];
+    if (y1 <= gy) {
+      if (y2 > gy) {
+        if ((x2 - x1) * (gy - y1) - (y2 - y1) * (gx - x1) > 0) wn++;
+      }
+    } else {
+      if (y2 <= gy) {
+        if ((x2 - x1) * (gy - y1) - (y2 - y1) * (gx - x1) < 0) wn--;
+      }
+    }
+  }
+  return wn;
+}
+
+/**
  * The Mapper is THE thinker. It owns perception (resonance propagation
  * through the manifold) AND locomotion (geodesic traversal). Thinking IS
  * movement through the world; there is no separate deliberation step.
@@ -216,6 +256,20 @@ class Traveler implements Mapping.Engine {
   /** P2: times φ was clamped to PHI_MAX; non-zero means a pathologically dense region was hit. */
   public phiClippedCount = 0;
 
+  // ── D2: Parallel transport (holonomy) ──────────────────────────────────────
+  /**
+   * 4×4 holonomy matrix accumulated along the most recently relaxed geodesic.
+   * Initialized to the identity; updated by computeHolonomy() after each CPU
+   * path relaxation.  Measures how an evidence vector rotates along the path.
+   */
+  public readonly lastHolonomy = new Float64Array(16);
+  /**
+   * Inferential effort scalar: ||H − I||_F / 4 where H is lastHolonomy.
+   * 0 = perfectly straight geodesic (easy inference), higher = more curvature
+   * accumulated (creative leap).  Surfaced as a confidence signal.
+   */
+  public lastInferentialEffort = 0;
+
   // ── C4: Learned Christoffel corrections ────────────────────────────────────
   /**
    * ΔΓᵢⱼᵏ: learned correction tensor (4×4×4 = 64 floats, indexed [i*16+j*4+k]).
@@ -263,6 +317,13 @@ class Traveler implements Mapping.Engine {
     this.gpu = gpu;
     this.unfolder = unfolder;
     this.synthesizer = new Synthesizer();
+
+    // D2: seed holonomy as identity matrix.
+    this.lastHolonomy[0] =
+      this.lastHolonomy[5] =
+      this.lastHolonomy[10] =
+      this.lastHolonomy[15] =
+        1;
 
     this.workspacePool = new TravelerWorkspacePool(
       Traveler.DEFAULT_POOL_SIZE,
@@ -557,10 +618,15 @@ class Traveler implements Mapping.Engine {
           w: pa[report.trapIndex],
           strength: DOPAT_CONFIG.mapper.TRAP_PENALTY,
         });
-        // C4: penalize the Christoffel correction — this direction led to a trap.
+        // C4: penalize the Christoffel correction - this direction led to a trap.
         this._updateChristoffels(-1.0);
       }
     }
+
+    // D2: Compute holonomy from the final relaxed path - works for both CPU and GPU paths.
+    this._computeHolonomy(px, py, pe, pa, steps);
+    if (finalIds !== null)
+      metrics.gauge("transport.inferential_effort", this.lastInferentialEffort);
 
     const result =
       finalIds ||
@@ -1174,6 +1240,186 @@ class Traveler implements Mapping.Engine {
   public regularizeChristoffels(): void {
     const decay = 1.0 - DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_REGULARIZATION;
     for (let i = 0; i < 64; i++) this.deltaGamma[i] *= decay;
+  }
+
+  /**
+   * D2 – Parallel transport: compute the holonomy matrix from a relaxed path.
+   *
+   * At each step the tangent rotates in the plane (û_{i-1}, û_i).  The holonomy
+   * H is the product of all these infinitesimal plane-rotations; it encodes how
+   * much a vector carried along the path would be deflected from its initial
+   * direction.  `lastInferentialEffort = ||H − I||_F / 4` is a scalar effort
+   * signal: 0 for a straight geodesic, larger for a winding, curvature-rich path.
+   */
+  private _computeHolonomy(
+    px: Float64Array,
+    py: Float64Array,
+    pe: Float64Array,
+    pa: Float64Array,
+    steps: number
+  ): void {
+    const H = this.lastHolonomy;
+    // Reset to identity.
+    H.fill(0);
+    H[0] = H[5] = H[10] = H[15] = 1;
+
+    const R = new Float64Array(16);
+
+    for (let i = 1; i < steps; i++) {
+      const ux = px[i] - px[i - 1];
+      const uy = py[i] - py[i - 1];
+      const uz = pe[i] - pe[i - 1];
+      const uw = pa[i] - pa[i - 1];
+      const vx = px[i + 1] - px[i];
+      const vy = py[i + 1] - py[i];
+      const vz = pe[i + 1] - pe[i];
+      const vw = pa[i + 1] - pa[i];
+
+      const uMag = Math.sqrt(ux * ux + uy * uy + uz * uz + uw * uw) + 1e-12;
+      const vMag = Math.sqrt(vx * vx + vy * vy + vz * vz + vw * vw) + 1e-12;
+      const ûx = ux / uMag,
+        ûy = uy / uMag,
+        ûz = uz / uMag,
+        ûw = uw / uMag;
+      const v̂x = vx / vMag,
+        v̂y = vy / vMag,
+        v̂z = vz / vMag,
+        v̂w = vw / vMag;
+
+      const cosT = Math.max(
+        -1,
+        Math.min(1, ûx * v̂x + ûy * v̂y + ûz * v̂z + ûw * v̂w)
+      );
+      if (Math.abs(cosT) > 1 - 1e-10) continue; // negligible bend, skip
+
+      const sinT = Math.sqrt(1 - cosT * cosT);
+      // v̂_perp: component of v̂ perpendicular to û, normalized.
+      const px_ = (v̂x - cosT * ûx) / sinT;
+      const py_ = (v̂y - cosT * ûy) / sinT;
+      const pz_ = (v̂z - cosT * ûz) / sinT;
+      const pw_ = (v̂w - cosT * ûw) / sinT;
+
+      const û = [ûx, ûy, ûz, ûw];
+      const p_ = [px_, py_, pz_, pw_];
+
+      // Build rotation matrix R in the plane (û, v̂_perp):
+      // R_ab = δ_ab + sinT(p_a û_b − û_a p_b) + (cosT−1)(û_a û_b + p_a p_b)
+      for (let a = 0; a < 4; a++) {
+        for (let b = 0; b < 4; b++) {
+          R[a * 4 + b] =
+            (a === b ? 1 : 0) +
+            sinT * (p_[a] * û[b] - û[a] * p_[b]) +
+            (cosT - 1) * (û[a] * û[b] + p_[a] * p_[b]);
+        }
+      }
+
+      // H = R · H (compose new rotation onto accumulated holonomy).
+      const h00 = H[0],
+        h01 = H[1],
+        h02 = H[2],
+        h03 = H[3];
+      const h10 = H[4],
+        h11 = H[5],
+        h12 = H[6],
+        h13 = H[7];
+      const h20 = H[8],
+        h21 = H[9],
+        h22 = H[10],
+        h23 = H[11];
+      const h30 = H[12],
+        h31 = H[13],
+        h32 = H[14],
+        h33 = H[15];
+      for (let a = 0; a < 4; a++) {
+        H[a * 4 + 0] =
+          R[a * 4] * h00 +
+          R[a * 4 + 1] * h10 +
+          R[a * 4 + 2] * h20 +
+          R[a * 4 + 3] * h30;
+        H[a * 4 + 1] =
+          R[a * 4] * h01 +
+          R[a * 4 + 1] * h11 +
+          R[a * 4 + 2] * h21 +
+          R[a * 4 + 3] * h31;
+        H[a * 4 + 2] =
+          R[a * 4] * h02 +
+          R[a * 4 + 1] * h12 +
+          R[a * 4 + 2] * h22 +
+          R[a * 4 + 3] * h32;
+        H[a * 4 + 3] =
+          R[a * 4] * h03 +
+          R[a * 4 + 1] * h13 +
+          R[a * 4 + 2] * h23 +
+          R[a * 4 + 3] * h33;
+      }
+    }
+
+    // Inferential effort = ||H − I||_F / 4 (normalized so a 90° rotation → ~0.5).
+    let frobSq = 0;
+    for (let a = 0; a < 4; a++) {
+      for (let b = 0; b < 4; b++) {
+        const d = H[a * 4 + b] - (a === b ? 1 : 0);
+        frobSq += d * d;
+      }
+    }
+    this.lastInferentialEffort = Math.sqrt(frobSq) / 4;
+  }
+
+  /**
+   * D3 – Detect whether two traversals between the same endpoints are homotopic.
+   *
+   * Constructs the loop path₁ ++ reversed(path₂) in (posX, posY) and checks
+   * whether any H₁ generator atom is enclosed (non-zero winding number).
+   * Straddled generators are genuine topological obstacles - the two routes
+   * represent distinct inferential strategies, not paraphrases.
+   *
+   * @param minPersistence  Only H₁ bars with (death − birth) > this are checked.
+   *   Filters out short-lived noise; defaults to 0 (check everything).
+   */
+  public detectHomotopy(
+    pathA: Uint32Array,
+    pathB: Uint32Array,
+    h1Bars: PersistenceBar[],
+    minPersistence = 0
+  ): HomotopyResult {
+    if (h1Bars.length === 0) {
+      return { homotopic: true, straddledH1Bars: [], analogyScore: 0 };
+    }
+
+    // Build the loop in (posX, posY) = pathA forward + pathB reversed.
+    const loop: [number, number][] = [];
+    for (const id of pathA) {
+      if (id < this.system.length && this.system.isAllocated(id)) {
+        loop.push([this.system.posX[id], this.system.posY[id]]);
+      }
+    }
+    for (let i = pathB.length - 1; i >= 0; i--) {
+      const id = pathB[i];
+      if (id < this.system.length && this.system.isAllocated(id)) {
+        loop.push([this.system.posX[id], this.system.posY[id]]);
+      }
+    }
+    if (loop.length < 3) {
+      return { homotopic: true, straddledH1Bars: [], analogyScore: 0 };
+    }
+
+    const qualified = h1Bars.filter(b => b.death - b.birth > minPersistence);
+    const straddled: PersistenceBar[] = [];
+
+    for (const bar of qualified) {
+      const id = bar.generatorAtomId;
+      if (!this.system.isAllocated(id)) continue;
+      const gx = this.system.posX[id];
+      const gy = this.system.posY[id];
+      if (windingNumber(loop, gx, gy) !== 0) {
+        straddled.push(bar);
+      }
+    }
+
+    const homotopic = straddled.length === 0;
+    const analogyScore =
+      qualified.length > 0 ? straddled.length / qualified.length : 0;
+    return { homotopic, straddledH1Bars: straddled, analogyScore };
   }
 
   private getPotentialAndNearest(

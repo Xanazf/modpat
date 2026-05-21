@@ -21,6 +21,7 @@ import { runAstSeederTests } from "./ast_seeder.test";
 import { runProactivePathTests } from "./proactive_paths.test";
 import { runPhiSafetyTests } from "./phi_safety.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
+import { runPhaseDTests } from "./phase_d.test";
 import { executeArithmeticSuite } from "./arithmetic.test";
 import { executeNumberLineSuite } from "./number_line.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
@@ -107,6 +108,7 @@ async function run() {
     await runWithTimeout("arithmetic", executeArithmeticSuite);
     await runWithTimeout("number_line", executeNumberLineSuite);
     await runWithTimeout("endurance", executeEnduranceSuite);
+    await runWithTimeout("phase_d", runPhaseDTests);
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

@@ -9,12 +9,29 @@ import { metrics } from "@core_s/Metrics";
 import type Unfolder from "@core_s/Unfolder";
 import { GridIndex4D } from "@src/core/structural/GridIndex4D";
 import { computeCurvature } from "@core_s/Curvature";
+import { detectSingularities } from "@core_s/Singularity";
 import type { SystemPersistence } from "./Persistence";
 import {
   type NerveGraph,
   type PersistenceBar,
   buildNerveGraph,
 } from "./TopologyMapper";
+
+/**
+ * D4 – Snapshot of the manifold's topological state at one topology tick.
+ * Used to identify cobordant episodes (structurally similar manifold phases)
+ * for long-term memory consolidation.
+ */
+export interface CobordismRecord {
+  /** Monotonically increasing topology-tick index. */
+  tickIndex: number;
+  /** Number of essential H₀ components (death = ∞). */
+  h0ComponentCount: number;
+  /** Total number of H₁ bars (including infinite). */
+  h1BarCount: number;
+  /** Sum of finite H₁ bar lifetimes (death − birth). */
+  totalH1Persistence: number;
+}
 
 function arraysEqual(a: number[], b: number[]): boolean {
   if (a.length !== b.length) return false;
@@ -264,6 +281,14 @@ export class ManifoldLifecycle {
 
   // ── C3: Ricci flow tick ────────────────────────────────────────────────────
   private _ricciTick = 0;
+
+  // ── D1: Singularity tick ───────────────────────────────────────────────────
+  private _singularityTick = 0;
+
+  // ── D4: Cobordism history ──────────────────────────────────────────────────
+  private _cobordismHistory: CobordismRecord[] = [];
+  private _globalTickIndex = 0;
+  private static readonly COBORDISM_HISTORY_SIZE = 10;
 
   /**
    * Initializes the Manifold Manager with primary and emergency systems.
@@ -527,7 +552,7 @@ export class ManifoldLifecycle {
     // Component births/deaths track changes in the set of *essential* components
     // (bars with death=Infinity, i.e. connected components that persist to the
     // maximum filtration radius).  Finite-death bars are historical merge events
-    // that exist at every snapshot — comparing them between ticks is meaningless.
+    // that exist at every snapshot - comparing them between ticks is meaningless.
     const prevH0InfiniteAtoms = new Set(
       this._prevH0.filter(b => b.death === Infinity).map(b => b.generatorAtomId)
     );
@@ -597,6 +622,23 @@ export class ManifoldLifecycle {
     if (events.length > 0) {
       metrics.increment("topology.events", events.length);
     }
+
+    // ── D4: Record cobordism snapshot ─────────────────────────────────────────
+    const totalH1Persistence = h1
+      .filter(b => b.death !== Infinity)
+      .reduce((sum, b) => sum + (b.death - b.birth), 0);
+    const record: CobordismRecord = {
+      tickIndex: this._globalTickIndex++,
+      h0ComponentCount: h0.filter(b => b.death === Infinity).length,
+      h1BarCount: h1.length,
+      totalH1Persistence,
+    };
+    this._cobordismHistory.push(record);
+    if (
+      this._cobordismHistory.length > ManifoldLifecycle.COBORDISM_HISTORY_SIZE
+    ) {
+      this._cobordismHistory.shift();
+    }
   }
 
   /**
@@ -647,7 +689,7 @@ export class ManifoldLifecycle {
         sys.posZ[i],
         sys.posW[i]
       );
-      // Clamp R before using it — prevents runaway updates in dense/pathological regions.
+      // Clamp R before using it - prevents runaway updates in dense/pathological regions.
       const R_clamped = Math.max(-thresh, Math.min(thresh, R));
       if (R_clamped === 0) continue;
       const delta = -lr * R_clamped;
@@ -658,6 +700,109 @@ export class ManifoldLifecycle {
     }
 
     if (updated > 0) metrics.increment("ricci.atoms_updated", updated);
+  }
+
+  /**
+   * D1 – Singularity detection and remediation tick.
+   *
+   * Scans for atoms where |∇φ|² / (1 + φ²) > SINGULARITY_THRESHOLD and splits
+   * each one into two atoms placed on opposite sides of a random orthogonal axis.
+   * Capped at 10 remediations per tick to prevent population bursts.
+   */
+  private runSingularityTick(): void {
+    const sys = this.activeSystem;
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const actualRadius = Math.sqrt(phys.INFLUENCE_RADIUS);
+    const splitR = phys.SINGULARITY_SPLIT_RADIUS;
+
+    const grid = new GridIndex4D(Math.max(actualRadius, 0.5));
+    for (let i = 0; i < sys.length; i++) {
+      if (sys.isAllocated(i)) {
+        grid.insert(i, sys.posX[i], sys.posY[i], sys.posZ[i], sys.posW[i]);
+      }
+    }
+
+    const candidates = detectSingularities(sys, grid);
+    if (candidates.length === 0) return;
+
+    metrics.increment("singularity.detected", candidates.length);
+
+    const MAX_REMEDIATIONS = 10;
+    let remediated = 0;
+
+    for (const { atomId } of candidates) {
+      if (remediated >= MAX_REMEDIATIONS) break;
+
+      let newId: number;
+      try {
+        newId = sys.createLocation(
+          sys.mass[atomId] * 0.5,
+          sys.scope[atomId],
+          "singularity_split"
+        );
+      } catch {
+        break; // manifold at capacity
+      }
+      sys.mass[atomId] *= 0.5;
+
+      // Copy non-mass fields to the sibling.
+      sys.density[newId] = sys.density[atomId];
+      sys.intensity[newId] = sys.intensity[atomId];
+      sys.entropyRate[newId] = sys.entropyRate[atomId];
+      sys.decayRate[newId] = sys.decayRate[atomId];
+      sys.operatorClass[newId] = sys.operatorClass[atomId];
+      sys.depth[newId] = sys.depth[atomId];
+      sys.slotType[newId] = sys.slotType[atomId];
+      sys.time[newId] = sys.time[atomId];
+
+      // Displace along a random direction in the XY plane; nudge W (temporal) too.
+      const theta = random() * Math.PI * 2;
+      sys.posX[newId] = sys.posX[atomId] + splitR * Math.cos(theta) * 0.3;
+      sys.posY[newId] = sys.posY[atomId] + splitR * Math.sin(theta) * 0.3;
+      sys.posZ[newId] = sys.posZ[atomId];
+      sys.posW[newId] = sys.posW[atomId] + splitR * 0.5;
+
+      // Nudge the original atom in the opposite half-direction.
+      sys.posX[atomId] -= splitR * Math.cos(theta) * 0.15;
+      sys.posY[atomId] -= splitR * Math.sin(theta) * 0.15;
+      sys.posW[atomId] -= splitR * 0.25;
+
+      sys.update(atomId);
+      sys.update(newId);
+      remediated++;
+    }
+
+    if (remediated > 0) metrics.increment("singularity.remediated", remediated);
+  }
+
+  /**
+   * D4 – Returns past episodes whose topology is cobordant to the given tick.
+   *
+   * Two episodes are cobordant if they have the same number of H₀ components
+   * (±1) and similar total H₁ persistence (within 20%).  Cobordant episodes
+   * share consolidated manifold representations and are candidates for
+   * long-term memory consolidation.
+   */
+  public getCobordantEpisodes(tickIndex: number): CobordismRecord[] {
+    const target = this._cobordismHistory.find(r => r.tickIndex === tickIndex);
+    if (!target) return [];
+    return this._cobordismHistory.filter(r => {
+      if (r.tickIndex === tickIndex) return false;
+      const h0Match =
+        Math.abs(r.h0ComponentCount - target.h0ComponentCount) <= 1;
+      const h1Match =
+        target.totalH1Persistence < 1e-9
+          ? r.totalH1Persistence < 1e-9
+          : Math.abs(r.totalH1Persistence - target.totalH1Persistence) /
+              target.totalH1Persistence <
+            0.2;
+      return h0Match && h1Match;
+    });
+  }
+
+  /** D4 – All recorded cobordism snapshots, most recent first. */
+  public getCobordismHistory(): CobordismRecord[] {
+    return [...this._cobordismHistory].reverse();
   }
 
   /**
@@ -1013,6 +1158,21 @@ export class ManifoldLifecycle {
         this.runRicciFlowTick();
       } catch (err) {
         console.error("[ManifoldLifecycle] Error during Ricci flow tick:", err);
+      }
+    }
+
+    // D1: Singularity detection and remediation (every SINGULARITY_TICK_INTERVAL ticks).
+    if (
+      ++this._singularityTick >= DOPAT_CONFIG.PHYSICS.SINGULARITY_TICK_INTERVAL
+    ) {
+      this._singularityTick = 0;
+      try {
+        this.runSingularityTick();
+      } catch (err) {
+        console.error(
+          "[ManifoldLifecycle] Error during singularity tick:",
+          err
+        );
       }
     }
 
