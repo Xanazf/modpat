@@ -1,13 +1,13 @@
 import assert from "node:assert";
-import Mapper from "@core_i/Mapper";
+import Traveler from "@core_i/Traveler";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
-export async function runMapperReviewTest() {
-  await describe("Mapper Review Suite", async () => {
+export async function runTravelerReviewTest() {
+  await describe("Traveler Review Suite", async () => {
     const env = await TestHarness.getEnvironment("semantic");
 
-    await it("GeodesicMapper Self-Review & Self-Correction", async () => {
+    await it("GeodesicTraveler Self-Review & Self-Correction", async () => {
       const alphaId = env.atomizer.ingestSequence("alpha", env.system)[0];
       const betaId = env.atomizer.ingestSequence("beta", env.system)[0];
 
@@ -28,7 +28,7 @@ export async function runMapperReviewTest() {
       env.system.scope[trapId] = 1.0;
       env.system.update(trapId);
 
-      const mapper = new Mapper(env.system);
+      const mapper = new Traveler(env.system);
       const path = await mapper.route(alphaId, betaId, {
         steps: 32,
         verbose: true,
@@ -53,7 +53,7 @@ export async function runMapperReviewTest() {
       env.system.posZ[betaId] = 0.5;
       env.system.posW[betaId] = 5.0;
 
-      const mapper = new Mapper(env.system);
+      const mapper = new Traveler(env.system);
       (mapper as any).buildGridIndex();
 
       const steps = 16;

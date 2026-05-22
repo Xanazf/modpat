@@ -3,7 +3,7 @@ import { computeSessionSheaf, type SessionSheaf } from "@core_s/SessionSheaf";
 import type { ClusterId } from "@core_s/FrameworkIndex";
 import { describe, it } from "./utils/harness";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// --- helpers -----------------------------------------------------------------
 
 const C = (n: number) => n as ClusterId;
 
@@ -15,7 +15,7 @@ function activations(
 
 export async function runSessionSheafTests() {
   await describe("E2 – Session sheaf / Čech cohomology", async () => {
-    // ── trivial cases ─────────────────────────────────────────────────────
+    // -- trivial cases -----------------------------------------------------
 
     await it("empty activations → h1Betti = 0", async () => {
       const sheaf = computeSessionSheaf(new Map());
@@ -64,7 +64,7 @@ export async function runSessionSheafTests() {
       assert.strictEqual(sheaf.h1Betti, 0);
     });
 
-    // ── contradictory: 3-cycle with no filling triangle ────────────────────
+    // -- contradictory: 3-cycle with no filling triangle --------------------
 
     await it("three sessions forming a loop without a common triple → h1Betti > 0", async () => {
       // A shares cluster 1 with B, B shares cluster 2 with C, C shares cluster 3 with A.
@@ -96,7 +96,7 @@ export async function runSessionSheafTests() {
       );
     });
 
-    // ── consistent triangle fills the cycle ───────────────────────────────
+    // -- consistent triangle fills the cycle -------------------------------
 
     await it("three sessions sharing a common cluster → triangle fills loop → h1Betti = 0", async () => {
       // A, B, C all share cluster 1 → pairwise overlaps form a triangle.
@@ -116,7 +116,7 @@ export async function runSessionSheafTests() {
       );
     });
 
-    // ── overlap structure ─────────────────────────────────────────────────
+    // -- overlap structure -------------------------------------------------
 
     await it("shared clusters are correctly identified in overlaps", async () => {
       const sheaf = computeSessionSheaf(

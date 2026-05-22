@@ -9,7 +9,7 @@
  * Run with --verbose for W-matrix, accumulated-resonance, and sink-candidate dumps.
  */
 import assert from "node:assert/strict";
-import type { ResolverDiagnostics } from "@core_i/Resolver";
+import type { PerceptionDiagnostics } from "@core_i/Traveler";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "../utils/harness";
 
@@ -111,7 +111,7 @@ export interface GroundingResult {
   notes: string;
 }
 
-function dumpDiagnostics(d: ResolverDiagnostics): void {
+function dumpDiagnostics(d: PerceptionDiagnostics): void {
   const { N, tokenLabels, operatorClasses, W, accumulated, sinkCandidates } = d;
 
   // Token table

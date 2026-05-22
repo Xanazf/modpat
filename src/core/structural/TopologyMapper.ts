@@ -222,7 +222,7 @@ export function buildNerveGraph(
   return { nodes, edges, diagram };
 }
 
-// ─── lens functions ──────────────────────────────────────────────────────────
+// --- lens functions ----------------------------------------------------------
 
 function lensValues(
   atoms: number[],
@@ -243,7 +243,7 @@ function lensValues(
   });
 }
 
-// ─── single-linkage clustering ───────────────────────────────────────────────
+// --- single-linkage clustering -----------------------------------------------
 
 function singleLinkage(
   atoms: number[],

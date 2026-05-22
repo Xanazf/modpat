@@ -1,5 +1,13 @@
-import { SlotType, type SystemRef } from "@core_i/System";
+/**
+ * Code-synthesis skill registration.
+ *
+ * Returns a SkillRegistration that, when elected by the Mapper, runs the
+ * code-ingestion pipeline (was Coder.processCode).
+ */
+
 import type Store from "@core_s/Memory";
+import type { SkillHandler, SkillRegistration } from "../index";
+import { SlotType, type SystemRef } from "@core_i/System";
 import logger from "@utils/SpectralLogger";
 import { generate, parse, walk } from "abstract-syntax-tree";
 import nlp from "compromise";
@@ -365,4 +373,22 @@ export async function processCode(
   const summary = `Ingested ${count} code patterns.`;
   respond(summary);
   return summary;
+}
+
+export function createCoderSkill(
+  atomizer: Atomic.Engine,
+  store: Store,
+  preceptId: number
+): SkillRegistration {
+  const handler: SkillHandler = async ctx => {
+    const answer = await processCode(
+      ctx.query,
+      ctx.system as Root.ManifoldView,
+      ctx.atomizer,
+      ctx.store ?? store,
+      msg => ctx.language?.respond(msg)
+    );
+    return { answer, confidence: 1.0 };
+  };
+  return { preceptId, handler };
 }

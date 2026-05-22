@@ -13,7 +13,7 @@
 
 import type { PersistenceBar } from "@core_s/PersistentHomology";
 
-// ─── 4×4 matrix utilities ─────────────────────────────────────────────────────
+// --- 4×4 matrix utilities -----------------------------------------------------
 
 /** In-place 4×4 Float64Array multiplication: result = A × B. */
 export function multiplyMatrices4x4(
@@ -51,7 +51,7 @@ function identity4x4(): Float64Array {
   return I;
 }
 
-// ─── ProofPath ────────────────────────────────────────────────────────────────
+// --- ProofPath ----------------------------------------------------------------
 
 /**
  * A typed traversal from atom `From` to atom `To`.
@@ -92,7 +92,7 @@ export class ProofPath<FromAtom extends number, ToAtom extends number> {
   }
 }
 
-// ─── HoTT primitives ─────────────────────────────────────────────────────────
+// --- HoTT primitives ---------------------------------------------------------
 
 /**
  * refl(a): the zero-length proof that a = a.
@@ -130,7 +130,7 @@ export function trans<A extends number, B extends number, C extends number>(
   return p.compose(q);
 }
 
-// ─── Path equality (homotopy check) ──────────────────────────────────────────
+// --- Path equality (homotopy check) ------------------------------------------
 
 export interface PathEqualityResult {
   /** True when the loop path₁ + reversed(path₂) encloses no persistent H₁ generator. */

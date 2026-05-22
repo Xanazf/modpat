@@ -12,18 +12,24 @@
  * Listener, Talker, and LiveInference.
  */
 
+import nlp from "compromise";
+
 import { DOPAT_CONFIG } from "@config";
-import { OperatorClass, type SystemRef } from "@core_i/System";
+
 import { isIdentityQueryAboutSelf, shiftPerspective } from "@core_s/Identity";
 import type Store from "@core_s/Memory";
-import logger from "@utils/SpectralLogger";
-import nlp from "compromise";
-import type { BridgeCandidate } from "../Mapper";
+
+import { OperatorClass, type SystemRef } from "@core_i/System";
+import type { BridgeCandidate } from "@core_i/Traveler";
+
 import {
   WorkingMemory,
   buildExplanation,
   type MemoryFrame,
 } from "./WorkingMemory";
+
+import { random } from "@utils/seededRandom";
+import logger from "@utils/SpectralLogger";
 
 // ---- Intent classification ------------------------------------------------
 
@@ -163,6 +169,17 @@ export class Language {
   /** Response callback - emits text to the output channel. */
   private _respond: (msg: string) => void;
 
+  /**
+   * TRAVELER step 1 - Embedding-derived positions recorded before pole
+   * override.  Keyed by atom ID; each value is [posX, posY, posZ, posW] at
+   * the point the atomizer placed the atom.  Consumed by the settling
+   * simulation in Traveler.observeSettlingGradient() (step 3).
+   */
+  private _driftTargets = new Map<
+    number,
+    readonly [number, number, number, number]
+  >();
+
   constructor(
     system: Root.ManifoldView | SystemRef,
     atomizer: Atomic.Engine,
@@ -267,6 +284,9 @@ export class Language {
 
     // Ingest into manifold
     const ids = this.atomizer.ingestSequence(topologicalQuery, this.system);
+
+    // TRAVELER step 1: override positions to pole + jitter; record drift targets.
+    this._poleSettle(ids);
 
     // Compute signature
     let signature: string | null = null;
@@ -649,6 +669,58 @@ export class Language {
     return Number.isInteger(result)
       ? result.toString()
       : parseFloat(result.toFixed(6)).toString();
+  }
+
+  // ---- TRAVELER step 1: Pole ingestion ------------------------------------
+
+  /**
+   * Returns and clears the pending drift targets accumulated during the most
+   * recent ingest() call.  Consumed once by Traveler.observeSettlingGradient().
+   */
+  public takeDriftTargets(): Map<
+    number,
+    readonly [number, number, number, number]
+  > {
+    const out = this._driftTargets;
+    this._driftTargets = new Map();
+    return out;
+  }
+
+  /**
+   * Records embedding-derived positions as drift targets for the new
+   * gradient-following pipeline (step 3).
+   *
+   * When POLE_INGESTION_ENABLED is true, also overrides each atom's coordinates
+   * to the manifold pole (0, 0, 0, 0) plus a small jitter.  The flag stays
+   * false until observeSettlingGradient() passes the step-3 A/B validation
+   * criteria, keeping the existing perceive/traverse pipeline unaffected.
+   *
+   * Numeric literals (special posW encoding on the number line) are exempt from
+   * pole displacement; they carry meaning in their coordinates.
+   */
+  private _poleSettle(ids: Uint32Array): void {
+    const { POLE_INGESTION_ENABLED, POLE_JITTER_XYZ, POLE_JITTER_W } =
+      DOPAT_CONFIG.PHYSICS;
+    const sys = this.system;
+    this._driftTargets.clear();
+    for (let k = 0; k < ids.length; k++) {
+      const id = ids[k];
+      if (!sys.isAllocated(id)) continue;
+      // Numeric atoms encode magnitude in posW (decayRate=0 marker).
+      if (sys.decayRate[id] === 0) continue;
+      this._driftTargets.set(id, [
+        sys.posX[id],
+        sys.posY[id],
+        sys.posZ[id],
+        sys.posW[id],
+      ]);
+      if (!POLE_INGESTION_ENABLED) continue;
+      sys.posX[id] = (random() - 0.5) * 2 * POLE_JITTER_XYZ;
+      sys.posY[id] = (random() - 0.5) * 2 * POLE_JITTER_XYZ;
+      sys.posZ[id] = (random() - 0.5) * 2 * POLE_JITTER_XYZ;
+      sys.posW[id] = Math.abs((random() - 0.5) * 2 * POLE_JITTER_W);
+      sys.update(id);
+    }
   }
 
   // ---- Private helpers ----------------------------------------------------

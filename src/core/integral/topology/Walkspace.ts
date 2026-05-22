@@ -27,7 +27,7 @@ import type {
   BridgeCandidate,
   DiscoveredOperator,
   PerceptionDiagnostics,
-} from "./Mapper";
+} from "@core_i/Traveler";
 
 /** A pre-allocated workspace for one in-flight Traveler.perceive call. */
 export class TravelerWorkspace {

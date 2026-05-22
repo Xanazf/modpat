@@ -24,7 +24,7 @@ import type Traveler from "@core_i/Traveler";
 import { getMetricForceWithInnerDerivative } from "@core_i/Traveler";
 import System from "@core_i/System";
 import Store from "@core_s/Memory";
-import { createTestMapper } from "@core_i/Runtime";
+import { createTestTraveler } from "@core_i/Runtime";
 
 // ---------------------------------------------------------------------------
 // Fixed corpus: (sourceText, expectedPattern)
@@ -175,9 +175,9 @@ async function run() {
   const store = new Store(system, atomizer, ":memory:");
   await store.waitForInit();
 
-  const { default: Resolver } = await import("@core_i/Resolver");
-  const resolver = new Resolver(system, atomizer, store);
-  const traveler = createTestMapper(system, atomizer, resolver, store);
+  const { default: Traveler } = await import("@core_i/Traveler");
+  const resolver = new Traveler(system, atomizer, store);
+  const traveler = createTestTraveler(system, atomizer, resolver, store);
 
   traveler.setGPUEnabled(false);
 

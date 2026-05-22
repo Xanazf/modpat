@@ -1,5 +1,5 @@
 /**
- * Mapper performance benchmark.
+ * Traveler performance benchmark.
  * Run: tsx tests/benchmarks/mapper_bench.ts
  *
  * Measures ms/query across manifold sizes before and after each sub-track.
@@ -9,7 +9,7 @@
  */
 
 import { DOPAT_CONFIG } from "@config";
-import Mapper from "@core_i/Mapper";
+import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
 import { random, seedRandom } from "@utils/seededRandom";
 
@@ -45,7 +45,7 @@ function randomQuery(system: System): [number, number] {
 async function run(): Promise<void> {
   (DOPAT_CONFIG as any).MAX_PRECEPTS = 1_100_000;
   seedRandom(DOPAT_CONFIG.SEED);
-  console.log("Mapper benchmark, CPU path (no GPU)\n");
+  console.log("Traveler benchmark, CPU path (no GPU)\n");
   console.log(
     `${"n".padStart(8)}  ${"ms/query".padStart(10)}  ${"queries".padStart(8)}`
   );
@@ -53,7 +53,7 @@ async function run(): Promise<void> {
 
   for (const n of CORPUS) {
     const system = buildFixture(n);
-    const mapper = new Mapper(system);
+    const mapper = new Traveler(system);
 
     // Warm-up
     const [wa, wb] = randomQuery(system);

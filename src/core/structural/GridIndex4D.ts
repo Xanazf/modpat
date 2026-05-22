@@ -56,7 +56,8 @@ export class GridIndex4D {
     qz: number,
     qw: number,
     radius: number,
-    view: Root.ManifoldView
+    view: Root.ManifoldView,
+    activeAtoms?: Set<number>
   ): number {
     const r = Math.ceil(radius / this.cellSize);
     const cx = Math.floor(qx / this.cellSize) | 0;
@@ -74,6 +75,7 @@ export class GridIndex4D {
             );
             if (!bucket) continue;
             for (const id of bucket) {
+              if (activeAtoms !== undefined && !activeAtoms.has(id)) continue;
               const ddx = view.posX[id] - qx,
                 ddy = view.posY[id] - qy,
                 ddz = view.posZ[id] - qz,

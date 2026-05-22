@@ -1,7 +1,7 @@
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import Resolver from "@core_i/Resolver";
-import { createTestMapper } from "@core_i/Runtime";
+import Traveler from "@core_i/Traveler";
+import { createTestTraveler } from "@core_i/Runtime";
 import System, { OperatorClass } from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
@@ -31,7 +31,7 @@ export async function executeContinuousLearningSuite() {
     const atomizer = new SemanticAtomizer();
     await atomizer.init();
     const store = new Store(primary, atomizer, dbPath);
-    const resolver = new Resolver(primary, atomizer, store);
+    const resolver = new Traveler(primary, atomizer, store);
     await store.waitForInit();
 
     // =========================================================================
@@ -168,7 +168,7 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Pre-ingestion resonance check detects logical contradiction", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(
+      const localInference = createTestTraveler(
         primary,
         atomizer,
         resolver,
@@ -190,7 +190,7 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Negative feedback reduces crystallized wave form energy", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(
+      const localInference = createTestTraveler(
         primary,
         atomizer,
         resolver,
@@ -235,7 +235,7 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Positive feedback increases crystallized wave form energy", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(
+      const localInference = createTestTraveler(
         primary,
         atomizer,
         resolver,
@@ -275,7 +275,7 @@ export async function executeContinuousLearningSuite() {
     await it("Phase 3: Repeated negative feedback drives energy to zero; cullWeakWaveForms removes it", async () => {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
-      const localInference = createTestMapper(
+      const localInference = createTestTraveler(
         primary,
         atomizer,
         resolver,
@@ -318,7 +318,7 @@ export async function executeContinuousLearningSuite() {
       const localStore = new Store(primary, atomizer, ":memory:");
       await localStore.waitForInit();
       // Fresh inference - last_signature starts null
-      const localInference = createTestMapper(
+      const localInference = createTestTraveler(
         primary,
         atomizer,
         resolver,

@@ -130,6 +130,54 @@ const DOPAT_CONFIG = {
      * Kept < 1.0 by default so fresh ingestion can override stale session state.
      */
     PHI_SESSION_BLEND: 0.8,
+    /**
+     * TRAVELER step 1 - Master switch for pole ingestion.  When false, atoms land
+     * at their embedding-derived coordinates (legacy behaviour); drift targets are
+     * still recorded by Language._poleSettle() for the step-3 pipeline to consume.
+     * Flip to true only after observeSettlingGradient() passes the step-3 A/B
+     * validation criteria (Jaccard > 90%, cosine similarity > 95%).
+     */
+    POLE_INGESTION_ENABLED: false,
+    /**
+     * TRAVELER step 4 - Primary switch for the new perceive pipeline.  When true,
+     * perceiveCoherent() delegates to observeSettlingGradient() instead of the
+     * Phase 0-7 transfer-matrix resonance engine.  Only flip after running the
+     * full test suite with this flag and confirming no regressions.
+     */
+    SETTLING_GRADIENT_ENABLED: false,
+    /**
+     * TRAVELER step 3 - Shadow mode for observeSettlingGradient().  When true,
+     * process() runs both the old perceive/traverse pipeline and the new
+     * gradient-following pipeline on every query, logging Jaccard overlap and
+     * cosine similarity for comparison.  The old pipeline result is still
+     * returned as the answer.  Disable in production to avoid double-work.
+     */
+    SETTLING_GRADIENT_SHADOW: false,
+    /**
+     * TRAVELER step 1 - Spatial jitter radius (XYZ axes) applied when placing a
+     * newly ingested atom at the manifold pole (0, 0, 0, 0).  Small enough that
+     * co-ingested atoms are distinguishable by D1 singularity detection, large
+     * enough to give each atom a unique starting position.
+     */
+    POLE_JITTER_XYZ: 0.05,
+    /**
+     * TRAVELER step 1 - Temporal jitter range for posW when placing a new atom
+     * at the pole.  Gives the temporal suppression factor (PHI_TEMPORAL_DECAY)
+     * a gradient to work with across simultaneous arrivals.
+     */
+    POLE_JITTER_W: 0.1,
+    /**
+     * TRAVELER step 1 - Maximum physics steps in the discrete settling simulation
+     * that runs immediately after atoms land at the pole.  Each step integrates
+     * the drift force from the embedding target toward the settled position.
+     */
+    SETTLE_MAX_TICKS: 20,
+    /**
+     * TRAVELER step 1 - Convergence criterion for the settling loop.  The loop
+     * exits early when the maximum per-atom velocity (step size × residual
+     * distance) drops below this threshold.
+     */
+    SETTLE_CONVERGENCE_THRESHOLD: 1e-4,
   },
 
   resolver: {

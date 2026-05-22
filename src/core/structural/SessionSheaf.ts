@@ -1,6 +1,6 @@
 import type { ClusterId } from "./FrameworkIndex";
 
-// ─── public interfaces ────────────────────────────────────────────────────────
+// --- public interfaces --------------------------------------------------------
 
 export interface SessionOverlap {
   sessionA: string;
@@ -42,7 +42,7 @@ export function computeSessionSheaf(
     return { overlaps: [], h1Betti: 0, conflictingClusters: new Set() };
   }
 
-  // ── Build overlaps (1-simplices) ──────────────────────────────────────────
+  // -- Build overlaps (1-simplices) ------------------------------------------
   const overlaps: SessionOverlap[] = [];
   // edgeIndex[i][j] (i < j) = index into overlaps array
   const edgeIdx = new Map<number, number>(); // packed key i*n+j → overlap index
@@ -87,7 +87,7 @@ export function computeSessionSheaf(
     return { overlaps, h1Betti: 0, conflictingClusters: new Set() };
   }
 
-  // ── Find triangles (2-simplices): i < j < k with non-empty TRIPLE intersection ──
+  // -- Find triangles (2-simplices): i < j < k with non-empty TRIPLE intersection --
   // Čech cohomology requires A∩B∩C ≠ ∅ for a 2-simplex, not just pairwise overlaps.
   interface Triangle {
     i: number;
@@ -124,7 +124,7 @@ export function computeSessionSheaf(
     }
   }
 
-  // ── H¹ Betti number via Euler characteristic ─────────────────────────────
+  // -- H¹ Betti number via Euler characteristic -----------------------------
   // β₀ = number of connected components in the overlap graph.
   // β₁ = numEdges − numSessions + β₀ − rank(∂₂)
   //
@@ -160,7 +160,7 @@ export function computeSessionSheaf(
 
   const h1Betti = Math.max(0, numEdges - n + beta0 - rankB2);
 
-  // ── Conflicting clusters: shared clusters in non-bounding edges ───────────
+  // -- Conflicting clusters: shared clusters in non-bounding edges -----------
   const conflictingClusters = new Set<ClusterId>();
   if (h1Betti > 0) {
     // Unpaired edges (those not eliminated by pivot) participate in non-bounding cycles.
@@ -177,7 +177,7 @@ export function computeSessionSheaf(
   return { overlaps, h1Betti, conflictingClusters };
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// --- helpers -----------------------------------------------------------------
 
 function connectedComponents(
   n: number,

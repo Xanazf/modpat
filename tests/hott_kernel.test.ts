@@ -8,11 +8,11 @@ import {
   pathEqual,
   multiplyMatrices4x4,
   transposeMatrix4x4,
-} from "@core_i/HoTTKernel";
+} from "@i_topology/HoTTKernel";
 import type { PersistenceBar } from "@core_s/PersistentHomology";
 import { describe, it } from "./utils/harness";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// helpers
 
 function frobDist(A: Float64Array, B: Float64Array): number {
   let s = 0;
@@ -53,11 +53,11 @@ function addAtom(sys: System, x: number, y: number, z = 0, w = 0.5): number {
   return id;
 }
 
-// ─── tests ────────────────────────────────────────────────────────────────────
+// tests
 
 export async function runHoTTKernelTests() {
   await describe("E3 – HoTT kernel", async () => {
-    // ── multiplyMatrices4x4 ───────────────────────────────────────────────
+    // multiplyMatrices4x4
 
     await it("multiplyMatrices4x4: I × I = I", async () => {
       const I = identity4x4();
@@ -79,7 +79,7 @@ export async function runHoTTKernelTests() {
       assert.ok(frobDist(R, Rtt) < 1e-9, "(Rᵀ)ᵀ should equal R");
     });
 
-    // ── refl ──────────────────────────────────────────────────────────────
+    // refl
 
     await it("refl: zero-length path, identity holonomy", async () => {
       const p = refl(42 as 42);
@@ -94,7 +94,7 @@ export async function runHoTTKernelTests() {
       );
     });
 
-    // ── symm ─────────────────────────────────────────────────────────────
+    // symm
 
     await it("symm: reverses path and transposes holonomy", async () => {
       const theta = Math.PI / 3;
@@ -125,7 +125,7 @@ export async function runHoTTKernelTests() {
       );
     });
 
-    // ── compose (trans) ───────────────────────────────────────────────────
+    // compose (trans)
 
     await it("compose: paths are concatenated without duplicate midpoint", async () => {
       const I = identity4x4();
@@ -173,7 +173,7 @@ export async function runHoTTKernelTests() {
       assert.ok(frobDist(r1.holonomy, r2.holonomy) < 1e-9);
     });
 
-    // ── pathEqual ─────────────────────────────────────────────────────────
+    // pathEqual
 
     await it("pathEqual: identical paths are homotopic", async () => {
       const sys = makeSystem();

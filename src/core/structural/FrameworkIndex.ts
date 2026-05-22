@@ -4,9 +4,25 @@ import type { NerveGraph } from "./TopologyMapper";
 declare const __superBrand: unique symbol;
 declare const __clusterBrand: unique symbol;
 declare const __subBrand: unique symbol;
+declare const __matrix4x4Brand: unique symbol;
 export type SuperclusterId = number & { readonly __brand: typeof __superBrand };
 export type ClusterId = number & { readonly __brand: typeof __clusterBrand };
 export type SubclusterId = number & { readonly __brand: typeof __subBrand };
+export type FrameworkId = SuperclusterId | ClusterId | SubclusterId;
+export type Matrix4x4 = Float64Array & {
+  readonly __brand: typeof __matrix4x4Brand;
+};
+
+export interface TravelerState {
+  /** Current 4D position in the manifold. Drifts with each process() call. */
+  position: [number, number, number, number];
+  /** Accumulated session holonomy (4×4 row-major). Product of all per-call lastHolonomy matrices. */
+  holonomyFrame: Matrix4x4;
+  /** Frameworks the Traveler has recently passed through (populated in step 5). */
+  activeFrameworks: Set<FrameworkId>;
+  /** Sum of lastInferentialEffort across all traversals this session. */
+  sessionEffort: number;
+}
 
 export interface SuperclusterTier {
   id: SuperclusterId;
@@ -49,7 +65,7 @@ export interface FrameworkBuildOpts {
   seedsPerCluster?: number;
 }
 
-// ─── ManifoldRegion and fuzzy connectives (E1) ────────────────────────────────
+// --- ManifoldRegion and fuzzy connectives (E1) --------------------------------
 
 /** A weighted region of the manifold: atom ID → local φ (density) value. */
 export type ManifoldRegion = Map<number, number>;
@@ -105,7 +121,7 @@ export function subsethood(a: ManifoldRegion, b: ManifoldRegion): number {
   return den === 0 ? 0 : num / den;
 }
 
-// ─── Formula AST (E1) ────────────────────────────────────────────────────────
+// --- Formula AST (E1) --------------------------------------------------------
 
 export type FormulaNode =
   | { readonly type: "region"; region: ManifoldRegion }
@@ -139,7 +155,7 @@ export function entailment(node: FormulaNode & { type: "implies" }): number {
   return subsethood(evalFormula(node.premise), evalFormula(node.conclusion));
 }
 
-// ─── Build FrameworkIndex (E0) ───────────────────────────────────────────────
+// --- Build FrameworkIndex (E0) -----------------------------------------------
 
 export function buildFrameworkIndex(
   system: Root.ManifoldView,
@@ -291,7 +307,7 @@ export function resolveActiveAtoms(
   return allowed;
 }
 
-// ─── private helpers ──────────────────────────────────────────────────────────
+// --- private helpers ----------------------------------------------------------
 
 function ufComponents(
   atoms: number[],

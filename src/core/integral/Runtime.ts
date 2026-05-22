@@ -1,8 +1,8 @@
 /**
  * Runtime - the single wiring point for the full ModPAT stack.
  *
- * After the "Mapper as Thinker" Phase 6 refactor:
- *   - Mapper is THE thinker (perception + locomotion + learning + motivation)
+ * After the "Traveler as Thinker" Phase 6 refactor:
+ *   - Traveler is THE thinker (perception + locomotion + learning + motivation)
  *   - Language is the translation boundary
  *   - Runtime is boot/wiring only; no reasoning logic lives here
  *
@@ -11,16 +11,11 @@
  *   await rt.mapper.process("the sky is blue");
  */
 
+import { DOPAT_CONFIG } from "@config";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
-import { DOPAT_CONFIG } from "@config";
-import { CognitiveLoop } from "@core_i/CognitiveLoop";
-import Traveler from "@core_i/Traveler";
-/** @deprecated Use Traveler */
-type Mapper = Traveler;
-import Resolver from "@core_i/Resolver";
-import System, { OperatorClass, SystemRef } from "@core_i/System";
+
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { SelfConcept } from "@core_s/Identity";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
@@ -30,16 +25,22 @@ import {
   constellations,
 } from "@core_s/ManifoldMetrics";
 import Store from "@core_s/Memory";
-import { SystemPersistence } from "@core_s/Persistence";
 import Unfolder from "@core_s/Unfolder";
-import { WorkerPool } from "@core_s/WorkerPool";
+import { SystemPersistence } from "@core_s/Persistence";
 import { AstSeedWorker, type AstSeedOptions } from "@core_s/AstSeedWorker";
+import { WorkerPool } from "@core_s/WorkerPool";
+
+import Traveler from "@core_i/Traveler";
+import System, { OperatorClass, SystemRef } from "@core_i/System";
+
+import type { SkillHandler } from "./skills";
+import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
+import { createCoderSkill } from "@skill_code/Coder";
+import Language from "@skill_lang/Language";
+
 import { IntentTag } from "@utils/intentPrecept";
 import { seedRandom } from "@utils/seededRandom";
 import logger from "@utils/SpectralLogger";
-import Language from "./language/Language";
-import { createCoderSkill } from "./skills/Coder";
-import type { SkillHandler } from "./skills";
 
 // ---------------------------------------------------------------------------
 // Default skill wiring
@@ -47,11 +48,11 @@ import type { SkillHandler } from "./skills";
 
 /**
  * Registers the four standard skills (LANGUAGE, ASSERTION, CODE, ARITHMETIC)
- * on a Mapper instance. Called at boot time by Runtime.boot() and by
- * createTestMapper() for test environments.
+ * on a Traveler instance. Called at boot time by Runtime.boot() and by
+ * createTestTraveler() for test environments.
  */
 function _registerDefaultSkills(
-  mapper: Mapper,
+  mapper: Traveler,
   language: Language,
   store: Store,
   atomizer: Atomic.Engine
@@ -74,7 +75,7 @@ function _registerDefaultSkills(
     // Detect physics echo: when perception can't converge, the physics pass
     // returns the input tokens as sinkCandidates. If the result IDs heavily
     // overlap with the query IDs, there's no real answer - return "unknown"
-    // so the Mapper's inquiry path can take over (mirrors old Listener behaviour).
+    // so the Traveler's inquiry path can take over (mirrors old Listener behaviour).
     if (decoded && decoded !== "unknown" && result.ids.length > 0) {
       const querySet = new Set(Array.from(ctx.queryIds));
       let overlap = 0;
@@ -127,24 +128,24 @@ function _registerDefaultSkills(
 // ---------------------------------------------------------------------------
 
 /**
- * Creates a configured Mapper with Language and standard skills wired.
+ * Creates a configured Traveler with Language and standard skills wired.
  * Intended for test environments that need to create a standalone inference
  * engine without going through Runtime.boot().
  *
  * @deprecated For production use Runtime.boot() and access rt.mapper directly.
  */
-export function createTestMapper(
+export function createTestTraveler(
   system: Root.ManifoldView | SystemRef,
   atomizer: Atomic.Engine,
-  resolverOrMapper: Mapper,
+  resolverOrTraveler: Traveler,
   store: Store,
   unfolder?: Unfolder
-): Mapper {
+): Traveler {
   const lang = new Language(system, atomizer, { store });
-  resolverOrMapper.setLanguage(lang);
-  if (unfolder) resolverOrMapper.setUnfolder(unfolder);
-  _registerDefaultSkills(resolverOrMapper, lang, store, atomizer);
-  return resolverOrMapper;
+  resolverOrTraveler.setLanguage(lang);
+  if (unfolder) resolverOrTraveler.setUnfolder(unfolder);
+  _registerDefaultSkills(resolverOrTraveler, lang, store, atomizer);
+  return resolverOrTraveler;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +191,7 @@ export interface RuntimeOptions {
   astSeedOptions?: AstSeedOptions;
   /**
    * Interval in ms for the autonomous learner cycle (default: 10 000).
-   * Handled by Mapper.startAutonomy() internally.
+   * Handled by Traveler.startAutonomy() internally.
    */
   learnerIntervalMs?: number;
   /**
@@ -209,24 +210,24 @@ export class Runtime {
   public readonly atomizerMode: AtomizerMode;
   public readonly store: Store;
   /**
-   * The Mapper - the single thinker (perception + locomotion + learning + motivation).
+   * The Traveler - the single thinker (perception + locomotion + learning + motivation).
    * All text input should go through `mapper.process(text)`.
    */
-  public readonly mapper: Mapper;
+  public readonly mapper: Traveler;
   /**
    * The Language layer - translation between raw text and the manifold.
    * Use `language.setRespond(cb)` to receive responses from mapper.process().
    */
   public readonly language: Language;
   /** @deprecated Use {@link mapper} instead. */
-  public readonly resolver: Resolver;
+  public readonly resolver: Traveler;
   /**
    * @deprecated Use {@link mapper} instead.
    * Kept as a deprecated alias so existing code using `rt.inference.processX()`
    * keeps compiling; `mapper` has deprecated `processX` aliases that delegate
    * to `mapper.process()`.
    */
-  get inference(): Mapper {
+  get inference(): Traveler {
     return this.mapper;
   }
   /** The ego-centre precept.  null when skipIdentity was set. */
@@ -280,7 +281,7 @@ export class Runtime {
     atomizer: Atomic.Engine;
     atomizerMode: AtomizerMode;
     store: Store;
-    mapper: Mapper;
+    mapper: Traveler;
     language: Language;
     unfolder: Unfolder;
     identity: SelfConcept | null;
@@ -294,7 +295,7 @@ export class Runtime {
     this.store = fields.store;
     this.mapper = fields.mapper;
     this.language = fields.language;
-    this.resolver = fields.mapper as unknown as Resolver;
+    this.resolver = fields.mapper as unknown as Traveler;
     this.unfolder = fields.unfolder;
     this.identity = fields.identity;
     this.lifecycle = fields.lifecycle ?? null;
@@ -304,7 +305,7 @@ export class Runtime {
 
   /**
    * Constructs and wires the full stack:
-   *   System → Atomizer → Store → Mapper → Language → Skills → SelfConcept
+   *   System → Atomizer → Store → Traveler → Language → Skills → SelfConcept
    */
   static async boot(opts: RuntimeOptions = {}): Promise<Runtime> {
     seedRandom(DOPAT_CONFIG.SEED);
@@ -347,7 +348,7 @@ export class Runtime {
     const store = new Store(system, atomizer, opts.db);
     await store.waitForInit();
 
-    // Mapper + Language + Unfolder
+    // Traveler + Language + Unfolder
     const mapper = new Traveler(system, atomizer, store);
     const language = new Language(system, atomizer, { store });
     mapper.setLanguage(language);
@@ -380,6 +381,7 @@ export class Runtime {
       );
       await lifecycle.loadHistoryFromPersistence();
       lifecycle.setUnfolder(unfolder);
+      mapper.setLifecycle(lifecycle);
     }
 
     // WorkerPool
@@ -406,13 +408,13 @@ export class Runtime {
     // Wire the Cognitive Daemon (lifecycle active by default).
     if (!opts.noLifecycle) {
       rt.cognitiveLoop = new CognitiveLoop(rt);
-      // Hook Mapper unknown result → spawn USER_UNKNOWN Intent
+      // Hook Traveler unknown result → spawn USER_UNKNOWN Intent
       mapper.onUnknown = (topic: string) => {
         rt.cognitiveLoop!.spawnAndRegister(topic, 3.0, IntentTag.USER_UNKNOWN);
       };
     }
 
-    // Wire Mapper InquiryQueue → spawn Intent precept on enqueue
+    // Wire Traveler InquiryQueue → spawn Intent precept on enqueue
     mapper.getInquiryQueue().onEnqueue = (topic: string) => {
       if (rt.cognitiveLoop) {
         rt.cognitiveLoop.spawnAndRegister(topic, 2.0, IntentTag.INQUIRY_GAP);
@@ -477,6 +479,13 @@ export class Runtime {
         .catch(e => {
           if (!rt._disposed) logger.warn("[SESSION PHI LOAD]", e);
         });
+
+      // TRAVELER step 2: restore persistent geometric state (position, holonomy, effort).
+      try {
+        await mapper.loadState("main");
+      } catch (e) {
+        if (!rt._disposed) logger.warn("[TRAVELER STATE LOAD]", e);
+      }
     }
 
     const restoreInquiries = store
@@ -532,7 +541,7 @@ export class Runtime {
       }
     }, intervalMs);
 
-    // Delegate learner cycle + cognitive tick to Mapper.startAutonomy().
+    // Delegate learner cycle + cognitive tick to Traveler.startAutonomy().
     // CognitiveLoop.start() calls mapper.startAutonomy() via the shim when
     // lifecycle is active; call it directly when lifecycle is off so the
     // learner still runs in lightweight boots.
@@ -553,7 +562,7 @@ export class Runtime {
         scanMs
       );
 
-      // Autonomous InquiryQueue draining via Mapper.drainInquiries().
+      // Autonomous InquiryQueue draining via Traveler.drainInquiries().
       this._inquiryDrainTimer = setInterval(() => {
         this.mapper
           .drainInquiries(3)
@@ -575,7 +584,7 @@ export class Runtime {
       clearInterval(this._inquiryDrainTimer);
       this._inquiryDrainTimer = null;
     }
-    // Stop Mapper's autonomous cycles (learner + cognitive tick).
+    // Stop Traveler's autonomous cycles (learner + cognitive tick).
     if (this.cognitiveLoop) {
       this.cognitiveLoop.stop();
     } else {
@@ -639,7 +648,7 @@ export class Runtime {
 
   /**
    * Scans constellation gaps and enqueues any new strained atom pairs as
-   * inquiry topics via Mapper.enqueueInquiry().
+   * inquiry topics via Traveler.enqueueInquiry().
    */
   private async _runGapScan(): Promise<void> {
     try {
@@ -702,6 +711,14 @@ export class Runtime {
     } catch {
       // Non-fatal; the next session simply starts without saved φ.
     }
+
+    // TRAVELER step 2: persist geometric state (position, holonomy, effort).
+    try {
+      await this.mapper.persistState("main");
+    } catch {
+      // Non-fatal.
+    }
+
     await this.store.close();
     if (this._lifecycleCtx) await this._lifecycleCtx.close();
     if (this.workers) await this.workers.dispose();

@@ -9,7 +9,7 @@ import {
 } from "@core_s/FrameworkIndex";
 import { describe, it } from "./utils/harness";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// --- helpers -----------------------------------------------------------------
 
 function makeSystem(): System {
   return new System();

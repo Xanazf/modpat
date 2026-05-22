@@ -11,8 +11,8 @@
 
 import assert from "node:assert/strict";
 import { OperatorClass } from "@core_i/System";
-import { InquiryQueue } from "@core_i/Learner";
-import { CognitiveLoop } from "@core_i/CognitiveLoop";
+import { InquiryQueue } from "@skill_cogi/InquiryQueue";
+import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
 import { IntentTag, spawnIntent } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
@@ -169,7 +169,7 @@ export async function runProactivePathTests() {
       // Query something the engine cannot resolve from an empty manifold
       await rt.inference.processQuestion("What is a quasar?");
 
-      // The callback may or may not fire depending on whether Resolver returned unknown
+      // The callback may or may not fire depending on whether Traveler returned unknown
       // We just verify the wiring exists (the callback field is set)
       assert.strictEqual(typeof rt.inference.onUnknown, "function");
 

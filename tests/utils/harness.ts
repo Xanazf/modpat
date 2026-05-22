@@ -1,7 +1,7 @@
 import Atomizer from "@atomics/LogicAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
-import Resolver from "@core_i/Resolver";
+import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
 import Store from "@core_s/Memory";
 import logger from "@src/utils/SpectralLogger";
@@ -12,7 +12,7 @@ export interface TestEnvironment<A extends Atomic.Engine = Atomic.Engine> {
   system: System;
   atomizer: A;
   store: Store;
-  resolver: Resolver;
+  resolver: Traveler;
 }
 
 export class TestHarness {
@@ -54,7 +54,7 @@ export class TestHarness {
     await atomizer.init();
     const store = new Store(system, atomizer, dbPath);
     await store.waitForInit();
-    const resolver = new Resolver(system, atomizer, store);
+    const resolver = new Traveler(system, atomizer, store);
 
     const env = { system, atomizer, store, resolver };
     if (TestHarness.useSharedEnv) {

@@ -15,9 +15,8 @@ import path from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { DOPAT_CONFIG, SYSTEM_CONFIG } from "@config";
-import type Resolver from "@core_i/Resolver";
 import Runtime from "@core_i/Runtime";
-import type Mapper from "@core_i/Mapper";
+import type Traveler from "@core_i/Traveler";
 import type System from "@core_i/System";
 import { OperatorClass } from "@core_i/System";
 import type { SelfConcept } from "@core_s/Identity";
@@ -97,10 +96,10 @@ function opColor(cls: number): string {
 let runtime: Runtime;
 let system: System;
 let atomizer: Atomic.Engine;
-let resolver: Resolver;
+let resolver: Traveler;
 let store: Store;
 let unfolder: Unfolder;
-let inference: Mapper;
+let inference: Traveler;
 let self: SelfConcept | null = null;
 const viz = new SpectralVisualizer();
 

@@ -9,7 +9,7 @@ import { executeEnduranceSuite } from "./endurance.test";
 import { executeGPUOffloadTest } from "./gpu_offload.test";
 import { runGroundingTests } from "./grounding/propositional.test";
 import { executeLiveInferenceSuite } from "./live_inference.test";
-import { runMapperReviewTest } from "./mapper_review.test";
+import { runTravelerReviewTest } from "./mapper_review.test";
 import { executeE2ETest } from "./pcs_e2e.test";
 import { executePersistenceSuite } from "./persistence.test";
 import { runRigorousTests as executeRigorousLogicSuite } from "./rigorous_logic.test";
@@ -23,6 +23,7 @@ import { runPhiSafetyTests } from "./phi_safety.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
 import { runPhaseDTests } from "./phase_d.test";
 import { runFrameworkIndexTests } from "./framework_index.test";
+import { runTravelerCorrectionsTests } from "./traveler_corrections.test";
 import { runFuzzyConnectivesTests } from "./fuzzy_connectives.test";
 import { runSessionSheafTests } from "./session_sheaf.test";
 import { runHoTTKernelTests } from "./hott_kernel.test";
@@ -88,7 +89,7 @@ async function run() {
     await runWithTimeout("dod_resolution_matrix", executeLogicSuite);
     await runWithTimeout("semantic_atomizer", executeSemanticSuite);
     await runWithTimeout("signal_and_manager", executeSignalManagerSuite);
-    await runWithTimeout("mapper_review", runMapperReviewTest);
+    await runWithTimeout("mapper_review", runTravelerReviewTest);
     await runWithTimeout("pcs_e2e", executeE2ETest);
     await runWithTimeout(
       "semantic_reasoning_perf",
@@ -115,6 +116,7 @@ async function run() {
     await runWithTimeout("endurance", executeEnduranceSuite);
     await runWithTimeout("phase_d", runPhaseDTests);
     await runWithTimeout("framework_index", runFrameworkIndexTests);
+    await runWithTimeout("traveler_corrections", runTravelerCorrectionsTests);
     await runWithTimeout("fuzzy_connectives", runFuzzyConnectivesTests);
     await runWithTimeout("session_sheaf", runSessionSheafTests);
     await runWithTimeout("hott_kernel", runHoTTKernelTests);

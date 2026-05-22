@@ -3,7 +3,7 @@ import { random } from "@utils/seededRandom";
 import System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import { OperatorClass, SystemRef } from "@core_i/System";
-import type { InquiryQueue } from "@core_i/InquiryQueue";
+import type { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import { DeltaQueue } from "@core_s/DeltaQueue";
 import { metrics } from "@core_s/Metrics";
 import type Unfolder from "@core_s/Unfolder";
@@ -263,7 +263,7 @@ export class ManifoldLifecycle {
   /** External knowledge expansion engine for Phase 4 (Subconscious Void Expansion). */
   private unfolder: Unfolder | null = null;
 
-  // ── B3: Topology tick ──────────────────────────────────────────────────────
+  // -- B3: Topology tick ------------------------------------------------------
   /** How often (in ticks) to run the full topology analysis. Budget-capped. */
   private static readonly TOPO_TICK_INTERVAL = 100;
   private _topoTick = 0;
@@ -282,13 +282,13 @@ export class ManifoldLifecycle {
   /** E0 – Three-tier framework index, rebuilt on each topology tick. */
   private _frameworkIndex: FrameworkIndex | null = null;
 
-  // ── C3: Ricci flow tick ────────────────────────────────────────────────────
+  // -- C3: Ricci flow tick ----------------------------------------------------
   private _ricciTick = 0;
 
-  // ── D1: Singularity tick ───────────────────────────────────────────────────
+  // -- D1: Singularity tick ---------------------------------------------------
   private _singularityTick = 0;
 
-  // ── D4: Cobordism history ──────────────────────────────────────────────────
+  // -- D4: Cobordism history --------------------------------------------------
   private _cobordismHistory: CobordismRecord[] = [];
   private _globalTickIndex = 0;
   private static readonly COBORDISM_HISTORY_SIZE = 10;
@@ -546,14 +546,14 @@ export class ManifoldLifecycle {
 
     const { h0, h1 } = this._nerveGraph.diagram;
 
-    // ── E0: rebuild three-tier framework index ────────────────────────────
+    // -- E0: rebuild three-tier framework index ----------------------------
     try {
       this._frameworkIndex = buildFrameworkIndex(sys, this._nerveGraph);
     } catch {
       // Non-critical: leave last known index in place on failure.
     }
 
-    // ── dream prioritisation ──────────────────────────────────────────────
+    // -- dream prioritisation ----------------------------------------------
     const MIN_PERSISTENCE = DOPAT_CONFIG.orbital.BASE_RADIUS * 0.1;
     this._dreamPriorityAtoms = new Set(
       h1
@@ -562,7 +562,7 @@ export class ManifoldLifecycle {
     );
     this._h1Bars = h1;
 
-    // ── emit TopologyEvents ───────────────────────────────────────────────
+    // -- emit TopologyEvents -----------------------------------------------
     const prevH1Atoms = new Set(prevH1.map(b => b.generatorAtomId));
     const newH1Atoms = new Set(h1.map(b => b.generatorAtomId));
 
@@ -618,7 +618,7 @@ export class ManifoldLifecycle {
       }
     }
 
-    // ── route to InquiryQueue ─────────────────────────────────────────────
+    // -- route to InquiryQueue ---------------------------------------------
     if (this._inquiryQueue) {
       for (const ev of events) {
         if (ev.type === "component_birth" && ev.persistence > MIN_PERSISTENCE) {
@@ -640,7 +640,7 @@ export class ManifoldLifecycle {
       metrics.increment("topology.events", events.length);
     }
 
-    // ── D4: Record cobordism snapshot ─────────────────────────────────────────
+    // -- D4: Record cobordism snapshot -----------------------------------------
     const totalH1Persistence = h1
       .filter(b => b.death !== Infinity)
       .reduce((sum, b) => sum + (b.death - b.birth), 0);

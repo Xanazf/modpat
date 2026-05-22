@@ -4,14 +4,14 @@
  * Tracks topics that returned "unknown" so the system can reason about them
  * proactively: pending → tried_dict → tried_wiki → ask_user → resolved.
  *
- * Previously lived alongside Learner.  Phase 3 of the "Mapper as Thinker"
- * refactor extracted it so the Mapper can own an instance directly while
+ * Previously lived alongside Learner.  Phase 3 of the "Traveler as Thinker"
+ * refactor extracted it so the Traveler can own an instance directly while
  * `Learner.ts` becomes a back-compat shim.
  */
 
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
-import type Mapper from "./Mapper";
+import type Traveler from "@core_i/Traveler";
 import logger from "@utils/SpectralLogger";
 
 export type InquiryStatus =
@@ -33,7 +33,7 @@ export interface InquiryItem {
 export class InquiryQueue {
   private items: Map<string, InquiryItem> = new Map();
   private store?: Store;
-  /** Optional hook called on each new enqueue - used by Mapper.spawnIntent. */
+  /** Optional hook called on each new enqueue - used by Traveler.spawnIntent. */
   public onEnqueue?: (topic: string) => void;
 
   constructor(store?: Store) {
@@ -119,7 +119,7 @@ export class InquiryQueue {
   public async step(
     limit: number,
     unfolder: Unfolder | null,
-    mapper: Mapper,
+    mapper: Traveler,
     system: Root.ManifoldView,
     atomizer: Atomic.Engine,
     store?: Store,
@@ -193,7 +193,7 @@ export class InquiryQueue {
 
   private async _retry(
     item: InquiryItem,
-    mapper: Mapper,
+    mapper: Traveler,
     atomizer: Atomic.Engine,
     system: Root.ManifoldView,
     store?: Store

@@ -17,10 +17,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import Resolver from "@core_i/Resolver";
+import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
-import { createTestMapper } from "@core_i/Runtime";
-import type Traveler from "@core_i/Traveler";
+import { createTestTraveler } from "@core_i/Runtime";
 import Store from "@core_s/Memory";
 
 // ---------------------------------------------------------------------------
@@ -284,8 +283,8 @@ async function run(): Promise<void> {
   const store = new Store(system, atomizer, ":memory:");
   await store.waitForInit();
 
-  const resolver = new Resolver(system, atomizer, store);
-  const traveler = createTestMapper(system, atomizer, resolver, store);
+  const resolver = new Traveler(system, atomizer, store);
+  const traveler = createTestTraveler(system, atomizer, resolver, store);
   traveler.setGPUEnabled(false);
 
   // Gather all pairs

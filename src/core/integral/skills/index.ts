@@ -8,7 +8,7 @@
  */
 
 import type Store from "@core_s/Memory";
-import type { IngestResult, Language } from "../language/Language";
+import type { IngestResult, Language } from "@skill_lang/Language";
 
 export interface SkillContext {
   /** The raw query text (already perspective-shifted by Language). */

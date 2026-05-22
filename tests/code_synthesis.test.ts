@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
-import { Synthesizer } from "@core_i/Coder";
-import Resolver from "@core_i/Resolver";
-import { createTestMapper } from "@core_i/Runtime";
+import { Synthesizer } from "@skill_code/Coder";
+import { createTestTraveler } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
 import { logger } from "@src/utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
@@ -15,7 +14,7 @@ export async function executeCodeSynthesisSuite() {
         await TestHarness.getEnvironment<SemanticAtomizer>("semantic");
       const { system, atomizer, store, resolver } = env;
 
-      const inference = createTestMapper(system, atomizer, resolver, store);
+      const inference = createTestTraveler(system, atomizer, resolver, store);
 
       const source = `
         function add(a, b) { return a + b; }

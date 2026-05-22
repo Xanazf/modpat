@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
-import { createTestMapper } from "@core_i/Runtime";
+import { createTestTraveler } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
 import Unfolder from "@core_s/Unfolder";
 import { describe, it, TestHarness } from "./utils/harness";
@@ -12,7 +12,7 @@ export async function executeE2ETest() {
     system.reset();
 
     const unfolder = new Unfolder(system, atomizer);
-    const inference = createTestMapper(
+    const inference = createTestTraveler(
       system,
       atomizer,
       resolver,

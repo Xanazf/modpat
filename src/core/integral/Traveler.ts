@@ -1,33 +1,46 @@
 import { createHash } from "node:crypto";
+import nlp from "compromise";
+
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import { metrics } from "@core_s/Metrics";
 import { CURVATURE_WGSL } from "@core_s/Curvature";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@core_s/Unfolder";
-import logger from "@utils/SpectralLogger";
 import {
   boostIntent,
   decayIntent,
   IntentTag,
   spawnIntent as spawnIntentPrecept,
 } from "@utils/intentPrecept";
-import { extractTopic } from "@utils/topicExtraction";
-import nlp from "compromise";
-import { GridIndex4D } from "../structural/GridIndex4D";
+import { GridIndex4D } from "@core_s/GridIndex4D";
 import type { PersistenceBar } from "@core_s/PersistentHomology";
-import { type CodePattern, Synthesizer } from "./Coder";
-import { InquiryQueue, type InquiryItem } from "./InquiryQueue";
+import {
+  resolveActiveAtoms,
+  type FrameworkId,
+  type Matrix4x4,
+  type TravelerState,
+} from "@core_s/FrameworkIndex";
+import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
+
+import { multiplyMatrices4x4 } from "@i_topology/HoTTKernel";
 import type { SkillHandler } from "./skills";
-import type { Language } from "./language/Language";
-import type { WorkingMemory } from "./language/WorkingMemory";
-import { TravelerWorkspace, TravelerWorkspacePool } from "./TravelerWorkspace";
+import { type CodePattern, Synthesizer } from "@skill_code/Coder";
+import { InquiryQueue, type InquiryItem } from "@skill_cogi/InquiryQueue";
+import type { Language } from "@skill_lang/Language";
+import type { WorkingMemory } from "@skill_lang/WorkingMemory";
+import {
+  TravelerWorkspace,
+  TravelerWorkspacePool,
+} from "@i_topology/Walkspace";
 import {
   classifyOperatorToken,
   OperatorClass,
   SlotType,
   SystemRef,
 } from "./System";
+import logger from "@utils/SpectralLogger";
+import { extractTopic } from "@utils/topicExtraction";
 
 /**
  * Per-call inputs to perceive / perceiveCoherent / probe.
@@ -131,9 +144,6 @@ export interface PerceptionDiagnostics {
   bridgeCandidates: BridgeCandidate[];
 }
 
-/** Backward-compat alias - tests reference this type name. */
-export type ResolverDiagnostics = PerceptionDiagnostics;
-
 /**
  * Capture returned by perceiveCapturing: race-free snapshot under the
  * workspace lock.
@@ -222,6 +232,8 @@ class Traveler implements Mapping.Engine {
   private synthesizer: Synthesizer;
   /** The language translation boundary. */
   public language: Language | null = null;
+  /** Optional structural manifold lifecycle for framework indexing. */
+  public lifecycle: ManifoldLifecycle | null = null;
   /** Open-ended skill registry. */
   private skills = new Map<number, SkillHandler>();
   /** Last-elected skill ID for feedback loop. */
@@ -253,10 +265,12 @@ class Traveler implements Mapping.Engine {
   public lastDiagnostics: PerceptionDiagnostics | null = null;
   /** Operators discovered via resonance during the most recent perceive call. */
   public lastDiscoveredOperators: DiscoveredOperator[] = [];
+  /** TRAVELER step 3: answer IDs from the most recent perceiveCoherent() call, for shadow comparison. */
+  private _lastCoherentIds: Uint32Array | null = null;
   /** P2: times φ was clamped to PHI_MAX; non-zero means a pathologically dense region was hit. */
   public phiClippedCount = 0;
 
-  // ── D2: Parallel transport (holonomy) ──────────────────────────────────────
+  // -- D2: Parallel transport (holonomy) --------------------------------------
   /**
    * 4×4 holonomy matrix accumulated along the most recently relaxed geodesic.
    * Initialized to the identity; updated by computeHolonomy() after each CPU
@@ -270,7 +284,7 @@ class Traveler implements Mapping.Engine {
    */
   public lastInferentialEffort = 0;
 
-  // ── C4: Learned Christoffel corrections ────────────────────────────────────
+  // -- C4: Learned Christoffel corrections ------------------------------------
   /**
    * ΔΓᵢⱼᵏ: learned correction tensor (4×4×4 = 64 floats, indexed [i*16+j*4+k]).
    * Applied as an additional geodesic deviation force during relaxPath.
@@ -280,6 +294,27 @@ class Traveler implements Mapping.Engine {
   public readonly deltaGamma = new Float64Array(64);
   /** Mean unit-velocity direction of the most recently relaxed path (used for training). */
   private _lastPathVelocity: [number, number, number, number] = [0, 0, 0, 0];
+
+  // -- TRAVELER step 2: Persistent geometric working memory ------------------
+
+  /** Current 4D position in the manifold. Starts at the pole (0,0,0,0); drifts with each interaction. */
+  public position: [number, number, number, number] = [0, 0, 0, 0];
+
+  /**
+   * Accumulated session holonomy (4×4 row-major Float64Array).
+   * Product of all lastHolonomy matrices across traversals this session.
+   * Periodically re-orthogonalized via Gram-Schmidt to prevent SO(4) drift.
+   */
+  public readonly holonomyFrame = new Float64Array(16) as Matrix4x4;
+
+  /** Active frameworks from E0 FrameworkIndex (populated in step 5). */
+  public readonly activeFrameworks = new Set<FrameworkId>();
+
+  /** Total inferential effort accumulated this session (sum of lastInferentialEffort). */
+  public sessionEffort = 0;
+
+  /** Tracks traversal count for Gram-Schmidt re-orthogonalization cadence. */
+  private _traversalCount = 0;
 
   /**
    * Set of scopes from working memory used as warm-start context for the
@@ -323,6 +358,13 @@ class Traveler implements Mapping.Engine {
       this.lastHolonomy[5] =
       this.lastHolonomy[10] =
       this.lastHolonomy[15] =
+        1;
+
+    // TRAVELER step 2: seed accumulated session holonomy as identity.
+    this.holonomyFrame[0] =
+      this.holonomyFrame[5] =
+      this.holonomyFrame[10] =
+      this.holonomyFrame[15] =
         1;
 
     this.workspacePool = new TravelerWorkspacePool(
@@ -374,6 +416,10 @@ class Traveler implements Mapping.Engine {
 
   public setLanguage(language: Language): void {
     this.language = language;
+  }
+
+  public setLifecycle(lifecycle: ManifoldLifecycle | null): void {
+    this.lifecycle = lifecycle;
   }
 
   /**
@@ -546,7 +592,8 @@ class Traveler implements Mapping.Engine {
             pe[i],
             pa[i],
             penalties,
-            boostScopes
+            boostScopes,
+            activeAtoms
           );
           if (potential > DOPAT_CONFIG.PHYSICS.VOID_POTENTIAL_THRESHOLD) {
             if (nearestId !== -1) {
@@ -598,7 +645,7 @@ class Traveler implements Mapping.Engine {
         }
       }
 
-      const report = this.review(px, py, pe, pa, steps);
+      const report = this.review(px, py, pe, pa, steps, activeAtoms);
       if (report.passed) {
         metrics.record("mapper.iters_to_converge", attempt + 1);
         finalIds = this.extractIds(
@@ -643,6 +690,9 @@ class Traveler implements Mapping.Engine {
         targetId
       );
 
+    // TRAVELER step 2: update persistent geometric state after each traversal.
+    this._updateTravelerState(targetId, result);
+
     this.reinforcePath(result);
     return result;
   }
@@ -674,6 +724,531 @@ class Traveler implements Mapping.Engine {
       topic,
       preExpandLength,
     });
+  }
+
+  // -- TRAVELER step 2: TravelerState management -----------------------------
+
+  /** Updates position, holonomyFrame, and sessionEffort after a traverse(). */
+  private _updateTravelerState(targetId: number, path: Uint32Array): void {
+    if (this.system.isAllocated(targetId)) {
+      this.position[0] = this.system.posX[targetId];
+      this.position[1] = this.system.posY[targetId];
+      this.position[2] = this.system.posZ[targetId];
+      this.position[3] = this.system.posW[targetId];
+    }
+
+    // Accumulate session holonomy: holonomyFrame = lastHolonomy × holonomyFrame
+    const newFrame = multiplyMatrices4x4(this.lastHolonomy, this.holonomyFrame);
+    this.holonomyFrame.set(newFrame);
+
+    this.sessionEffort += this.lastInferentialEffort;
+    this._traversalCount++;
+
+    if (this._traversalCount % 10 === 0) {
+      this._gramSchmidtReorthogonalize();
+    }
+
+    // Populate active frameworks from the path history
+    if (this.lifecycle) {
+      const index = this.lifecycle.getFrameworkIndex();
+      if (index) {
+        for (let i = 0; i < path.length; i++) {
+          const id = path[i];
+          if (!this.system.isAllocated(id)) continue;
+          for (const sc of index.superclusters) {
+            if (sc.memberAtomIds.has(id)) this.activeFrameworks.add(sc.id);
+          }
+          for (const cl of index.clusters) {
+            if (cl.memberAtomIds.has(id)) this.activeFrameworks.add(cl.id);
+          }
+          for (const sub of index.subclusters) {
+            if (sub.memberAtomIds.has(id)) this.activeFrameworks.add(sub.id);
+          }
+        }
+      }
+    }
+  }
+
+  /** Gram-Schmidt re-orthogonalizes holonomyFrame rows to prevent SO(4) drift. */
+  private _gramSchmidtReorthogonalize(): void {
+    const H = this.holonomyFrame;
+    for (let r = 0; r < 4; r++) {
+      for (let p = 0; p < r; p++) {
+        let dot = 0;
+        for (let k = 0; k < 4; k++) dot += H[r * 4 + k] * H[p * 4 + k];
+        for (let k = 0; k < 4; k++) H[r * 4 + k] -= dot * H[p * 4 + k];
+      }
+      let norm = 0;
+      for (let k = 0; k < 4; k++) norm += H[r * 4 + k] * H[r * 4 + k];
+      norm = Math.sqrt(norm) + 1e-12;
+      for (let k = 0; k < 4; k++) H[r * 4 + k] /= norm;
+    }
+  }
+
+  /**
+   * Resets positional state to the pole without clearing learned state.
+   * deltaGamma and vault are preserved; activeFrameworks is cleared because
+   * a pole reset represents a full context reset - no prior traversal history
+   * should influence the new session's framework scope.
+   */
+  public resetToPole(): void {
+    this.position[0] =
+      this.position[1] =
+      this.position[2] =
+      this.position[3] =
+        0;
+    this.holonomyFrame.fill(0);
+    this.holonomyFrame[0] =
+      this.holonomyFrame[5] =
+      this.holonomyFrame[10] =
+      this.holonomyFrame[15] =
+        1;
+    this.sessionEffort = 0;
+    this.activeFrameworks.clear();
+  }
+
+  /** Applies a previously loaded or serialized TravelerState to this instance. */
+  public applyState(state: TravelerState): void {
+    this.position[0] = state.position[0];
+    this.position[1] = state.position[1];
+    this.position[2] = state.position[2];
+    this.position[3] = state.position[3];
+    this.holonomyFrame.set(state.holonomyFrame);
+    this.activeFrameworks.clear();
+    for (const f of state.activeFrameworks) this.activeFrameworks.add(f);
+    this.sessionEffort = state.sessionEffort;
+  }
+
+  // -- TRAVELER step 3: Observe → Follow → Read ------------------------------
+
+  /**
+   * Observe → Follow → Read: the full replacement for the Phase 0-7
+   * transfer-matrix pipeline.
+   *
+   * Observe:
+   *   Phase 0b  Vault recall by sequence signature (fast path for crystallised
+   *             knowledge, same as the old pipeline's Phase 0b).
+   *   Phase 0   PartLayer topology walk (same as the old pipeline's Phase 0).
+   *
+   * Follow:
+   *   When neither vault nor topology produce an answer, integrates a probe
+   *   from the input centroid under the manifold metric force (∇φ) for up to
+   *   SETTLE_MAX_TICKS steps to identify the relevant cluster.  When
+   *   POLE_INGESTION_ENABLED is true, consumption of drift targets from
+   *   Language orients the probe toward the embedding-derived cluster.
+   *
+   * Read:
+   *   Source = heaviest input atom (or nearest to accumulated Traveler
+   *   position once it has moved).  Sink = atom nearest the settled probe.
+   *   traverse(source, sink) - the geodesic path IS the inference.
+   *   Holonomy of the traversal carries the confidence signal.
+   *
+   * Activated by SETTLING_GRADIENT_ENABLED=true; also used directly for
+   * shadow comparison (SETTLING_GRADIENT_SHADOW=true, step 3).
+   */
+  public async observeSettlingGradient(
+    ids: Uint32Array,
+    opts: PerceptionOptions = {}
+  ): Promise<Uint32Array> {
+    if (ids.length === 0) return new Uint32Array(0);
+    const N = ids.length;
+
+    // -- Phase 0b: vault recall ---------------------------------------------
+    if (!opts.probeMode) {
+      const derivation = await this.resolveSemanticDerivation(ids);
+      if (derivation) {
+        if (this.store) {
+          this.boostAtomMasses(ids);
+          this.boostAtomMasses(derivation);
+        }
+        return derivation;
+      }
+    }
+
+    // -- Phase 0: PartLayer topology walk -----------------------------------
+    const lastId = ids[N - 1];
+    const lastClass = this.system.operatorClass[lastId];
+    let queryOpId = lastId,
+      queryOpClass = lastClass;
+    let subjectIds = ids.slice(0, N - 1);
+
+    if (lastClass === OperatorClass.Sink && N >= 3) {
+      const prevId = ids[N - 2];
+      if (this.system.operatorClass[prevId] === OperatorClass.IdentityShift) {
+        queryOpId = prevId;
+        queryOpClass = this.system.operatorClass[prevId];
+        subjectIds = ids.slice(0, N - 2);
+      }
+    }
+
+    if (queryOpClass === OperatorClass.IdentityShift && subjectIds.length > 0) {
+      const topoResult = this.resolveMultiTokenSemanticLookup(
+        subjectIds,
+        queryOpId
+      );
+      if (topoResult.length > 0) {
+        if (!opts.probeMode && this.store) {
+          await this.store.crystallizeProof(ids, topoResult, 1.0);
+          this.boostAtomMasses(ids);
+          this.boostAtomMasses(topoResult);
+        }
+        return topoResult;
+      }
+    }
+
+    // -- Phase 0.5: code synthesis fast-path -------------------------------
+    if (
+      this.store &&
+      N > 0 &&
+      this.system.operatorClass[ids[N - 1]] === OperatorClass.Sink
+    ) {
+      const synthResult = await this.resolveCodeSynthesis(ids);
+      const decoded = this.atomizer
+        .decodeSequence(synthResult, this.system)
+        .trim();
+      if (decoded && decoded !== "unknown") return synthResult;
+    }
+
+    // E0 active frameworks resolution
+    let activeAtoms: Set<number> | undefined = undefined;
+    if (this.lifecycle) {
+      const index = this.lifecycle.getFrameworkIndex();
+      if (index && this.activeFrameworks.size > 0) {
+        activeAtoms = resolveActiveAtoms(index, this.activeFrameworks);
+      }
+    }
+
+    // -- Observe: settle probe from input centroid under manifold force ------
+    this.buildGridIndex();
+    const driftTargets =
+      this.language?.takeDriftTargets() ??
+      new Map<number, readonly [number, number, number, number]>();
+
+    // Individual atom settling under POLE_INGESTION_ENABLED
+    if (DOPAT_CONFIG.PHYSICS.POLE_INGESTION_ENABLED && driftTargets.size > 0) {
+      this._settleAtoms(ids, driftTargets, opts.contextScopes, activeAtoms);
+      this.buildGridIndex(); // Rebuild grid index with the newly settled atom positions
+    }
+
+    const settled = this._settleProbe(
+      ids,
+      driftTargets,
+      opts.contextScopes,
+      activeAtoms
+    );
+    if (!settled) return this.atomizer.ingestSequence("unknown", this.system);
+
+    const { x: sx, y: sy, z: sz, w: sw } = settled;
+
+    // -- Follow: identify source and sink atoms -----------------------------
+    const nearRadius = Math.sqrt(DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS);
+
+    const sinkId = this.gridIndex.nearest(
+      sx,
+      sy,
+      sz,
+      sw,
+      nearRadius * 4,
+      this.system,
+      activeAtoms
+    );
+    if (sinkId === -1)
+      return this.atomizer.ingestSequence("unknown", this.system);
+
+    const travelerDisp =
+      this.position[0] ** 2 +
+      this.position[1] ** 2 +
+      this.position[2] ** 2 +
+      this.position[3] ** 2;
+
+    let sourceId: number;
+    if (travelerDisp > 0.01) {
+      sourceId = this.gridIndex.nearest(
+        this.position[0],
+        this.position[1],
+        this.position[2],
+        this.position[3],
+        nearRadius * 4,
+        this.system,
+        activeAtoms
+      );
+      if (sourceId === -1) sourceId = this._heaviestInput(ids);
+    } else {
+      sourceId = this._heaviestInput(ids);
+    }
+
+    if (sourceId === -1 || sourceId === sinkId) {
+      const candidates = this.gridIndex
+        .candidatesInRadius(sx, sy, sz, sw, nearRadius)
+        .filter(id => this.system.isAllocated(id));
+      const filtered =
+        activeAtoms !== undefined
+          ? candidates.filter(id => activeAtoms.has(id))
+          : candidates;
+      return new Uint32Array(
+        filtered
+          .sort((a, b) => this.system.mass[b] - this.system.mass[a])
+          .slice(0, 16)
+      );
+    }
+
+    // -- Read: traverse source → sink; path IS the inference -----------------
+    return this.traverse(sourceId, sinkId, {
+      boostScopes: opts.contextScopes,
+      activeAtoms,
+    });
+  }
+
+  /**
+   * Integrates the positions of newly ingested atoms starting from the pole
+   * toward their embedding drift targets under the manifold metric potential
+   * and a soft spring force.
+   */
+  private _settleAtoms(
+    ids: Uint32Array,
+    driftTargets: Map<number, readonly [number, number, number, number]>,
+    boost?: Set<number>,
+    activeAtoms?: Set<number>
+  ): void {
+    const step = DOPAT_CONFIG.PHYSICS.GRADIENT_STEP;
+    const maxTicks = DOPAT_CONFIG.PHYSICS.SETTLE_MAX_TICKS;
+    const threshold = DOPAT_CONFIG.PHYSICS.SETTLE_CONVERGENCE_THRESHOLD;
+    const DRIFT_SPRING = 0.1;
+
+    for (let k = 0; k < ids.length; k++) {
+      const id = ids[k];
+      if (!this.system.isAllocated(id)) continue;
+      const target = driftTargets.get(id);
+      if (!target) continue;
+
+      const [tx, ty, tz, tw] = target;
+      let px = this.system.posX[id];
+      let py = this.system.posY[id];
+      let pz = this.system.posZ[id];
+      let pw = this.system.posW[id];
+
+      for (let tick = 0; tick < maxTicks; tick++) {
+        // Exclude the atom itself to avoid self-attraction.
+        const [, fx, fy, fz, fw] = this.getMetricForce(
+          px,
+          py,
+          pz,
+          pw,
+          [],
+          boost,
+          activeAtoms
+        );
+        const dx = (-fx + (tx - px) * DRIFT_SPRING) * step;
+        const dy = (-fy + (ty - py) * DRIFT_SPRING) * step;
+        const dz = (-fz + (tz - pz) * DRIFT_SPRING) * step;
+        const dw = (-fw + (tw - pw) * DRIFT_SPRING) * step;
+
+        px += dx;
+        py += dy;
+        pz += dz;
+        pw += dw;
+
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw) < threshold) break;
+      }
+
+      this.system.posX[id] = px;
+      this.system.posY[id] = py;
+      this.system.posZ[id] = pz;
+      this.system.posW[id] = pw;
+      this.system.update(id);
+    }
+  }
+
+  /**
+   * Integrates a probe point from the centroid of `ids` under the manifold
+   * metric force for up to SETTLE_MAX_TICKS steps.
+   * Returns the converged {x, y, z, w} or null when `ids` is empty.
+   */
+  private _settleProbe(
+    ids: Uint32Array,
+    driftTargets: Map<number, readonly [number, number, number, number]>,
+    boost?: Set<number>,
+    activeAtoms?: Set<number>
+  ): { x: number; y: number; z: number; w: number } | null {
+    // Compute input centroid
+    let cx = 0,
+      cy = 0,
+      cz = 0,
+      cw = 0,
+      n = 0;
+    for (let k = 0; k < ids.length; k++) {
+      const id = ids[k];
+      if (!this.system.isAllocated(id)) continue;
+      cx += this.system.posX[id];
+      cy += this.system.posY[id];
+      cz += this.system.posZ[id];
+      cw += this.system.posW[id];
+      n++;
+    }
+    if (n === 0) return null;
+    cx /= n;
+    cy /= n;
+    cz /= n;
+    cw /= n;
+
+    // If POLE_INGESTION_ENABLED is true, the atoms have already been individually settled
+    // by _settleAtoms. Return their centroid directly as the stable target coordinates.
+    if (DOPAT_CONFIG.PHYSICS.POLE_INGESTION_ENABLED) {
+      return { x: cx, y: cy, z: cz, w: cw };
+    }
+
+    let driftTx = 0,
+      driftTy = 0,
+      driftTz = 0,
+      driftTw = 0,
+      driftN = 0;
+    if (driftTargets.size > 0) {
+      for (const [, [tx, ty, tz, tw]] of driftTargets) {
+        driftTx += tx;
+        driftTy += ty;
+        driftTz += tz;
+        driftTw += tw;
+        driftN++;
+      }
+      if (driftN > 0) {
+        driftTx /= driftN;
+        driftTy /= driftN;
+        driftTz /= driftN;
+        driftTw /= driftN;
+      }
+    }
+    // Soft spring weight: hint contributes alongside metric force but never overrides it.
+    const DRIFT_SPRING = 0.1;
+
+    // Discrete settling: follow gradient (+ optional drift hint) toward highest-density cluster
+    let px = cx,
+      py = cy,
+      pz = cz,
+      pw = cw;
+    const step = DOPAT_CONFIG.PHYSICS.GRADIENT_STEP;
+    const maxTicks = DOPAT_CONFIG.PHYSICS.SETTLE_MAX_TICKS;
+    const threshold = DOPAT_CONFIG.PHYSICS.SETTLE_CONVERGENCE_THRESHOLD;
+
+    for (let tick = 0; tick < maxTicks; tick++) {
+      const [, fx, fy, fz, fw] = this.getMetricForce(
+        px,
+        py,
+        pz,
+        pw,
+        [],
+        boost,
+        activeAtoms
+      );
+      // fx/fy/fz/fw is ∂V/∂x pointing AWAY from clusters (V is minimum at clusters).
+      // Move in direction -∇V = toward clusters, plus optional drift spring.
+      const dx =
+        (-fx + (driftN > 0 ? (driftTx - px) * DRIFT_SPRING : 0)) * step;
+      const dy =
+        (-fy + (driftN > 0 ? (driftTy - py) * DRIFT_SPRING : 0)) * step;
+      const dz =
+        (-fz + (driftN > 0 ? (driftTz - pz) * DRIFT_SPRING : 0)) * step;
+      const dw =
+        (-fw + (driftN > 0 ? (driftTw - pw) * DRIFT_SPRING : 0)) * step;
+      px += dx;
+      py += dy;
+      pz += dz;
+      pw += dw;
+
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw) < threshold) break;
+    }
+
+    return { x: px, y: py, z: pz, w: pw };
+  }
+
+  /** Returns the ID of the highest-mass allocated atom in `ids`, or -1. */
+  private _heaviestInput(ids: Uint32Array): number {
+    let bestId = -1,
+      bestMass = -Infinity;
+    for (let k = 0; k < ids.length; k++) {
+      const id = ids[k];
+      if (!this.system.isAllocated(id)) continue;
+      const m = this.system.mass[id];
+      if (m > bestMass) {
+        bestMass = m;
+        bestId = id;
+      }
+    }
+    return bestId;
+  }
+
+  /**
+   * Compares two atom ID sets (Jaccard) and their 4D centroid vectors (cosine),
+   * logs the result, and emits metrics.  Used by the step-3 shadow comparison.
+   */
+  private _shadowCompare(
+    oldIds: Uint32Array,
+    newIds: Uint32Array,
+    label: string
+  ): { jaccard: number; cosine: number } {
+    const setA = new Set(Array.from(oldIds));
+    const setB = new Set(Array.from(newIds));
+    let intersect = 0;
+    for (const id of setA) if (setB.has(id)) intersect++;
+    const union = setA.size + setB.size - intersect;
+    const jaccard = union === 0 ? 1 : intersect / union;
+
+    const mA = this._meanPos(oldIds);
+    const mB = this._meanPos(newIds);
+    const dot = mA[0] * mB[0] + mA[1] * mB[1] + mA[2] * mB[2] + mA[3] * mB[3];
+    const magA = Math.sqrt(mA.reduce((s, v) => s + v * v, 0)) + 1e-12;
+    const magB = Math.sqrt(mB.reduce((s, v) => s + v * v, 0)) + 1e-12;
+    const cosine = dot / (magA * magB);
+
+    logger.log(
+      `[TRAVELER shadow] "${label}" old=${oldIds.length} new=${newIds.length} ` +
+        `jaccard=${jaccard.toFixed(3)} cosine=${cosine.toFixed(3)}`
+    );
+    metrics.gauge("traveler.shadow_jaccard", jaccard);
+    metrics.gauge("traveler.shadow_cosine", cosine);
+
+    return { jaccard, cosine };
+  }
+
+  /** Returns the mean 4D position vector of allocated atoms in `ids`. */
+  private _meanPos(ids: Uint32Array): [number, number, number, number] {
+    let x = 0,
+      y = 0,
+      z = 0,
+      w = 0,
+      n = 0;
+    for (const id of ids) {
+      if (!this.system.isAllocated(id)) continue;
+      x += this.system.posX[id];
+      y += this.system.posY[id];
+      z += this.system.posZ[id];
+      w += this.system.posW[id];
+      n++;
+    }
+    if (n === 0) return [0, 0, 0, 0];
+    return [x / n, y / n, z / n, w / n];
+  }
+
+  /** Persists TravelerState to DuckDB. No-op when no store is attached. */
+  public async persistState(sessionId: string): Promise<void> {
+    if (!this.store) return;
+    await this.store.saveTravelerState(sessionId, {
+      position: [
+        this.position[0],
+        this.position[1],
+        this.position[2],
+        this.position[3],
+      ],
+      holonomyFrame: this.holonomyFrame as Matrix4x4,
+      activeFrameworks: new Set(this.activeFrameworks),
+      sessionEffort: this.sessionEffort,
+    });
+  }
+
+  /** Loads TravelerState from DuckDB and applies it. No-op when no store or no saved state. */
+  public async loadState(sessionId: string): Promise<void> {
+    if (!this.store) return;
+    const state = await this.store.loadTravelerState(sessionId);
+    if (state) this.applyState(state);
   }
 
   /**
@@ -1462,7 +2037,8 @@ class Traveler implements Mapping.Engine {
     z: number,
     w: number,
     pens: any[],
-    boost: Set<number> | undefined
+    boost: Set<number> | undefined,
+    activeAtoms?: Set<number>
   ): { potential: number; nearestId: number } {
     const phys = DOPAT_CONFIG.PHYSICS;
     const nearRadius = Math.sqrt(phys.INFLUENCE_RADIUS) * 4;
@@ -1472,9 +2048,18 @@ class Traveler implements Mapping.Engine {
       z,
       w,
       nearRadius,
-      this.system
+      this.system,
+      activeAtoms
     );
-    const [potential] = this.getMetricForce(x, y, z, w, pens, boost);
+    const [potential] = this.getMetricForce(
+      x,
+      y,
+      z,
+      w,
+      pens,
+      boost,
+      activeAtoms
+    );
     return { potential, nearestId };
   }
 
@@ -1483,7 +2068,8 @@ class Traveler implements Mapping.Engine {
     py: Float64Array,
     pe: Float64Array,
     pa: Float64Array,
-    steps: number
+    steps: number,
+    activeAtoms?: Set<number>
   ): Mapping.ReviewReport {
     const phys = DOPAT_CONFIG.PHYSICS;
     const trapRadius = Math.sqrt(phys.TRAP_DISTANCE_THRESHOLD);
@@ -1494,7 +2080,8 @@ class Traveler implements Mapping.Engine {
         pe[i],
         pa[i],
         trapRadius,
-        this.system
+        this.system,
+        activeAtoms
       );
       if (nearestId === -1) continue;
       const ddx = px[i] - this.system.posX[nearestId];
@@ -1625,11 +2212,21 @@ class Traveler implements Mapping.Engine {
     return this.probe(sequenceIds, opts);
   }
 
-  /** Full Phase 0..7 perception pipeline. */
+  /**
+   * Perception entry point.
+   * When SETTLING_GRADIENT_ENABLED=true, routes through observeSettlingGradient
+   * (Observe → Follow → Read).  Otherwise falls back to the Phase 0..7
+   * transfer-matrix resonance pipeline via _perceiveCapturing.
+   * The flag must only be flipped to true after the full test suite passes
+   * without regressions (TRAVELER step 4).
+   */
   public async perceive(
     sequenceIds: Uint32Array,
     opts: PerceptionOptions = {}
   ): Promise<Uint32Array> {
+    if (DOPAT_CONFIG.PHYSICS.SETTLING_GRADIENT_ENABLED) {
+      return this.observeSettlingGradient(sequenceIds, opts);
+    }
     return (await this._perceiveCapturing(sequenceIds, opts)).ids;
   }
 
@@ -1671,13 +2268,11 @@ class Traveler implements Mapping.Engine {
         bridgeCandidates: [],
       };
     }
-
     if (N > Traveler.MAX_SEQUENCE_LENGTH) {
       throw new Error(
         `Sequence length ${N} exceeds max DOD buffer capacity ${Traveler.MAX_SEQUENCE_LENGTH}`
       );
     }
-
     const slot = await this.workspacePool.acquire();
     slot.contextScopes = opts.contextScopes ?? this.contextScopes;
     slot.probeMode = opts.probeMode ?? false;
@@ -1753,6 +2348,7 @@ class Traveler implements Mapping.Engine {
       }
     }
 
+    // -- Phase 2: energy vibration init ----------------------------------------
     const energyVibration = slot.T_buffer.subarray(0, N);
     energyVibration.fill(0);
     if (N > 0) energyVibration[0] = 1.0;
@@ -1785,6 +2381,7 @@ class Traveler implements Mapping.Engine {
       }
     }
 
+    // -- Phase 3: transfer matrix construction ---------------------------------
     const transferMatrix = slot.W_buffer.subarray(0, N * N);
     transferMatrix.fill(0);
 
@@ -1823,6 +2420,7 @@ class Traveler implements Mapping.Engine {
         }
       }
     }
+    // Modus tollens: "not B" cancels the B side of any "A implies B" bridge.
     for (let i = 0; i < N - 1; i++) {
       if (this.system.operatorClass[sequenceIds[i]] !== OperatorClass.Inversion)
         continue;
@@ -1873,6 +2471,7 @@ class Traveler implements Mapping.Engine {
       }
     }
 
+    // -- Phase 4-5: forward resonance propagation ------------------------------
     const accumulatedResonance = slot.E_total_buffer.subarray(0, N * N);
     const currentResonance = slot.E_curr_buffer.subarray(0, N * N);
     accumulatedResonance.set(transferMatrix);
@@ -1933,6 +2532,7 @@ class Traveler implements Mapping.Engine {
       accumulatedResonance
     );
 
+    // -- Phase 6: backward energy from sink ------------------------------------
     const T_back = slot.T_back_buffer.subarray(0, N);
     const T_back_nx = slot.T_back_next_buffer.subarray(0, N);
     const backwardEnergy = slot.backwardEnergyBuffer.subarray(0, N);
@@ -1962,6 +2562,7 @@ class Traveler implements Mapping.Engine {
       }
     }
 
+    // -- Bridge candidate detection ---------------------------------------------
     const bridgeCandidates: BridgeCandidate[] = [];
     const FWD_THRESHOLD = 0.05;
     const BACK_THRESHOLD = 0.05;
@@ -1996,6 +2597,7 @@ class Traveler implements Mapping.Engine {
 
     if (sinkNodeIdx === -1) return sequenceIds;
 
+    // -- Phase 7: sink candidate selection -------------------------------------
     let targetNodeIdx = -1;
     let maxNetEnergy = -Infinity;
     const allSinkCandidates: PerceptionDiagnostics["sinkCandidates"] = [];
@@ -2054,6 +2656,7 @@ class Traveler implements Mapping.Engine {
       bridgeCandidates,
     };
 
+    // Modus tollens result: pick the least-energised non-negated candidate.
     {
       const directlyNegatedScopes = new Set<number>();
       let inversionTokenId = -1;
@@ -2088,12 +2691,9 @@ class Traveler implements Mapping.Engine {
 
     if (maxNetEnergy <= 0) {
       const lastIdInSequence = sequenceIds[N - 1];
-      const isSink =
-        this.system.operatorClass[lastIdInSequence] === OperatorClass.Sink;
-      if (isSink) {
+      if (this.system.operatorClass[lastIdInSequence] === OperatorClass.Sink) {
         return this.resolveCodeSynthesis(sequenceIds);
       }
-
       return this.atomizer.ingestSequence("unknown", this.system);
     }
 
@@ -2175,9 +2775,7 @@ class Traveler implements Mapping.Engine {
       energyVibration.set(T_next);
     }
 
-    const finalPath = new Uint32Array(resultIds.subarray(0, resultCount));
-
-    return finalPath;
+    return new Uint32Array(resultIds.subarray(0, resultCount));
   }
 
   private async resolveCodeSynthesis(
@@ -2260,6 +2858,47 @@ class Traveler implements Mapping.Engine {
 
     return this.atomizer.ingestSequence("unknown", this.system);
   }
+
+  // =========================================================================
+  // COHERENT RESOLUTION (was Resolver.resolveCoherent)
+  // =========================================================================
+
+  public async perceiveCoherent(
+    sequenceIds: Uint32Array,
+    opts: {
+      probeMode?: boolean;
+      maxIterations?: number;
+      contextScopes?: Set<number>;
+    } = {}
+  ): Promise<CoherentResult> {
+    // TRAVELER step 4: settling gradient pipeline (Phase 0-7 retired).
+    const ids = await this.observeSettlingGradient(sequenceIds, {
+      contextScopes: opts.contextScopes,
+      probeMode: opts.probeMode,
+    });
+    const coherence = Math.max(0, 1 - this.lastInferentialEffort);
+    this._lastCoherentIds = ids;
+    return {
+      ids,
+      coherence,
+      iterations: 1,
+      learned: [],
+      diagnosis: ids.length > 0 ? "coherent" : "void",
+      diagnostics: null,
+    };
+  }
+
+  /** Backward-compat alias. */
+  public resolveCoherent(
+    sequenceIds: Uint32Array,
+    opts: { probeMode?: boolean; maxIterations?: number } = {}
+  ): Promise<CoherentResult> {
+    return this.perceiveCoherent(sequenceIds, opts);
+  }
+
+  // =========================================================================
+  // PERCEPTION HELPERS (Phase 3-7)
+  // =========================================================================
 
   private discoverOperatorsByResonance(
     sequenceIds: Uint32Array,
@@ -2349,198 +2988,6 @@ class Traveler implements Mapping.Engine {
     return discovered;
   }
 
-  // =========================================================================
-  // COHERENT RESOLUTION (was Resolver.resolveCoherent)
-  // =========================================================================
-
-  public async perceiveCoherent(
-    sequenceIds: Uint32Array,
-    opts: {
-      probeMode?: boolean;
-      maxIterations?: number;
-      contextScopes?: Set<number>;
-    } = {}
-  ): Promise<CoherentResult> {
-    const maxIter =
-      opts.maxIterations ?? DOPAT_CONFIG.resolver.COHERENCE_MAX_ITERS;
-    const threshold = DOPAT_CONFIG.resolver.COHERENCE_THRESHOLD;
-    const contrastMin = DOPAT_CONFIG.resolver.COHERENCE_CONTRAST;
-    const inProbe = opts.probeMode ?? false;
-
-    const learned: string[] = [];
-    let bestIds: Uint32Array = new Uint32Array(0);
-    let bestDiag: PerceptionDiagnostics | null = null;
-    let bestCoherence = 0;
-    let staleSince = 0;
-    let finalDiagnosis: CoherentResult["diagnosis"] = "exhausted";
-    let iter = 0;
-
-    for (; iter < maxIter; iter++) {
-      const capture = await this._perceiveCapturing(sequenceIds, {
-        probeMode: inProbe,
-        contextScopes: opts.contextScopes,
-      });
-      const ids = capture.ids;
-      const diag = capture.diagnostics;
-      const coherence = this.measureCoherence(diag);
-
-      if (iter === 0 || coherence > bestCoherence) {
-        bestCoherence = coherence;
-        bestIds = ids;
-        bestDiag = diag;
-        staleSince = 0;
-      } else {
-        staleSince++;
-      }
-
-      if (coherence >= threshold) {
-        finalDiagnosis = "coherent";
-        iter++;
-        break;
-      }
-
-      if (staleSince >= 2) {
-        break;
-      }
-
-      if (!diag) {
-        finalDiagnosis = "void";
-        break;
-      }
-
-      const dx = this.diagnoseLowCoherence(diag, contrastMin);
-
-      if (dx === "void") {
-        finalDiagnosis = "void";
-        if (inProbe) break;
-        const topic = this.extractContentWords(sequenceIds);
-        if (!topic) break;
-
-        let expanded = false;
-
-        if (!expanded && this.unfolder) {
-          const voidId = this.placeVoidAtCentroid(sequenceIds);
-          const unfolded = await this.unfolder.expand(voidId, topic);
-          if (unfolded) {
-            expanded = true;
-            learned.push(`expanded "${topic}"`);
-          }
-        }
-
-        if (!expanded) break;
-      } else if (dx === "conflict") {
-        finalDiagnosis = "conflict";
-        const a = diag.sinkCandidates[0]?.label ?? "?";
-        const b = diag.sinkCandidates[1]?.label ?? "?";
-        learned.push(`conflict: "${a}" vs "${b}"`);
-        break;
-      } else {
-        finalDiagnosis = "weak";
-        if (!inProbe && this.store) {
-          const { signature } = this.store.abstractSequence(sequenceIds);
-          await this.store.adjustEnergy(signature, 0.2);
-          const label = diag.sinkCandidates[0]?.label ?? "?";
-          learned.push(`reinforced "${label}"`);
-        }
-        break;
-      }
-    }
-
-    if (bestIds.length === 0) {
-      bestIds = this.atomizer.ingestSequence("unknown", this.system);
-    }
-
-    return {
-      ids: bestIds,
-      coherence: bestCoherence,
-      iterations: iter,
-      learned,
-      diagnosis: finalDiagnosis,
-      diagnostics: bestDiag,
-    };
-  }
-
-  /** Backward-compat alias. */
-  public resolveCoherent(
-    sequenceIds: Uint32Array,
-    opts: { probeMode?: boolean; maxIterations?: number } = {}
-  ): Promise<CoherentResult> {
-    return this.perceiveCoherent(sequenceIds, opts);
-  }
-
-  private measureCoherence(diag: PerceptionDiagnostics | null): number {
-    if (!diag || diag.maxNetEnergy <= 0 || diag.sinkCandidates.length === 0)
-      return 0;
-    const best = diag.sinkCandidates[0].strength;
-    if (best <= 0) return 0;
-    const amplitude = diag.maxNetEnergy / (1 + diag.maxNetEnergy);
-    const second = diag.sinkCandidates[1]?.strength ?? 0;
-    const contrast = second <= 0 ? 1.0 : best / (best + second);
-    return amplitude * contrast;
-  }
-
-  private diagnoseLowCoherence(
-    diag: PerceptionDiagnostics,
-    contrastMin: number
-  ): "void" | "conflict" | "weak" {
-    if (diag.maxNetEnergy <= 0 || diag.sinkCandidates.length === 0)
-      return "void";
-    const best = diag.sinkCandidates[0].strength;
-    const second = diag.sinkCandidates[1]?.strength ?? 0;
-    if (second > 0 && best / second < contrastMin) return "conflict";
-    return "weak";
-  }
-
-  private extractContentWords(sequenceIds: Uint32Array): string {
-    const nonOpIds: number[] = [];
-    for (let i = 0; i < sequenceIds.length; i++) {
-      const id = sequenceIds[i];
-      if (
-        this.system.isAllocated(id) &&
-        this.system.operatorClass[id] === OperatorClass.None
-      )
-        nonOpIds.push(id);
-    }
-    return this.atomizer
-      .decodeSequence(new Uint32Array(nonOpIds), this.system)
-      .trim();
-  }
-
-  private placeVoidAtCentroid(sequenceIds: Uint32Array): number {
-    const nonOpIds: number[] = [];
-    for (let i = 0; i < sequenceIds.length; i++) {
-      const id = sequenceIds[i];
-      if (
-        this.system.isAllocated(id) &&
-        this.system.operatorClass[id] === OperatorClass.None
-      )
-        nonOpIds.push(id);
-    }
-    let ax = 0,
-      ay = 0,
-      az = 0,
-      aw = 0;
-    for (const id of nonOpIds) {
-      ax += this.system.posX[id];
-      ay += this.system.posY[id];
-      az += this.system.posZ[id];
-      aw += this.system.posW[id];
-    }
-    const n = Math.max(1, nonOpIds.length);
-    const voidScope = this.atomizer.getSymbolScope("void", false);
-    const voidId = this.system.createLocation(-this.system.c, voidScope);
-    this.system.posX[voidId] = ax / n;
-    this.system.posY[voidId] = ay / n;
-    this.system.posZ[voidId] = az / n;
-    this.system.posW[voidId] = aw / n;
-    this.system.update(voidId);
-    return voidId;
-  }
-
-  // =========================================================================
-  // SEMANTIC LOOKUP (was Resolver private helpers)
-  // =========================================================================
-
   private findDominantOperator(
     sequenceIds: Uint32Array,
     sourceNodeIdx?: number
@@ -2560,6 +3007,10 @@ class Traveler implements Mapping.Engine {
     }
     return -1;
   }
+
+  // =========================================================================
+  // SEMANTIC LOOKUP (was Resolver private helpers)
+  // =========================================================================
 
   private ensureSpatialIndex(): void {
     const n = this.system.length;
@@ -3669,6 +4120,28 @@ class Traveler implements Mapping.Engine {
         // Reinforce the connection between the query and the skill
         // This makes the skill "heavier" in the manifold for this query type.
         this.reinforcePath(new Uint32Array([0, ...ids, skillId, 0]));
+      }
+
+      // TRAVELER step 3: shadow comparison - run new gradient-following pipeline
+      // alongside old pipeline and log Jaccard/cosine metrics for validation.
+      if (
+        DOPAT_CONFIG.PHYSICS.SETTLING_GRADIENT_SHADOW &&
+        this._lastCoherentIds
+      ) {
+        const shadowOpts: PerceptionOptions = {
+          contextScopes: this.language?.contextScopes(),
+        };
+        this.observeSettlingGradient(ids, shadowOpts)
+          .then(shadowIds => {
+            if (this._lastCoherentIds) {
+              this._shadowCompare(
+                this._lastCoherentIds,
+                shadowIds,
+                text.slice(0, 40)
+              );
+            }
+          })
+          .catch(() => {});
       }
 
       // 8. Record conclusion in Working Memory

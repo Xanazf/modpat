@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
-import { createTestMapper } from "@core_i/Runtime";
+import { createTestTraveler } from "@core_i/Runtime";
 import { metrics } from "@core_s/Metrics";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
@@ -15,7 +15,7 @@ export async function executeLiveInferenceSuite() {
     } catch {}
 
     const env = await TestHarness.getEnvironment("semantic", testDbPath);
-    const inference = createTestMapper(
+    const inference = createTestTraveler(
       env.system,
       env.atomizer,
       env.resolver,

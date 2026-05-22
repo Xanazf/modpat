@@ -56,7 +56,7 @@ export function computePersistentHomology(
   return { h0, h1 };
 }
 
-// ─── atom selection ─────────────────────────────────────────────────────────
+// --- atom selection ---------------------------------------------------------
 
 function selectTopK(system: Root.ManifoldView, k: number): number[] {
   const candidates: { id: number; mass: number }[] = [];
@@ -69,7 +69,7 @@ function selectTopK(system: Root.ManifoldView, k: number): number[] {
   return candidates.slice(0, k).map(x => x.id);
 }
 
-// ─── edge list ──────────────────────────────────────────────────────────────
+// --- edge list --------------------------------------------------------------
 
 function buildEdges(
   atoms: number[],
@@ -138,7 +138,7 @@ function buildEdges(
   return edges;
 }
 
-// ─── union-find (path compression, union by mass) ───────────────────────────
+// --- union-find (path compression, union by mass) ---------------------------
 
 class MassUF {
   private parent: Int32Array;
@@ -182,7 +182,7 @@ class MassUF {
   }
 }
 
-// ─── H₀ ─────────────────────────────────────────────────────────────────────
+// --- H₀ ---------------------------------------------------------------------
 
 function computeH0(
   atoms: number[],
@@ -218,7 +218,7 @@ function computeH0(
   return bars;
 }
 
-// ─── H₁ ─────────────────────────────────────────────────────────────────────
+// --- H₁ ---------------------------------------------------------------------
 
 /** XOR two sorted (ascending) index arrays in-place on `target`. */
 function xorSortedInPlace(target: number[], other: number[]): void {
@@ -390,7 +390,7 @@ function computeH1(
   return bars;
 }
 
-// ─── simple union-find (rank only, no mass tracking) ────────────────────────
+// --- simple union-find (rank only, no mass tracking) ------------------------
 
 class SimpleUF {
   private p: Int32Array;

@@ -9,6 +9,7 @@ import {
 } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
 import { topoSignatureJaccard } from "@core_s/TopologyMapper";
+import type { TravelerState } from "@core_s/FrameworkIndex";
 import {
   type DuckDBConnection,
   DuckDBInstance,
@@ -127,6 +128,18 @@ export default class Store implements Memory.Vault {
       CREATE TABLE IF NOT EXISTS session_phi (
         scope DOUBLE PRIMARY KEY,
         phi   DOUBLE NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS traveler_sessions (
+        session_id VARCHAR PRIMARY KEY,
+        pos_x DOUBLE NOT NULL,
+        pos_y DOUBLE NOT NULL,
+        pos_z DOUBLE NOT NULL,
+        pos_w DOUBLE NOT NULL,
+        holonomy_json VARCHAR NOT NULL,
+        active_frameworks_json VARCHAR NOT NULL,
+        session_effort DOUBLE NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
@@ -1056,6 +1069,81 @@ export default class Store implements Memory.Vault {
       map.set(Number(row[0]), Number(row[1]));
     }
     return map;
+  }
+
+  /**
+   * TRAVELER step 2 - Upserts TravelerState for a session into DuckDB.
+   */
+  public async saveTravelerState(
+    sessionId: string,
+    state: TravelerState
+  ): Promise<void> {
+    const holonomyJson = JSON.stringify(Array.from(state.holonomyFrame));
+    const frameworksJson = JSON.stringify(Array.from(state.activeFrameworks));
+    // DuckDB: delete-then-insert to achieve upsert without ON CONFLICT syntax variance.
+    const del = await this._connection.prepare(
+      `DELETE FROM traveler_sessions WHERE session_id = ?`
+    );
+    try {
+      del.bindVarchar(1, sessionId);
+      await del.run();
+    } finally {
+      del.destroySync();
+    }
+    const ins = await this._connection.prepare(
+      `INSERT INTO traveler_sessions
+         (session_id, pos_x, pos_y, pos_z, pos_w, holonomy_json, active_frameworks_json, session_effort)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    try {
+      ins.bindVarchar(1, sessionId);
+      ins.bindDouble(2, state.position[0]);
+      ins.bindDouble(3, state.position[1]);
+      ins.bindDouble(4, state.position[2]);
+      ins.bindDouble(5, state.position[3]);
+      ins.bindVarchar(6, holonomyJson);
+      ins.bindVarchar(7, frameworksJson);
+      ins.bindDouble(8, state.sessionEffort);
+      await ins.run();
+    } finally {
+      ins.destroySync();
+    }
+  }
+
+  /**
+   * TRAVELER step 2 - Loads TravelerState for the given session ID.
+   * Returns null when no saved state exists.
+   */
+  public async loadTravelerState(
+    sessionId: string
+  ): Promise<TravelerState | null> {
+    const stmt = await this._connection.prepare(
+      `SELECT pos_x, pos_y, pos_z, pos_w, holonomy_json, active_frameworks_json, session_effort
+         FROM traveler_sessions WHERE session_id = ?`
+    );
+    let rows: any[][] | null = null;
+    try {
+      stmt.bindVarchar(1, sessionId);
+      const res = await stmt.runAndReadAll();
+      rows = res.getRows();
+    } finally {
+      stmt.destroySync();
+    }
+    if (!rows || rows.length === 0) return null;
+    const row = rows[0];
+    const holonomyArr: number[] = JSON.parse(String(row[4]));
+    const frameworksArr: number[] = JSON.parse(String(row[5]));
+    return {
+      position: [
+        Number(row[0]),
+        Number(row[1]),
+        Number(row[2]),
+        Number(row[3]),
+      ],
+      holonomyFrame: new Float64Array(holonomyArr) as any,
+      activeFrameworks: new Set(frameworksArr as any),
+      sessionEffort: Number(row[6]),
+    };
   }
 
   /**

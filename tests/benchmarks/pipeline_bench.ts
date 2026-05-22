@@ -7,7 +7,7 @@
  */
 
 import LogicAtomizer from "@atomics/LogicAtomizer";
-import Resolver from "@core_i/Resolver";
+import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
 import Store from "@core_s/Memory";
 
@@ -53,14 +53,14 @@ async function buildFixture(n: number): Promise<{
   system: System;
   atomizer: LogicAtomizer;
   store: Store;
-  resolver: Resolver;
+  resolver: Traveler;
 }> {
   const system = new System();
   const atomizer = new LogicAtomizer();
   await atomizer.init();
   const store = new Store(system, atomizer);
   await store.waitForInit();
-  const resolver = new Resolver(system, atomizer, store);
+  const resolver = new Traveler(system, atomizer, store);
 
   // Populate with n simple implication facts using a small cyclic vocabulary.
   // Using only "implies" operator (registered very early) avoids operator-band overflow.

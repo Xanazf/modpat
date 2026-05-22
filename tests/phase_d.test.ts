@@ -11,7 +11,7 @@ import { metrics } from "@core_s/Metrics";
 import type { PersistenceBar } from "@core_s/PersistentHomology";
 import { describe, it } from "./utils/harness";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// --- helpers -----------------------------------------------------------------
 
 function makeSystem(): System {
   return new System();
@@ -77,7 +77,7 @@ async function makePersistence() {
   return new SystemPersistence(conn);
 }
 
-// ─── D1: Singularity detection ────────────────────────────────────────────────
+// --- D1: Singularity detection ------------------------------------------------
 
 export async function runPhaseDTests() {
   await describe("D1 - Singularity detection and remediation", async () => {
@@ -200,7 +200,7 @@ export async function runPhaseDTests() {
     });
   });
 
-  // ─── D2: Parallel transport ─────────────────────────────────────────────────
+  // --- D2: Parallel transport -------------------------------------------------
 
   await describe("D2 - Parallel transport (holonomy)", async () => {
     await it("lastHolonomy initializes as the identity matrix", async () => {
@@ -347,7 +347,7 @@ export async function runPhaseDTests() {
     });
   });
 
-  // ─── D3: Path homotopy detection ─────────────────────────────────────────────
+  // --- D3: Path homotopy detection ---------------------------------------------
 
   await describe("D3 - Path homotopy detection → analogy", async () => {
     await it("empty h1Bars → always homotopic regardless of paths", async () => {
@@ -486,7 +486,7 @@ export async function runPhaseDTests() {
     });
   });
 
-  // ─── D4: Cobordism records ────────────────────────────────────────────────────
+  // --- D4: Cobordism records ----------------------------------------------------
 
   await describe("D4 - Cobordism between episodes", async () => {
     await it("getCobordismHistory is empty before any topology ticks", async () => {

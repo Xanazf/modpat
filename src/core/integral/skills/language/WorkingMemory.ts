@@ -10,7 +10,7 @@
  * manifold's own thermodynamic forgetting (old precepts decay in mass).
  */
 
-import type { BridgeCandidate } from "@core_i/Mapper";
+import type { BridgeCandidate } from "@core_i/Traveler";
 
 export interface MemoryFrame {
   query: string;

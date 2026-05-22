@@ -11,7 +11,7 @@ import {
 } from "@core_s/FrameworkIndex";
 import { describe, it } from "./utils/harness";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// --- helpers -----------------------------------------------------------------
 
 function makeRegion(entries: [number, number][]): ManifoldRegion {
   return new Map(entries);
@@ -19,7 +19,7 @@ function makeRegion(entries: [number, number][]): ManifoldRegion {
 
 export async function runFuzzyConnectivesTests() {
   await describe("E1 – Fuzzy connectives", async () => {
-    // ── t-norm axioms: AND ────────────────────────────────────────────────
+    // -- t-norm axioms: AND ------------------------------------------------
 
     await it("AND is commutative", async () => {
       const A = makeRegion([
@@ -77,7 +77,7 @@ export async function runFuzzyConnectivesTests() {
       assert.strictEqual(result.size, 0);
     });
 
-    // ── t-conorm axioms: OR ───────────────────────────────────────────────
+    // -- t-conorm axioms: OR -----------------------------------------------
 
     await it("OR is commutative", async () => {
       const A = makeRegion([
@@ -123,7 +123,7 @@ export async function runFuzzyConnectivesTests() {
       assert.ok(Math.abs((result.get(2) ?? 0) - 0.9) < 1e-9);
     });
 
-    // ── NOT ───────────────────────────────────────────────────────────────
+    // -- NOT ---------------------------------------------------------------
 
     await it("NOT: complement of full support returns zeros", async () => {
       const universe = makeRegion([
@@ -151,7 +151,7 @@ export async function runFuzzyConnectivesTests() {
       assert.ok(Math.abs((result.get(2) ?? 0) - 0.4) < 1e-9);
     });
 
-    // ── IMPLIES / subsethood ──────────────────────────────────────────────
+    // -- IMPLIES / subsethood ----------------------------------------------
 
     await it("subsethood returns 1 when A is nested in B", async () => {
       const A = makeRegion([
@@ -186,7 +186,7 @@ export async function runFuzzyConnectivesTests() {
       assert.ok(Math.abs(s) < 1e-9, `Expected 0 for empty A, got ${s}`);
     });
 
-    // ── Formula AST ───────────────────────────────────────────────────────
+    // -- Formula AST -------------------------------------------------------
 
     await it("evalFormula: region leaf returns the region itself", async () => {
       const r = makeRegion([

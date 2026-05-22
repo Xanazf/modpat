@@ -93,7 +93,7 @@ async function main() {
     }
   }
 
-  // ── E0: Three-tier framework index ────────────────────────────────────────
+  // -- E0: Three-tier framework index ----------------------------------------
   const fw = buildFrameworkIndex(system, graph);
   console.log("\n=== Framework Index (E0) ===\n");
   console.log(
@@ -122,7 +122,7 @@ async function main() {
     console.log(`\nCross-frame edges (topoInterest, cross-supercluster):`);
     for (const e of fw.crossFrameEdges) {
       console.log(
-        `  atom ${e.from} ── atom ${e.to}  persistence=${e.persistence.toFixed(3)}`
+        `  atom ${e.from} -- atom ${e.to}  persistence=${e.persistence.toFixed(3)}`
       );
     }
   }
