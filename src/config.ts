@@ -140,11 +140,12 @@ const DOPAT_CONFIG = {
     POLE_INGESTION_ENABLED: false,
     /**
      * TRAVELER step 4 - Primary switch for the new perceive pipeline.  When true,
-     * perceiveCoherent() delegates to observeSettlingGradient() instead of the
-     * Phase 0-7 transfer-matrix resonance engine.  Only flip after running the
-     * full test suite with this flag and confirming no regressions.
+     * perceive() routes through observeSettlingGradient() (Observe→Follow→Read)
+     * instead of the Phase 0-7 transfer-matrix resonance engine.  E1 logical lift
+     * handles compound formulas; the old pipeline remains accessible via
+     * perceiveCapturing() for diagnostics.
      */
-    SETTLING_GRADIENT_ENABLED: false,
+    SETTLING_GRADIENT_ENABLED: true,
     /**
      * TRAVELER step 3 - Shadow mode for observeSettlingGradient().  When true,
      * process() runs both the old perceive/traverse pipeline and the new
@@ -178,6 +179,16 @@ const DOPAT_CONFIG = {
      * distance) drops below this threshold.
      */
     SETTLE_CONVERGENCE_THRESHOLD: 1e-4,
+    /**
+     * TRAVELER session lifecycle - Exponential decay applied to the Traveler's
+     * accumulated position vector per cognitive tick when no traversal is in
+     * progress.  Implements the gravitational attraction back toward the pole
+     * described in the session lifecycle: each component decays by
+     * (1 - POLE_IDLE_ATTRACTION) per tick.  0 disables drift; 1 snaps to
+     * the pole instantly.  0.02 produces a half-life of ~34 ticks (~2.8 min
+     * at the default 5 s cognitive tick cadence).
+     */
+    POLE_IDLE_ATTRACTION: 0.02,
   },
 
   resolver: {

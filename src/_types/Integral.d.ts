@@ -171,6 +171,89 @@ declare namespace Root {
 }
 
 declare namespace Mapping {
+  /** Per-call inputs to perceive / perceiveCoherent / probe. */
+  interface PerceptionOptions {
+    /** Scopes from working memory; receive a warm-start energy bonus in Phase 2. */
+    contextScopes?: Set<number>;
+    /** Skip vault recall and NLP rules; used by learnCycle/challenge for physics-only verification. */
+    probeMode?: boolean;
+  }
+
+  /** Backward-compat alias for PerceptionOptions. */
+  type ResolveOptions = PerceptionOptions;
+
+  /** Result returned by perceiveCoherent. */
+  interface CoherentResult {
+    ids: Uint32Array;
+    /** [0, 1] – amplitude × contrast; ≥ COHERENCE_THRESHOLD is a found answer. */
+    coherence: number;
+    iterations: number;
+    learned: string[];
+    diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
+    diagnostics: Mapping.PerceptionDiagnostics | null;
+  }
+
+  /** A token at the intersection of the forward and backward resonance waves. */
+  interface BridgeCandidate {
+    idx: number;
+    id: number;
+    label: string;
+    forwardEnergy: number;
+    backwardEnergy: number;
+    bridgeScore: number;
+    isMissingLink: boolean;
+  }
+
+  /** A token found by resonance-peak analysis to exhibit operator-like wave topology. */
+  interface DiscoveredOperator {
+    id: number;
+    idx: number;
+    label: string;
+    inferredClass: number; // OperatorClass value
+    confidence: number;
+    outboundRatio: number;
+  }
+
+  /** Full diagnostic snapshot from one perceive call. */
+  interface PerceptionDiagnostics {
+    N: number;
+    tokenLabels: string[];
+    operatorClasses: number[];
+    W: Float64Array;
+    accumulated: Float64Array;
+    sinkCandidates: Array<{
+      idx: number;
+      id: number;
+      label: string;
+      strength: number;
+      posX: number;
+      posY: number;
+      posZ: number;
+      posW: number;
+      opClass: number;
+    }>;
+    selectedTargetIdx: number;
+    maxNetEnergy: number;
+    discoveredOperators: Mapping.DiscoveredOperator[];
+    bridgeCandidates: Mapping.BridgeCandidate[];
+  }
+
+  /** Race-free snapshot returned by perceiveCapturing. */
+  interface PerceptionCapture {
+    ids: Uint32Array;
+    diagnostics: Mapping.PerceptionDiagnostics | null;
+    sinkStrength: number;
+    discoveredOperators: Mapping.DiscoveredOperator[];
+    bridgeCandidates: Mapping.BridgeCandidate[];
+  }
+
+  /** D3 – result of a path homotopy check between two traversals. */
+  interface HomotopyResult {
+    homotopic: boolean;
+    straddledH1Bars: Topology.PersistenceBar[];
+    analogyScore: number;
+  }
+
   /**
    * Configuration options for the geodesic routing process.
    */

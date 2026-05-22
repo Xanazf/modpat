@@ -23,11 +23,6 @@
  */
 
 import { RingBuffer } from "ring-buffer-ts";
-import type {
-  BridgeCandidate,
-  DiscoveredOperator,
-  PerceptionDiagnostics,
-} from "@core_i/Traveler";
 
 /** A pre-allocated workspace for one in-flight Traveler.perceive call. */
 export class TravelerWorkspace {
@@ -45,10 +40,10 @@ export class TravelerWorkspace {
   readonly resultIdsBuffer: Uint32Array;
 
   // Per-call outputs.
-  diagnostics: PerceptionDiagnostics | null = null;
+  diagnostics: Mapping.PerceptionDiagnostics | null = null;
   sinkStrength = 0;
-  discoveredOperators: DiscoveredOperator[] = [];
-  bridgeCandidates: BridgeCandidate[] = [];
+  discoveredOperators: Mapping.DiscoveredOperator[] = [];
+  bridgeCandidates: Mapping.BridgeCandidate[] = [];
 
   // Per-call inputs.
   contextScopes: Set<number> = new Set();

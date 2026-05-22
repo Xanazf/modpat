@@ -54,6 +54,20 @@ declare namespace PMath {
   }
 }
 
+declare namespace Topology {
+  /** One bar in a persistence diagram: birth, death, and the atom whose birth edge generated it. */
+  interface PersistenceBar {
+    birth: number;
+    death: number;
+    generatorAtomId: number;
+  }
+
+  interface PersistenceDiagram {
+    h0: PersistenceBar[];
+    h1: PersistenceBar[];
+  }
+}
+
 declare namespace Memory {
   type InquiryStatus =
     | "pending"

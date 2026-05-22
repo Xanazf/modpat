@@ -14,7 +14,7 @@ import {
   spawnIntent as spawnIntentPrecept,
 } from "@utils/intentPrecept";
 import { GridIndex4D } from "@mutate/GridIndex4D";
-import type { PersistenceBar } from "@core_s/PersistentHomology";
+import { resolveE1Formula } from "./formula/E1Formula";
 import {
   resolveActiveAtoms,
   type FrameworkId,
@@ -42,131 +42,16 @@ import {
 import logger from "@utils/SpectralLogger";
 import { extractTopic } from "@utils/topicExtraction";
 
-/**
- * Per-call inputs to perceive / perceiveCoherent / probe.
- *
- * Threading these through the call instead of via instance fields is what
- * makes the engine safe when CognitiveLoop, Learner, dream cycle and user
- * input call the same Mapper concurrently. Callers that don't set them get
- * the existing instance-level defaults.
- */
-export interface PerceptionOptions {
-  /**
-   * Scopes from the caller's working memory. Tokens in the sequence whose
-   * scope appears here receive a warm-start energy bonus in the forward
-   * propagation pass (Phase 2).
-   */
-  contextScopes?: Set<number>;
-  /**
-   * When true, perceive skips Phase 0 (vault recall) and Phase 1
-   * (NLP-derived rules). Used by learnCycle/challenge to verify that the
-   * physics alone can reproduce the answer.
-   */
-  probeMode?: boolean;
-}
-
-/** Backward-compat alias. */
-export type ResolveOptions = PerceptionOptions;
-
-/**
- * Result returned by perceiveCoherent: the best answer found, a coherence score,
- * how many iterations it took, what actions the loop took, and why it stopped.
- */
-export interface CoherentResult {
-  /** The best answer IDs found (empty if the wave never converged). */
-  ids: Uint32Array;
-  /**
-   * Coherence score in [0, 1]: amplitude (normalised sink strength) multiplied by
-   * contrast (how far ahead the winner is of the second-best candidate).
-   * Values >= COHERENCE_THRESHOLD are considered a found answer.
-   */
-  coherence: number;
-  /** Number of perceive passes executed. */
-  iterations: number;
-  /**
-   * Human-readable log of actions taken during the convergence loop:
-   * void expansions, conflict notes, reinforcement boosts.
-   */
-  learned: string[];
-  /**
-   * Why the loop stopped.
-   */
-  diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
-  /**
-   * Diagnostics from the iteration whose answer was chosen as the best.
-   */
-  diagnostics: PerceptionDiagnostics | null;
-}
-
-/**
- * A token that sits at the intersection of the forward and backward resonance waves.
- */
-export interface BridgeCandidate {
-  idx: number;
-  id: number;
-  label: string;
-  forwardEnergy: number;
-  backwardEnergy: number;
-  bridgeScore: number;
-  isMissingLink: boolean;
-}
-
-/** A token found by resonance-peak analysis to exhibit operator-like wave topology. */
-export interface DiscoveredOperator {
-  id: number;
-  idx: number;
-  label: string;
-  inferredClass: OperatorClass;
-  confidence: number;
-  outboundRatio: number;
-}
-
-export interface PerceptionDiagnostics {
-  N: number;
-  tokenLabels: string[];
-  operatorClasses: number[];
-  W: Float64Array;
-  accumulated: Float64Array;
-  sinkCandidates: Array<{
-    idx: number;
-    id: number;
-    label: string;
-    strength: number;
-    posX: number;
-    posY: number;
-    posZ: number;
-    posW: number;
-    opClass: number;
-  }>;
-  selectedTargetIdx: number;
-  maxNetEnergy: number;
-  discoveredOperators: DiscoveredOperator[];
-  bridgeCandidates: BridgeCandidate[];
-}
-
-/**
- * Capture returned by perceiveCapturing: race-free snapshot under the
- * workspace lock.
- */
-export interface PerceptionCapture {
-  ids: Uint32Array;
-  diagnostics: PerceptionDiagnostics | null;
-  sinkStrength: number;
-  discoveredOperators: DiscoveredOperator[];
-  bridgeCandidates: BridgeCandidate[];
-}
-
-/**
- * D3 – Result of a path homotopy check between two traversals.
- */
-export interface HomotopyResult {
-  /** True if the loop path₁ + reversed(path₂) encloses no persistent H₁ generator. */
-  homotopic: boolean;
-  /** H₁ bars whose generator atoms are enclosed by the loop. */
-  straddledH1Bars: PersistenceBar[];
-  /** [0, 1] - 0 = homotopic, 1 = all qualified generators straddled. */
-  analogyScore: number;
-}
+// Canonical definitions live in src/_types/Integral.d.ts (Mapping namespace).
+// These re-exports preserve existing import paths for downstream code.
+export type PerceptionOptions  = Mapping.PerceptionOptions;
+export type ResolveOptions     = Mapping.PerceptionOptions;
+export type CoherentResult     = Mapping.CoherentResult;
+export type BridgeCandidate    = Mapping.BridgeCandidate;
+export type DiscoveredOperator = Mapping.DiscoveredOperator;
+export type PerceptionDiagnostics = Mapping.PerceptionDiagnostics;
+export type PerceptionCapture  = Mapping.PerceptionCapture;
+export type HomotopyResult     = Mapping.HomotopyResult;
 
 /**
  * Integer winding number of the 2D polygon `loop` around the point (gx, gy).
@@ -265,8 +150,6 @@ class Traveler implements Mapping.Engine {
   public lastDiagnostics: PerceptionDiagnostics | null = null;
   /** Operators discovered via resonance during the most recent perceive call. */
   public lastDiscoveredOperators: DiscoveredOperator[] = [];
-  /** TRAVELER step 3: answer IDs from the most recent perceiveCoherent() call, for shadow comparison. */
-  private _lastCoherentIds: Uint32Array | null = null;
   /** P2: times φ was clamped to PHI_MAX; non-zero means a pathologically dense region was hit. */
   public phiClippedCount = 0;
 
@@ -786,6 +669,27 @@ class Traveler implements Mapping.Engine {
   }
 
   /**
+   * Session lifecycle - Applies one step of gravitational drift toward the pole.
+   * Called from _cogTick() when no active traversal is in progress.
+   * Each position component decays by the POLE_IDLE_ATTRACTION factor so the
+   * Traveler drifts back to (0,0,0,0) over time, making it receptive to fresh
+   * input again after a period of inactivity.
+   */
+  private _idleDriftToPole(): void {
+    const decay = 1 - DOPAT_CONFIG.PHYSICS.POLE_IDLE_ATTRACTION;
+    this.position[0] *= decay;
+    this.position[1] *= decay;
+    this.position[2] *= decay;
+    this.position[3] *= decay;
+  }
+
+  /** Delegate to the pure E1Formula module (formula/E1Formula.ts). */
+  private _resolveE1Formula(ids: Uint32Array): Uint32Array | null {
+    return resolveE1Formula(ids, this.system);
+  }
+
+
+  /**
    * Resets positional state to the pole without clearing learned state.
    * deltaGamma and vault are preserved; activeFrameworks is cleared because
    * a pole reset represents a full context reset - no prior traversal history
@@ -843,14 +747,14 @@ class Traveler implements Mapping.Engine {
    *   traverse(source, sink) - the geodesic path IS the inference.
    *   Holonomy of the traversal carries the confidence signal.
    *
-   * Activated by SETTLING_GRADIENT_ENABLED=true; also used directly for
-   * shadow comparison (SETTLING_GRADIENT_SHADOW=true, step 3).
+   * This is the production perceive pipeline as of TRAVELER step 4.
    */
   public async observeSettlingGradient(
     ids: Uint32Array,
     opts: PerceptionOptions = {}
   ): Promise<Uint32Array> {
     if (ids.length === 0) return new Uint32Array(0);
+    this.lastSinkStrength = 0; // reset so stale values never leak across calls
     const N = ids.length;
 
     // -- Phase 0b: vault recall ---------------------------------------------
@@ -861,6 +765,7 @@ class Traveler implements Mapping.Engine {
           this.boostAtomMasses(ids);
           this.boostAtomMasses(derivation);
         }
+        this.lastSinkStrength = 1.0; // vault hits are high-confidence
         return derivation;
       }
     }
@@ -892,7 +797,24 @@ class Traveler implements Mapping.Engine {
           this.boostAtomMasses(ids);
           this.boostAtomMasses(topoResult);
         }
+        this.lastSinkStrength = 1.0; // topology hit is high-confidence
         return topoResult;
+      }
+    }
+
+    // -- Phase E1: fuzzy connective formula resolution ----------------------
+    // Handles &&-compound formulas (modus ponens, transitivity, universal
+    // instantiation). Skip in probeMode so challenge() tests physics alone.
+    if (!opts.probeMode) {
+      const e1Result = this._resolveE1Formula(ids);
+      if (e1Result !== null && e1Result.length > 0) {
+        if (this.store) {
+          await this.store.crystallizeProof(ids, e1Result, 1.0);
+          this.boostAtomMasses(ids);
+          this.boostAtomMasses(e1Result);
+        }
+        this.lastSinkStrength = 1.0; // logical deduction: full confidence
+        return e1Result;
       }
     }
 
@@ -909,12 +831,29 @@ class Traveler implements Mapping.Engine {
       if (decoded && decoded !== "unknown") return synthResult;
     }
 
-    // E0 active frameworks resolution
+    // E0 active frameworks resolution; E1 framework boost
     let activeAtoms: Set<number> | undefined = undefined;
+    let effectiveBoost: Set<number> | undefined = opts.contextScopes;
     if (this.lifecycle) {
       const index = this.lifecycle.getFrameworkIndex();
       if (index && this.activeFrameworks.size > 0) {
         activeAtoms = resolveActiveAtoms(index, this.activeFrameworks);
+        const boost = new Set<number>(opts.contextScopes ?? []);
+        for (const sc of index.superclusters) {
+          if (this.activeFrameworks.has(sc.id)) {
+            for (const seedId of sc.seedAtomIds) {
+              if (this.system.isAllocated(seedId)) boost.add(this.system.scope[seedId]);
+            }
+          }
+        }
+        for (const cl of index.clusters) {
+          if (this.activeFrameworks.has(cl.id)) {
+            for (const seedId of cl.seedAtomIds) {
+              if (this.system.isAllocated(seedId)) boost.add(this.system.scope[seedId]);
+            }
+          }
+        }
+        if (boost.size > 0) effectiveBoost = boost;
       }
     }
 
@@ -926,14 +865,14 @@ class Traveler implements Mapping.Engine {
 
     // Individual atom settling under POLE_INGESTION_ENABLED
     if (DOPAT_CONFIG.PHYSICS.POLE_INGESTION_ENABLED && driftTargets.size > 0) {
-      this._settleAtoms(ids, driftTargets, opts.contextScopes, activeAtoms);
+      this._settleAtoms(ids, driftTargets, effectiveBoost, activeAtoms);
       this.buildGridIndex(); // Rebuild grid index with the newly settled atom positions
     }
 
     const settled = this._settleProbe(
       ids,
       driftTargets,
-      opts.contextScopes,
+      effectiveBoost,
       activeAtoms
     );
     if (!settled) return this.atomizer.ingestSequence("unknown", this.system);
@@ -994,7 +933,7 @@ class Traveler implements Mapping.Engine {
 
     // -- Read: traverse source → sink; path IS the inference -----------------
     return this.traverse(sourceId, sinkId, {
-      boostScopes: opts.contextScopes,
+      boostScopes: effectiveBoost,
       activeAtoms,
     });
   }
@@ -1176,57 +1115,6 @@ class Traveler implements Mapping.Engine {
     return bestId;
   }
 
-  /**
-   * Compares two atom ID sets (Jaccard) and their 4D centroid vectors (cosine),
-   * logs the result, and emits metrics.  Used by the step-3 shadow comparison.
-   */
-  private _shadowCompare(
-    oldIds: Uint32Array,
-    newIds: Uint32Array,
-    label: string
-  ): { jaccard: number; cosine: number } {
-    const setA = new Set(Array.from(oldIds));
-    const setB = new Set(Array.from(newIds));
-    let intersect = 0;
-    for (const id of setA) if (setB.has(id)) intersect++;
-    const union = setA.size + setB.size - intersect;
-    const jaccard = union === 0 ? 1 : intersect / union;
-
-    const mA = this._meanPos(oldIds);
-    const mB = this._meanPos(newIds);
-    const dot = mA[0] * mB[0] + mA[1] * mB[1] + mA[2] * mB[2] + mA[3] * mB[3];
-    const magA = Math.sqrt(mA.reduce((s, v) => s + v * v, 0)) + 1e-12;
-    const magB = Math.sqrt(mB.reduce((s, v) => s + v * v, 0)) + 1e-12;
-    const cosine = dot / (magA * magB);
-
-    logger.log(
-      `[TRAVELER shadow] "${label}" old=${oldIds.length} new=${newIds.length} ` +
-        `jaccard=${jaccard.toFixed(3)} cosine=${cosine.toFixed(3)}`
-    );
-    metrics.gauge("traveler.shadow_jaccard", jaccard);
-    metrics.gauge("traveler.shadow_cosine", cosine);
-
-    return { jaccard, cosine };
-  }
-
-  /** Returns the mean 4D position vector of allocated atoms in `ids`. */
-  private _meanPos(ids: Uint32Array): [number, number, number, number] {
-    let x = 0,
-      y = 0,
-      z = 0,
-      w = 0,
-      n = 0;
-    for (const id of ids) {
-      if (!this.system.isAllocated(id)) continue;
-      x += this.system.posX[id];
-      y += this.system.posY[id];
-      z += this.system.posZ[id];
-      w += this.system.posW[id];
-      n++;
-    }
-    if (n === 0) return [0, 0, 0, 0];
-    return [x / n, y / n, z / n, w / n];
-  }
 
   /** Persists TravelerState to DuckDB. No-op when no store is attached. */
   public async persistState(sessionId: string): Promise<void> {
@@ -1988,7 +1876,7 @@ class Traveler implements Mapping.Engine {
   public detectHomotopy(
     pathA: Uint32Array,
     pathB: Uint32Array,
-    h1Bars: PersistenceBar[],
+    h1Bars: Topology.PersistenceBar[],
     minPersistence = 0
   ): HomotopyResult {
     if (h1Bars.length === 0) {
@@ -2013,7 +1901,7 @@ class Traveler implements Mapping.Engine {
     }
 
     const qualified = h1Bars.filter(b => b.death - b.birth > minPersistence);
-    const straddled: PersistenceBar[] = [];
+    const straddled: Topology.PersistenceBar[] = [];
 
     for (const bar of qualified) {
       const id = bar.generatorAtomId;
@@ -2214,16 +2102,24 @@ class Traveler implements Mapping.Engine {
 
   /**
    * Perception entry point.
-   * When SETTLING_GRADIENT_ENABLED=true, routes through observeSettlingGradient
-   * (Observe → Follow → Read).  Otherwise falls back to the Phase 0..7
-   * transfer-matrix resonance pipeline via _perceiveCapturing.
-   * The flag must only be flipped to true after the full test suite passes
-   * without regressions (TRAVELER step 4).
+   *
+   * Default: routes through the Phase 0-7 transfer-matrix resonance pipeline
+   * (_perceiveCapturing).  Set SETTLING_GRADIENT_ENABLED=true to switch to the
+   * gradient-following Observe→Follow→Read pipeline (TRAVELER step 4).
+   *
+   * perceiveCoherent() already routes unconditionally through
+   * observeSettlingGradient — flip SETTLING_GRADIENT_ENABLED only after the
+   * full test suite passes with the gradient pipeline (step 4 gate).
    */
   public async perceive(
     sequenceIds: Uint32Array,
     opts: PerceptionOptions = {}
   ): Promise<Uint32Array> {
+    if (sequenceIds.length > Traveler.MAX_SEQUENCE_LENGTH) {
+      throw new Error(
+        `Sequence length ${sequenceIds.length} exceeds max DOD buffer capacity ${Traveler.MAX_SEQUENCE_LENGTH}`
+      );
+    }
     if (DOPAT_CONFIG.PHYSICS.SETTLING_GRADIENT_ENABLED) {
       return this.observeSettlingGradient(sequenceIds, opts);
     }
@@ -2877,7 +2773,6 @@ class Traveler implements Mapping.Engine {
       probeMode: opts.probeMode,
     });
     const coherence = Math.max(0, 1 - this.lastInferentialEffort);
-    this._lastCoherentIds = ids;
     return {
       ids,
       coherence,
@@ -3860,6 +3755,9 @@ class Traveler implements Mapping.Engine {
     if (!this.atomizer || !this.store) return;
     this._cogTickCount++;
 
+    // Session lifecycle: drift position back toward the pole on every idle tick.
+    this._idleDriftToPole();
+
     // 1. SENSE - prune freed/decayed IDs
     for (const id of this._intentIds) {
       if (!this.system.isAllocated(id) || this.system.mass[id] <= 0) {
@@ -4120,28 +4018,6 @@ class Traveler implements Mapping.Engine {
         // Reinforce the connection between the query and the skill
         // This makes the skill "heavier" in the manifold for this query type.
         this.reinforcePath(new Uint32Array([0, ...ids, skillId, 0]));
-      }
-
-      // TRAVELER step 3: shadow comparison - run new gradient-following pipeline
-      // alongside old pipeline and log Jaccard/cosine metrics for validation.
-      if (
-        DOPAT_CONFIG.PHYSICS.SETTLING_GRADIENT_SHADOW &&
-        this._lastCoherentIds
-      ) {
-        const shadowOpts: PerceptionOptions = {
-          contextScopes: this.language?.contextScopes(),
-        };
-        this.observeSettlingGradient(ids, shadowOpts)
-          .then(shadowIds => {
-            if (this._lastCoherentIds) {
-              this._shadowCompare(
-                this._lastCoherentIds,
-                shadowIds,
-                text.slice(0, 40)
-              );
-            }
-          })
-          .catch(() => {});
       }
 
       // 8. Record conclusion in Working Memory
