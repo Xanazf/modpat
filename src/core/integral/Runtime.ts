@@ -466,6 +466,19 @@ export class Runtime {
       });
     }
 
+    // F4: load saved session φ before seeding so any pre-seeded atoms get the
+    // saved density boost at createLocation() time.
+    if (opts.db && opts.db !== ":memory:") {
+      store
+        .loadSessionPhi()
+        .then(phiMap => {
+          if (!rt._disposed && phiMap.size > 0) system.setPhiSeedMap(phiMap);
+        })
+        .catch(e => {
+          if (!rt._disposed) logger.warn("[SESSION PHI LOAD]", e);
+        });
+    }
+
     const restoreInquiries = store
       .loadInquiryQueue()
       .then(items => {
@@ -682,6 +695,13 @@ export class Runtime {
     this.astSeeder?.pause();
     await this._bootBackground.catch(() => {});
     await this.mapper.dispose();
+    // F4: persist the φ field so it carries into the next session.
+    // Only when using a real file-backed store (not :memory:).
+    try {
+      await this.store.saveSessionPhi(this.system);
+    } catch {
+      // Non-fatal; the next session simply starts without saved φ.
+    }
     await this.store.close();
     if (this._lifecycleCtx) await this._lifecycleCtx.close();
     if (this.workers) await this.workers.dispose();

@@ -123,6 +123,13 @@ const DOPAT_CONFIG = {
      * along the XY plane and the W (temporal) axis.
      */
     SINGULARITY_SPLIT_RADIUS: 5.0,
+    /**
+     * F4 - Blend factor for applying saved session φ to newly created atoms.
+     * At createLocation() time: mass[id] = max(fresh_mass, PHI_SESSION_BLEND × saved_mass).
+     * 1.0 = fully restore saved density; 0.5 = blend halfway; 0 = no restoration.
+     * Kept < 1.0 by default so fresh ingestion can override stale session state.
+     */
+    PHI_SESSION_BLEND: 0.8,
   },
 
   resolver: {

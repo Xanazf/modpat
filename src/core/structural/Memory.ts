@@ -123,6 +123,11 @@ export default class Store implements Memory.Vault {
         added_at BIGINT,
         attempts INTEGER DEFAULT 0
       );
+
+      CREATE TABLE IF NOT EXISTS session_phi (
+        scope DOUBLE PRIMARY KEY,
+        phi   DOUBLE NOT NULL
+      );
     `);
 
     // Idempotent migrations for columns added in later schema versions.
@@ -991,6 +996,66 @@ export default class Store implements Memory.Vault {
     }
 
     return parts.join(" ");
+  }
+
+  /**
+   * F4 - Snapshots the φ (density) field for all allocated atoms.
+   * Keyed by scope (stable semantic identity across runs) so the saved state
+   * survives a full process restart even when atom IDs differ.
+   * Averaged per scope when multiple atoms share the same concept identity.
+   */
+  public async saveSessionPhi(system: Root.ManifoldView): Promise<void> {
+    const blend = DOPAT_CONFIG.PHYSICS.PHI_SESSION_BLEND;
+    const perScope = new Map<number, { sum: number; count: number }>();
+
+    for (let i = 0; i < system.length; i++) {
+      if (!system.isAllocated(i)) continue;
+      const s = system.scope[i];
+      const d = system.density[i];
+      if (d <= 0) continue;
+      const entry = perScope.get(s);
+      if (entry) {
+        entry.sum += d;
+        entry.count++;
+      } else {
+        perScope.set(s, { sum: d, count: 1 });
+      }
+    }
+
+    if (perScope.size === 0) return;
+
+    await this._connection.run("BEGIN");
+    try {
+      await this._connection.run("DELETE FROM session_phi");
+      const appender = await this._connection.createAppender("session_phi");
+      for (const [scope, { sum, count }] of perScope) {
+        appender.appendDouble(scope);
+        appender.appendDouble((sum / count) * blend);
+        appender.endRow();
+      }
+      appender.flushSync();
+      appender.closeSync();
+      await this._connection.run("COMMIT");
+    } catch (err) {
+      await this._connection.run("ROLLBACK");
+      throw err;
+    }
+  }
+
+  /**
+   * F4 - Loads the saved session φ field as a scope → phi map.
+   * Returns an empty map when no session has been persisted yet.
+   */
+  public async loadSessionPhi(): Promise<Map<number, number>> {
+    const res = await this._connection.run(
+      "SELECT scope, phi FROM session_phi"
+    );
+    const rows = await res.getRows();
+    const map = new Map<number, number>();
+    for (const row of rows ?? []) {
+      map.set(Number(row[0]), Number(row[1]));
+    }
+    return map;
   }
 
   /**

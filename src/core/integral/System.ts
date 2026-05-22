@@ -463,6 +463,9 @@ class System implements Root.ManifoldView {
   /** Free-list allocator, defaults to a plain array, swappable to a TMRFreeList via setAllocator(). */
   private freeList: Root.FreeList = [];
 
+  /** F4 - scope → phi seed loaded from the persistent store at boot time. */
+  private _phiSeedMap: Map<number, number> | null = null;
+
   /** Scope → set of currently allocated IDs: enables O(1) lookup by scope value. */
   private readonly scopeIndex = new Map<number, Set<number>>();
 
@@ -564,6 +567,15 @@ class System implements Root.ManifoldView {
 
   public getScope(id: number): number {
     return this.scope[id];
+  }
+
+  /**
+   * F4 - Registers the session φ seed map loaded from the persistent store.
+   * Must be called before atoms are ingested so createLocation() can apply
+   * the saved density boost to every matching scope on first creation.
+   */
+  public setPhiSeedMap(map: Map<number, number>): void {
+    this._phiSeedMap = map.size > 0 ? map : null;
   }
 
   /**
@@ -695,6 +707,19 @@ class System implements Root.ManifoldView {
 
     // Trigger update to calculate derived properties.
     this.update(id, from || "createLocation");
+
+    // F4: if a session phi seed exists for this scope, boost mass (and thus
+    // density) to at least the saved value so topology from prior sessions carries
+    // forward. Only applied once at creation; subsequent ticks evolve freely.
+    if (this._phiSeedMap) {
+      const saved = this._phiSeedMap.get(initialScope);
+      if (saved !== undefined && saved > this.density[id]) {
+        this.mass[id] = saved * DOPAT_CONFIG.PHYSICS.PRECEPT_SCALE;
+        this.density[id] = saved;
+        this.checksum[id] = this.calculateChecksum(id);
+      }
+    }
+
     return id;
   }
 
