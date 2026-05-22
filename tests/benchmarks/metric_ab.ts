@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { DOPAT_CONFIG } from "@config";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import type Traveler from "@core_i/Traveler";
+import { getMetricForceWithInnerDerivative } from "@core_i/Traveler";
 import System from "@core_i/System";
 import Store from "@core_s/Memory";
 import { createTestMapper } from "@core_i/Runtime";
@@ -123,10 +124,13 @@ interface QueryResult {
   expected: string;
   answerOn: string;
   answerOff: string;
+  answerFullGrad: string;
   match: boolean;
   expectedMet: boolean;
+  expectedMetFullGrad: boolean;
   timeOnMs: number;
   timeOffMs: number;
+  timeFullGradMs: number;
 }
 
 interface Baseline {
@@ -136,8 +140,10 @@ interface Baseline {
     total: number;
     matchRate: number;
     expectedMetOn: number;
+    expectedMetFullGrad: number;
     avgTimeOnMs: number;
     avgTimeOffMs: number;
+    avgTimeFullGradMs: number;
   };
 }
 
@@ -175,6 +181,56 @@ async function run() {
 
   traveler.setGPUEnabled(false);
 
+  // --- Sanity check of simplified vs. full gradient force ---
+  if (CORPUS.length > 0) {
+    system.reset();
+    const testItem = CORPUS[0];
+    const ids = atomizer.ingestSequence(testItem.source, system);
+    if (ids.length > 0) {
+      (traveler as any).buildGridIndex();
+      const firstId = ids[0];
+      const px = system.posX[firstId];
+      const py = system.posY[firstId];
+      const pz = system.posZ[firstId];
+      const pw = system.posW[firstId];
+
+      // Simplified force (A_B_FULL_GRADIENT = false)
+      (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
+      const simplified = (traveler as any).getMetricForce(
+        px,
+        py,
+        pz,
+        pw,
+        [],
+        undefined
+      );
+
+      // Inner derivative force (A_B_FULL_GRADIENT = true, computed via public function)
+      const fullGradForce = getMetricForceWithInnerDerivative(
+        traveler,
+        px,
+        py,
+        pz,
+        pw,
+        [],
+        undefined
+      );
+
+      console.log(`\n--- Conformal Metric Force Sanity Check ---`);
+      console.log(
+        `Atom ID: ${firstId} at position: [${px.toFixed(4)}, ${py.toFixed(4)}, ${pz.toFixed(4)}, ${pw.toFixed(4)}]`
+      );
+      console.log(
+        `Simplified Force: [V=${simplified[0].toFixed(4)}, fx=${simplified[1].toFixed(4)}, fy=${simplified[2].toFixed(4)}, fz=${simplified[3].toFixed(4)}, fw=${simplified[4].toFixed(4)}]`
+      );
+      console.log(
+        `Full Gradient Force: [V=${fullGradForce[0].toFixed(4)}, fx=${fullGradForce[1].toFixed(4)}, fy=${fullGradForce[2].toFixed(4)}, fz=${fullGradForce[3].toFixed(4)}, fw=${fullGradForce[4].toFixed(4)}]`
+      );
+      console.log(`-------------------------------------------\n`);
+    }
+    system.reset();
+  }
+
   const results: QueryResult[] = [];
 
   for (const item of CORPUS) {
@@ -182,20 +238,32 @@ async function run() {
 
     // --- conformal ON ---
     (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = true;
+    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
     const on = await runQuery(item.source, traveler, atomizer, system);
 
     system.reset();
 
     // --- conformal OFF ---
     (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = false;
+    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
     const off = await runQuery(item.source, traveler, atomizer, system);
 
-    // restore
+    system.reset();
+
+    // --- conformal FULL GRADIENT ---
     (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = true;
+    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = true;
+    const fullGrad = await runQuery(item.source, traveler, atomizer, system);
+
+    // restore defaults
+    (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = true;
+    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
 
     const match = on.answer === off.answer;
     const expectedMet =
       item.expected === "" || on.answer.includes(item.expected);
+    const expectedMetFullGrad =
+      item.expected === "" || fullGrad.answer.includes(item.expected);
 
     results.push({
       id: item.id,
@@ -203,17 +271,21 @@ async function run() {
       expected: item.expected,
       answerOn: on.answer,
       answerOff: off.answer,
+      answerFullGrad: fullGrad.answer,
       match,
       expectedMet,
+      expectedMetFullGrad,
       timeOnMs: parseFloat(on.ms.toFixed(2)),
       timeOffMs: parseFloat(off.ms.toFixed(2)),
+      timeFullGradMs: parseFloat(fullGrad.ms.toFixed(2)),
     });
 
     console.log(
       `[${match ? "=" : "≠"}] ${item.id.padEnd(14)} ` +
-        `ON=${on.answer.slice(0, 30).padEnd(32)} ` +
-        `OFF=${off.answer.slice(0, 30).padEnd(32)} ` +
-        `${on.ms.toFixed(0)}ms / ${off.ms.toFixed(0)}ms`
+        `ON=${on.answer.slice(0, 20).padEnd(22)} ` +
+        `OFF=${off.answer.slice(0, 20).padEnd(22)} ` +
+        `FG=${fullGrad.answer.slice(0, 20).padEnd(22)} ` +
+        `${on.ms.toFixed(0)}ms / ${off.ms.toFixed(0)}ms / ${fullGrad.ms.toFixed(0)}ms`
     );
   }
 
@@ -222,15 +294,23 @@ async function run() {
   const total = results.length;
   const matchCount = results.filter(r => r.match).length;
   const expectedMetCount = results.filter(r => r.expectedMet).length;
+  const expectedMetFullGradCount = results.filter(
+    r => r.expectedMetFullGrad
+  ).length;
   const avgOn = results.reduce((s, r) => s + r.timeOnMs, 0) / total;
   const avgOff = results.reduce((s, r) => s + r.timeOffMs, 0) / total;
+  const avgFullGrad = results.reduce((s, r) => s + r.timeFullGradMs, 0) / total;
 
   const summary = {
     total,
     matchRate: parseFloat((matchCount / total).toFixed(3)),
     expectedMetOn: parseFloat((expectedMetCount / total).toFixed(3)),
+    expectedMetFullGrad: parseFloat(
+      (expectedMetFullGradCount / total).toFixed(3)
+    ),
     avgTimeOnMs: parseFloat(avgOn.toFixed(2)),
     avgTimeOffMs: parseFloat(avgOff.toFixed(2)),
+    avgTimeFullGradMs: parseFloat(avgFullGrad.toFixed(2)),
   };
 
   console.log("\n--- Summary ---");
@@ -240,8 +320,12 @@ async function run() {
   console.log(
     `  Expected met (ON):    ${expectedMetCount}/${total} (${(summary.expectedMetOn * 100).toFixed(1)}%)`
   );
-  console.log(`  Avg time ON:  ${avgOn.toFixed(1)} ms`);
-  console.log(`  Avg time OFF: ${avgOff.toFixed(1)} ms`);
+  console.log(
+    `  Expected met (FULL GRAD): ${expectedMetFullGradCount}/${total} (${(summary.expectedMetFullGrad * 100).toFixed(1)}%)`
+  );
+  console.log(`  Avg time ON:        ${avgOn.toFixed(1)} ms`);
+  console.log(`  Avg time OFF:       ${avgOff.toFixed(1)} ms`);
+  console.log(`  Avg time FULL GRAD: ${avgFullGrad.toFixed(1)} ms`);
 
   const baseline: Baseline = {
     date: new Date().toISOString(),
@@ -260,6 +344,16 @@ async function run() {
       if (!old) continue;
       if (old.expectedMet && !r.expectedMet) {
         console.error(`REGRESSION: ${r.id} - was correct, now fails`);
+        regressions++;
+      }
+      if (
+        old.expectedMetFullGrad !== undefined &&
+        old.expectedMetFullGrad &&
+        !r.expectedMetFullGrad
+      ) {
+        console.error(
+          `REGRESSION (FULL GRAD): ${r.id} - was correct, now fails`
+        );
         regressions++;
       }
     }

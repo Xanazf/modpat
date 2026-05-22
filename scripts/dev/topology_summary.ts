@@ -8,6 +8,7 @@
 import { program } from "commander";
 import Runtime from "@core_i/Runtime";
 import { buildNerveGraph } from "@core_s/TopologyMapper";
+import { buildFrameworkIndex } from "@core_s/FrameworkIndex";
 
 program
   .option("--lens <type>", "lens function: posX | mass | density", "posX")
@@ -89,6 +90,40 @@ async function main() {
     }
     if (graph.diagram.h1.length > 20) {
       console.log(`  ... (${graph.diagram.h1.length - 20} more bars)`);
+    }
+  }
+
+  // ── E0: Three-tier framework index ────────────────────────────────────────
+  const fw = buildFrameworkIndex(system, graph);
+  console.log("\n=== Framework Index (E0) ===\n");
+  console.log(
+    `Superclusters: ${fw.superclusters.length}  Clusters: ${fw.clusters.length}  Subclusters: ${fw.subclusters.length}  Interstitial: ${fw.interstitial.size}\n`
+  );
+
+  for (const sc of fw.superclusters) {
+    console.log(
+      `  Supercluster [${sc.id}]  atoms=${sc.memberAtomIds.size}  seeds=[${sc.seedAtomIds.join(",")}]`
+    );
+    for (const cid of sc.childClusterIds) {
+      const cl = fw.clusters.find(c => c.id === cid)!;
+      console.log(
+        `    Cluster [${cl.id}]  atoms=${cl.memberAtomIds.size}  seeds=[${cl.seedAtomIds.join(",")}]`
+      );
+      for (const sid of cl.childSubclusterIds) {
+        const sub = fw.subclusters.find(s => s.id === sid)!;
+        console.log(
+          `      Subcluster [${sub.id}]  atoms=${sub.memberAtomIds.size}`
+        );
+      }
+    }
+  }
+
+  if (fw.crossFrameEdges.length > 0) {
+    console.log(`\nCross-frame edges (topoInterest, cross-supercluster):`);
+    for (const e of fw.crossFrameEdges) {
+      console.log(
+        `  atom ${e.from} ── atom ${e.to}  persistence=${e.persistence.toFixed(3)}`
+      );
     }
   }
 

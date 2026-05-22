@@ -16,6 +16,7 @@ import {
   type PersistenceBar,
   buildNerveGraph,
 } from "./TopologyMapper";
+import { type FrameworkIndex, buildFrameworkIndex } from "./FrameworkIndex";
 
 /**
  * D4 – Snapshot of the manifold's topological state at one topology tick.
@@ -278,6 +279,8 @@ export class ManifoldLifecycle {
   private _dreamPriorityAtoms: Set<number> = new Set();
   /** InquiryQueue for routing component_birth curiosity events. */
   private _inquiryQueue: InquiryQueue | null = null;
+  /** E0 – Three-tier framework index, rebuilt on each topology tick. */
+  private _frameworkIndex: FrameworkIndex | null = null;
 
   // ── C3: Ricci flow tick ────────────────────────────────────────────────────
   private _ricciTick = 0;
@@ -504,6 +507,11 @@ export class ManifoldLifecycle {
     return this._nerveGraph;
   }
 
+  /** E0 – Three-tier framework index, or null before the first topology tick. */
+  public getFrameworkIndex(): FrameworkIndex | null {
+    return this._frameworkIndex;
+  }
+
   /**
    * Low-frequency topology tick: persistent homology + TDA Mapper.
    * Runs asynchronously (fire-and-forget) so it never blocks the tick loop.
@@ -537,6 +545,13 @@ export class ManifoldLifecycle {
     }
 
     const { h0, h1 } = this._nerveGraph.diagram;
+
+    // ── E0: rebuild three-tier framework index ────────────────────────────
+    try {
+      this._frameworkIndex = buildFrameworkIndex(sys, this._nerveGraph);
+    } catch {
+      // Non-critical: leave last known index in place on failure.
+    }
 
     // ── dream prioritisation ──────────────────────────────────────────────
     const MIN_PERSISTENCE = DOPAT_CONFIG.orbital.BASE_RADIUS * 0.1;

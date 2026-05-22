@@ -189,6 +189,13 @@ declare namespace Mapping {
     topic?: string;
     /** The index before new knowledge was ingested, used to mask past memory queries. */
     preExpandLength?: number;
+    /**
+     * E0 – Optional set of atom IDs to consider during force computation.
+     * Candidates outside this set are skipped, restricting traversal to the
+     * active framework region.  Interstitial atoms should always be included
+     * by the caller.  Built from FrameworkIndex via resolveActiveAtoms().
+     */
+    activeAtoms?: Set<number>;
   }
 
   /**

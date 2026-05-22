@@ -22,6 +22,10 @@ import { runProactivePathTests } from "./proactive_paths.test";
 import { runPhiSafetyTests } from "./phi_safety.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
 import { runPhaseDTests } from "./phase_d.test";
+import { runFrameworkIndexTests } from "./framework_index.test";
+import { runFuzzyConnectivesTests } from "./fuzzy_connectives.test";
+import { runSessionSheafTests } from "./session_sheaf.test";
+import { runHoTTKernelTests } from "./hott_kernel.test";
 import { executeArithmeticSuite } from "./arithmetic.test";
 import { executeNumberLineSuite } from "./number_line.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
@@ -109,6 +113,10 @@ async function run() {
     await runWithTimeout("number_line", executeNumberLineSuite);
     await runWithTimeout("endurance", executeEnduranceSuite);
     await runWithTimeout("phase_d", runPhaseDTests);
+    await runWithTimeout("framework_index", runFrameworkIndexTests);
+    await runWithTimeout("fuzzy_connectives", runFuzzyConnectivesTests);
+    await runWithTimeout("session_sheaf", runSessionSheafTests);
+    await runWithTimeout("hott_kernel", runHoTTKernelTests);
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

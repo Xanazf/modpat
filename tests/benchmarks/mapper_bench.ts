@@ -11,6 +11,7 @@
 import { DOPAT_CONFIG } from "@config";
 import Mapper from "@core_i/Mapper";
 import System from "@core_i/System";
+import { random, seedRandom } from "@utils/seededRandom";
 
 const CORPUS = [100, 1_000, 10_000, 50_000, 100_000, 1_000_000];
 const QUERIES_PER_SIZE = 20;
@@ -21,13 +22,13 @@ function buildFixture(n: number): System {
   const spread = Math.sqrt(ir) * Math.sqrt(n) * 2;
 
   for (let i = 0; i < n; i++) {
-    const id = system.createLocation(1.0 + Math.random(), 1.0 + Math.random());
-    system.posX[id] = (Math.random() - 0.5) * spread;
-    system.posY[id] = (Math.random() - 0.5) * spread;
-    system.posZ[id] = (Math.random() - 0.5) * spread;
-    system.posW[id] = Math.random() * spread * 0.01; // age increases slowly
-    system.depth[id] = Math.random();
-    system.time[id] = Math.random();
+    const id = system.createLocation(1.0 + random(), 1.0 + random());
+    system.posX[id] = (random() - 0.5) * spread;
+    system.posY[id] = (random() - 0.5) * spread;
+    system.posZ[id] = (random() - 0.5) * spread;
+    system.posW[id] = random() * spread * 0.01; // age increases slowly
+    system.depth[id] = random();
+    system.time[id] = random();
     system.update(id);
   }
   return system;
@@ -35,13 +36,15 @@ function buildFixture(n: number): System {
 
 function randomQuery(system: System): [number, number] {
   const n = system.length;
-  const a = Math.floor(Math.random() * n);
-  let b = Math.floor(Math.random() * n);
-  while (b === a) b = Math.floor(Math.random() * n);
+  const a = Math.floor(random() * n);
+  let b = Math.floor(random() * n);
+  while (b === a) b = Math.floor(random() * n);
   return [a, b];
 }
 
 async function run(): Promise<void> {
+  (DOPAT_CONFIG as any).MAX_PRECEPTS = 1_100_000;
+  seedRandom(DOPAT_CONFIG.SEED);
   console.log("Mapper benchmark, CPU path (no GPU)\n");
   console.log(
     `${"n".padStart(8)}  ${"ms/query".padStart(10)}  ${"queries".padStart(8)}`

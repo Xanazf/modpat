@@ -474,6 +474,7 @@ class Traveler implements Mapping.Engine {
     const boostScopes = options.boostScopes;
     const learningRate = options.learningRate ?? 0.05;
     const maxIterations = options.maxIterations ?? 100;
+    const activeAtoms = options.activeAtoms;
 
     const px = new Float64Array(steps + 1);
     const py = new Float64Array(steps + 1);
@@ -531,7 +532,8 @@ class Traveler implements Mapping.Engine {
           maxIterations,
           learningRate,
           boostScopes,
-          penalties
+          penalties,
+          activeAtoms
         );
       }
 
@@ -590,7 +592,8 @@ class Traveler implements Mapping.Engine {
               maxIterations,
               learningRate,
               boostScopes,
-              penalties
+              penalties,
+              activeAtoms
             );
         }
       }
@@ -969,7 +972,8 @@ class Traveler implements Mapping.Engine {
     maxIterations: number,
     lr: number,
     boost: Set<number> | undefined,
-    penalties: any[]
+    penalties: any[],
+    activeAtoms?: Set<number>
   ): void {
     for (let iter = 0; iter < maxIterations; iter++) {
       for (let i = 1; i < steps; i++) {
@@ -979,7 +983,8 @@ class Traveler implements Mapping.Engine {
           pe[i],
           pa[i],
           penalties,
-          boost
+          boost,
+          activeAtoms
         );
 
         const sx = (px[i - 1] + px[i + 1]) / 2 - px[i];
@@ -1044,7 +1049,8 @@ class Traveler implements Mapping.Engine {
     pz: number,
     pw: number,
     pens: any[],
-    boost: Set<number> | undefined
+    boost: Set<number> | undefined,
+    activeAtoms?: Set<number>
   ): [V: number, fx: number, fy: number, fz: number, fw: number] {
     const phys = DOPAT_CONFIG.PHYSICS;
     const F = phys.INFLUENCE_FALLOFF;
@@ -1066,6 +1072,8 @@ class Traveler implements Mapping.Engine {
     // First pass: compute local semantic density sum φ(p)
     let phi = 0.0;
     for (const j of candidates) {
+      // E0: skip atoms outside the active framework, if one is set
+      if (activeAtoms !== undefined && !activeAtoms.has(j)) continue;
       const dx = px - this.system.posX[j],
         dy = py - this.system.posY[j],
         dz = pz - this.system.posZ[j],
@@ -1091,6 +1099,7 @@ class Traveler implements Mapping.Engine {
 
     // Second pass: compute potential V and metric forces
     for (const j of candidates) {
+      if (activeAtoms !== undefined && !activeAtoms.has(j)) continue;
       const dx = px - this.system.posX[j],
         dy = py - this.system.posY[j],
         dz = pz - this.system.posZ[j],
@@ -1181,6 +1190,31 @@ class Traveler implements Mapping.Engine {
     }
 
     return [Math.max(0.01, V), fx, fy, fz, fw];
+  }
+
+  public getMetricForceWithInnerDerivative(
+    px: number,
+    py: number,
+    pz: number,
+    pw: number,
+    pens: any[],
+    boost: Set<number> | undefined,
+    activeAtoms?: Set<number>
+  ): [V: number, fx: number, fy: number, fz: number, fw: number] {
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const oldGradient = phys.A_B_FULL_GRADIENT;
+    const oldConformal = phys.CONFORMAL_ENABLED;
+
+    // Temporarily set flags to true
+    (phys as any).A_B_FULL_GRADIENT = true;
+    (phys as any).CONFORMAL_ENABLED = true;
+
+    try {
+      return this.getMetricForce(px, py, pz, pw, pens, boost, activeAtoms);
+    } finally {
+      (phys as any).A_B_FULL_GRADIENT = oldGradient;
+      (phys as any).CONFORMAL_ENABLED = oldConformal;
+    }
   }
 
   /**
@@ -3707,3 +3741,24 @@ class Traveler implements Mapping.Engine {
 /** Back-compat alias - import Traveler from "@core_i/Traveler" for new code. */
 export type { Traveler as Mapper };
 export default Traveler;
+
+export function getMetricForceWithInnerDerivative(
+  traveler: Traveler,
+  px: number,
+  py: number,
+  pz: number,
+  pw: number,
+  pens: any[],
+  boost: Set<number> | undefined,
+  activeAtoms?: Set<number>
+): [V: number, fx: number, fy: number, fz: number, fw: number] {
+  return traveler.getMetricForceWithInnerDerivative(
+    px,
+    py,
+    pz,
+    pw,
+    pens,
+    boost,
+    activeAtoms
+  );
+}
