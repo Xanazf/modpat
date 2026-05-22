@@ -17,24 +17,24 @@
  * cycle (this file is pure and must not import from Traveler or System).
  */
 
-const OC_NONE        = 0;
-const OC_IDENTITY    = 1; // IdentityShift – implies / is / are / was / can
+const OC_NONE = 0;
+const OC_IDENTITY = 1; // IdentityShift – implies / is / are / was / can
 const OC_CONJUNCTION = 2; // &&, and, but
-const OC_SINK        = 3; // |-, then, therefore
-const OC_QUANTIFIER  = 4; // exists
-const OC_MODIFIER    = 5; // all, every, some, for all
-const OC_INVERSION   = 6; // not, !
+const OC_SINK = 3; // |-, then, therefore
+const OC_QUANTIFIER = 4; // exists
+const OC_MODIFIER = 5; // all, every, some, for all
+const OC_INVERSION = 6; // not, !
 
 interface ParsedClause {
   antecedentScopes: Set<number>;
-  antecedentIds:    number[];
-  consequentIds:    number[];
-  opId:             number;
-  universal:        boolean;
-  modifierId:       number;
-  isQuantifier:     boolean;
+  antecedentIds: number[];
+  consequentIds: number[];
+  opId: number;
+  universal: boolean;
+  modifierId: number;
+  isQuantifier: boolean;
   /** ID of the leading Inversion atom for negated facts ("not smoke"), or -1. */
-  negationId:       number;
+  negationId: number;
 }
 
 /**
@@ -83,20 +83,31 @@ export function resolveE1Formula(
       let past = false;
       for (const id of clause) {
         const c = system.operatorClass[id];
-        if (c === OC_QUANTIFIER) { past = true; continue; }
+        if (c === OC_QUANTIFIER) {
+          past = true;
+          continue;
+        }
         if (past && c === OC_NONE) afterQuant.push(id);
       }
       parsed.push({
-        antecedentScopes: new Set(), antecedentIds: [],
-        consequentIds: afterQuant, opId: -1,
-        universal: false, modifierId: -1, isQuantifier: true, negationId: -1,
+        antecedentScopes: new Set(),
+        antecedentIds: [],
+        consequentIds: afterQuant,
+        opId: -1,
+        universal: false,
+        modifierId: -1,
+        isQuantifier: true,
+        negationId: -1,
       });
       continue;
     }
 
     let opIdx = -1;
     for (let i = anteStart; i < clause.length; i++) {
-      if (system.operatorClass[clause[i]] === OC_IDENTITY) { opIdx = i; break; }
+      if (system.operatorClass[clause[i]] === OC_IDENTITY) {
+        opIdx = i;
+        break;
+      }
     }
 
     if (opIdx === -1) {
@@ -104,14 +115,24 @@ export function resolveE1Formula(
       let negationId = -1;
       for (const id of clause) {
         const c = system.operatorClass[id];
-        if (c === OC_INVERSION) { negationId = id; break; }
+        if (c === OC_INVERSION) {
+          negationId = id;
+          break;
+        }
         if (c === OC_NONE) break; // None atom first → not negated
       }
-      const factIds = Array.from(clause).filter(id => system.operatorClass[id] === OC_NONE);
+      const factIds = Array.from(clause).filter(
+        id => system.operatorClass[id] === OC_NONE
+      );
       parsed.push({
         antecedentScopes: new Set(factIds.map(id => system.scope[id])),
-        antecedentIds: factIds, consequentIds: [],
-        opId: -1, universal, modifierId, isQuantifier: false, negationId,
+        antecedentIds: factIds,
+        consequentIds: [],
+        opId: -1,
+        universal,
+        modifierId,
+        isQuantifier: false,
+        negationId,
       });
       continue;
     }
@@ -125,8 +146,13 @@ export function resolveE1Formula(
     );
     parsed.push({
       antecedentScopes: new Set(anteIds.map(id => system.scope[id])),
-      antecedentIds: anteIds, consequentIds: consIds,
-      opId: clause[opIdx], universal, modifierId, isQuantifier: false, negationId: -1,
+      antecedentIds: anteIds,
+      consequentIds: consIds,
+      opId: clause[opIdx],
+      universal,
+      modifierId,
+      isQuantifier: false,
+      negationId: -1,
     });
   }
 
@@ -141,14 +167,20 @@ export function resolveE1Formula(
   // already collapses "not not B" → [B], so we simply return the consequent.
   if (clauses.length === 1) {
     const single = parsed[0];
-    if (!single.isQuantifier && single.opId !== -1 && single.consequentIds.length > 0) {
+    if (
+      !single.isQuantifier &&
+      single.opId !== -1 &&
+      single.consequentIds.length > 0
+    ) {
       return new Uint32Array(single.consequentIds);
     }
     return null;
   }
 
   const conditionals = parsed.filter(c => c.opId !== -1);
-  const facts        = parsed.filter(c => c.opId === -1 && !c.isQuantifier && c.antecedentIds.length > 0);
+  const facts = parsed.filter(
+    c => c.opId === -1 && !c.isQuantifier && c.antecedentIds.length > 0
+  );
 
   if (conditionals.length === 0) return null;
 
@@ -156,10 +188,14 @@ export function resolveE1Formula(
   if (facts.length > 0) {
     const plainFacts = facts.filter(f => f.negationId === -1);
     if (plainFacts.length > 0) {
-      const factScopes = new Set(plainFacts.flatMap(f => [...f.antecedentScopes]));
+      const factScopes = new Set(
+        plainFacts.flatMap(f => [...f.antecedentScopes])
+      );
       for (const cond of conditionals) {
         if (cond.antecedentScopes.size === 0) continue;
-        const allMatch = [...cond.antecedentScopes].every(s => factScopes.has(s));
+        const allMatch = [...cond.antecedentScopes].every(s =>
+          factScopes.has(s)
+        );
         if (allMatch && cond.consequentIds.length > 0) {
           return new Uint32Array(cond.consequentIds);
         }
@@ -172,7 +208,9 @@ export function resolveE1Formula(
       for (const negFact of negatedFacts) {
         const negScopes = negFact.antecedentScopes;
         for (const cond of conditionals) {
-          const match = cond.consequentIds.some(id => negScopes.has(system.scope[id]));
+          const match = cond.consequentIds.some(id =>
+            negScopes.has(system.scope[id])
+          );
           if (match && cond.antecedentIds.length > 0) {
             return new Uint32Array([negFact.negationId, ...cond.antecedentIds]);
           }
@@ -182,7 +220,7 @@ export function resolveE1Formula(
   }
 
   // Rule 2: Universal instantiation – (∀A.B) ∧ (x is A) ⊢ x is B
-  const universals    = conditionals.filter(c => c.universal);
+  const universals = conditionals.filter(c => c.universal);
   const nonUniversals = conditionals.filter(c => !c.universal);
   if (universals.length > 0 && nonUniversals.length > 0) {
     for (const inst of nonUniversals) {
@@ -190,24 +228,40 @@ export function resolveE1Formula(
         const match = inst.consequentIds.some(id =>
           univ.antecedentScopes.has(system.scope[id])
         );
-        if (match && univ.consequentIds.length > 0 && inst.antecedentIds.length > 0) {
+        if (
+          match &&
+          univ.consequentIds.length > 0 &&
+          inst.antecedentIds.length > 0
+        ) {
           const opId = inst.opId !== -1 ? inst.opId : univ.opId;
-          return new Uint32Array([...inst.antecedentIds, opId, ...univ.consequentIds]);
+          return new Uint32Array([
+            ...inst.antecedentIds,
+            opId,
+            ...univ.consequentIds,
+          ]);
         }
       }
     }
   }
 
   // Rule 3: Transitivity with full chain-following – (A ⇒ B) ∧ (B ⇒ … ⇒ Z) ⊢ A ⇒ Z
-  const scopeToNext = new Map<number, {
-    consIds: number[]; opId: number; universal: boolean; modifierId: number;
-  }>();
+  const scopeToNext = new Map<
+    number,
+    {
+      consIds: number[];
+      opId: number;
+      universal: boolean;
+      modifierId: number;
+    }
+  >();
   for (const cond of conditionals) {
     for (const scope of cond.antecedentScopes) {
       if (!scopeToNext.has(scope)) {
         scopeToNext.set(scope, {
-          consIds: cond.consequentIds, opId: cond.opId,
-          universal: cond.universal, modifierId: cond.modifierId,
+          consIds: cond.consequentIds,
+          opId: cond.opId,
+          universal: cond.universal,
+          modifierId: cond.modifierId,
         });
       }
     }
@@ -216,13 +270,13 @@ export function resolveE1Formula(
   for (const start of conditionals) {
     if (start.antecedentIds.length === 0) continue;
 
-    let consIds   = start.consequentIds;
-    let opId      = start.opId;
+    let consIds = start.consequentIds;
+    let opId = start.opId;
     let universal = start.universal;
-    let modId     = start.modifierId;
+    let modId = start.modifierId;
     const visited = new Set(start.antecedentScopes);
-    let advanced  = false;
-    let hops      = 0;
+    let advanced = false;
+    let hops = 0;
 
     while (hops++ < 20) {
       let found = false;
@@ -232,11 +286,11 @@ export function resolveE1Formula(
         const next = scopeToNext.get(scope);
         if (next && next.consIds.length > 0) {
           visited.add(scope);
-          consIds   = next.consIds;
+          consIds = next.consIds;
           universal = universal || next.universal;
           if (modId === -1 && next.modifierId !== -1) modId = next.modifierId;
-          advanced  = true;
-          found     = true;
+          advanced = true;
+          found = true;
           break;
         }
       }
@@ -245,7 +299,12 @@ export function resolveE1Formula(
 
     if (advanced) {
       const prefix = universal && modId !== -1 ? [modId] : [];
-      return new Uint32Array([...prefix, ...start.antecedentIds, opId, ...consIds]);
+      return new Uint32Array([
+        ...prefix,
+        ...start.antecedentIds,
+        opId,
+        ...consIds,
+      ]);
     }
   }
 

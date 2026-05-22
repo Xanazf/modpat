@@ -54,7 +54,10 @@ export async function runTravelerCorrectionsTests() {
       driftTargets.set(id2, target2);
 
       // Settle the atoms
-      traveler["_settleAtoms"](new Uint32Array([id1, id2]), driftTargets);
+      (traveler as any)["_settleAtoms"](
+        new Uint32Array([id1, id2]),
+        driftTargets
+      );
 
       // Verify they have moved significantly from the pole (0,0,0,0) toward target coords
       const dist1 = Math.sqrt(

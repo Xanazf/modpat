@@ -139,22 +139,6 @@ const DOPAT_CONFIG = {
      */
     POLE_INGESTION_ENABLED: false,
     /**
-     * TRAVELER step 4 - Primary switch for the new perceive pipeline.  When true,
-     * perceive() routes through observeSettlingGradient() (Observe→Follow→Read)
-     * instead of the Phase 0-7 transfer-matrix resonance engine.  E1 logical lift
-     * handles compound formulas; the old pipeline remains accessible via
-     * perceiveCapturing() for diagnostics.
-     */
-    SETTLING_GRADIENT_ENABLED: true,
-    /**
-     * TRAVELER step 3 - Shadow mode for observeSettlingGradient().  When true,
-     * process() runs both the old perceive/traverse pipeline and the new
-     * gradient-following pipeline on every query, logging Jaccard overlap and
-     * cosine similarity for comparison.  The old pipeline result is still
-     * returned as the answer.  Disable in production to avoid double-work.
-     */
-    SETTLING_GRADIENT_SHADOW: false,
-    /**
      * TRAVELER step 1 - Spatial jitter radius (XYZ axes) applied when placing a
      * newly ingested atom at the manifold pole (0, 0, 0, 0).  Small enough that
      * co-ingested atoms are distinguishable by D1 singularity detection, large
@@ -189,45 +173,6 @@ const DOPAT_CONFIG = {
      * at the default 5 s cognitive tick cadence).
      */
     POLE_IDLE_ATTRACTION: 0.02,
-  },
-
-  resolver: {
-    /**
-     * Energy bonus applied to the Resolver's forward-pass initial vibration
-     * for each token whose concept (scope) was recently accessed (posW > 0).
-     * freshness_bonus = posW[id] × AGE_ENERGY_WEIGHT (capped so total ≤ 1.0).
-     */
-    AGE_ENERGY_WEIGHT: 0.15,
-    /** Propagation damping factor. */
-    PROPAGATION_ALPHA: 0.85,
-    /** Number of propagation iterations for stability. */
-    PROPAGATION_ITERS: 10,
-    /** Weight for constructive interference. */
-    W_CONSTRUCTIVE: 1.0,
-    /** Weight for gravitational lensing. */
-    W_LENSING: 0.7,
-    /** Weight for destructive interference. */
-    W_DESTRUCTIVE: -1.0,
-    /** Minimum total resonance flow (outbound + incoming) for a token to be a discovery candidate. */
-    OPERATOR_DISCOVERY_MIN_FLOW: 0.01,
-    /** Outbound ratio threshold for IdentityShift/Action inference (strongly routing). */
-    OPERATOR_DISCOVERY_OUTBOUND_THRESHOLD: 0.65,
-    /** Outbound ratio floor for Conjunction inference (balanced relay). */
-    OPERATOR_DISCOVERY_CONJUNCTION_THRESHOLD: 0.45,
-    /** Minimum confidence to promote a token's operatorClass and mass in the manifold. */
-    OPERATOR_DISCOVERY_CONFIDENCE_THRESHOLD: 0.55,
-    /**
-     * Coherent-resolution loop: minimum coherence score (amplitude × contrast, [0,1])
-     * at which the wave is considered to have collapsed to a definite answer.
-     */
-    COHERENCE_THRESHOLD: 0.25,
-    /**
-     * Minimum ratio of the top-sink strength to the second-best for the answer
-     * to be considered unambiguous.  Below this ratio the diagnosis is "conflict".
-     */
-    COHERENCE_CONTRAST: 1.5,
-    /** Maximum convergence iterations inside resolveCoherent. */
-    COHERENCE_MAX_ITERS: 5,
   },
 
   mapper: {
@@ -317,10 +262,7 @@ const DOPAT_CONFIG = {
 };
 
 export function validateConfig(): void {
-  const { resolver, mapper, memory, structural } = DOPAT_CONFIG;
-
-  if (resolver.PROPAGATION_ALPHA <= 0 || resolver.PROPAGATION_ALPHA >= 1)
-    throw new Error("PROPAGATION_ALPHA must be in (0, 1)");
+  const { mapper, memory, structural } = DOPAT_CONFIG;
 
   if (mapper.GRADIENT_STEP <= 0) throw new Error("GRADIENT_STEP must be > 0");
 

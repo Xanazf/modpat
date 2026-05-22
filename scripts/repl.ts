@@ -219,7 +219,7 @@ function refreshKnowledge(): void {
 
 function statsBar(sinkStrength: number | null): string {
   const allocated = countAllocated();
-  const discovered = resolver.lastDiscoveredOperators.length;
+  const discovered = 0; // gradient pipeline does not produce operator discovery
   const k = cachedKnowledge;
   const parts: string[] = [gray(`${allocated} precepts`)];
   if (sinkStrength !== null && sinkStrength > 0) {
@@ -318,19 +318,6 @@ function showVerbose(): void {
         `  ${red("missing:")} ${missingLine}  ${gray("← ask about these")}\n`
       );
     }
-  }
-
-  // Discovered operators
-  const disc = resolver.lastDiscoveredOperators;
-  if (disc.length > 0) {
-    const discLine = disc
-      .map(
-        d =>
-          `${yellow(d.label)}${gray(`→${OP_NAME[d.inferredClass]}(${d.confidence.toFixed(2)})}`)}`
-      )
-      .join("  ");
-    process.stdout.write(`  ${gray("discovered:")} ${discLine}\n`);
-    sessionDiscovered += disc.filter(d => d.confidence >= 0.55).length;
   }
 
   // Wave amplitude bar for the token sequence (normalized time values)
