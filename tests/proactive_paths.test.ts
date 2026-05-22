@@ -10,13 +10,13 @@
  */
 
 import assert from "node:assert/strict";
+import Runtime from "@core_i/Runtime";
 import { OperatorClass } from "@core_i/System";
-import { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
+import { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import { IntentTag, spawnIntent } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
-import Runtime from "@core_i/Runtime";
 
 export async function runProactivePathTests() {
   await describe("Proactive Paths - CognitiveLoop + InquiryQueue + Gap Scanner", async () => {

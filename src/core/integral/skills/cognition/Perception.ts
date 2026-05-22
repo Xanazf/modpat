@@ -6,17 +6,16 @@
  * the Traveler creates once and passes on every call.
  */
 
-import nlp from "compromise";
-
 import { DOPAT_CONFIG } from "@config";
-import { OperatorClass, SlotType } from "@core_i/System";
-import type Store from "@core_s/Memory";
-import type { Language } from "@skill_lang/Language";
-import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
-import { GridIndex4D } from "@mutate/GridIndex4D";
-import { resolveActiveAtoms, type FrameworkId } from "@mutate/FrameworkIndex";
 import { resolveE1Formula } from "@core_i/formula/E1Formula";
+import { OperatorClass, SlotType } from "@core_i/System";
+import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
+import type Store from "@core_s/Memory";
+import { type FrameworkId, resolveActiveAtoms } from "@mutate/FrameworkIndex";
+import { GridIndex4D } from "@mutate/GridIndex4D";
 import { type CodePattern, Synthesizer } from "@skill_code/Coder";
+import type { Language } from "@skill_lang/Language";
+import nlp from "compromise";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

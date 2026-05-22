@@ -5,12 +5,12 @@
  * code-ingestion pipeline (was Coder.processCode).
  */
 
-import type Store from "@core_s/Memory";
-import type { SkillHandler, SkillRegistration } from "../index";
 import { SlotType, type SystemRef } from "@core_i/System";
+import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
 import { generate, parse, walk } from "abstract-syntax-tree";
 import nlp from "compromise";
+import type { SkillHandler, SkillRegistration } from "../index";
 
 // Synthesizer
 

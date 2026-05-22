@@ -18,13 +18,13 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DOPAT_CONFIG } from "@config";
 import LogicAtomizer from "@atomics/LogicAtomizer";
+import { DOPAT_CONFIG } from "@config";
+import { createTestTraveler } from "@core_i/Runtime";
+import System from "@core_i/System";
 import type Traveler from "@core_i/Traveler";
 import { getMetricForceWithInnerDerivative } from "@core_i/Traveler";
-import System from "@core_i/System";
 import Store from "@core_s/Memory";
-import { createTestTraveler } from "@core_i/Runtime";
 
 // ---------------------------------------------------------------------------
 // Fixed corpus: (sourceText, expectedPattern)

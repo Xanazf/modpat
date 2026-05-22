@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
-import { Synthesizer } from "@skill_code/Coder";
 import { createTestTraveler } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
+import { Synthesizer } from "@skill_code/Coder";
 import { logger } from "@src/utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 

@@ -11,13 +11,13 @@
  *   await rt.mapper.process("the sky is blue");
  */
 
-import { DOPAT_CONFIG } from "@config";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
-
+import { DOPAT_CONFIG } from "@config";
+import System, { OperatorClass, type SystemRef } from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import { DatabaseContext } from "@core_s/DatabaseContext";
-import { SelfConcept } from "@props/Identity";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import {
   buildManifoldIndex,
@@ -25,22 +25,18 @@ import {
   constellations,
 } from "@core_s/ManifoldMetrics";
 import Store from "@core_s/Memory";
-import Unfolder from "@mutate/Unfolder";
 import { SystemPersistence } from "@core_s/Persistence";
-import { AstSeedWorker, type AstSeedOptions } from "@workers/AstSeedWorker";
 import { WorkerPool } from "@core_s/WorkerPool";
-
-import Traveler from "@core_i/Traveler";
-import System, { OperatorClass, SystemRef } from "@core_i/System";
-
-import type { SkillHandler } from "./skills";
-import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
+import Unfolder from "@mutate/Unfolder";
+import { SelfConcept } from "@props/Identity";
 import { createCoderSkill } from "@skill_code/Coder";
+import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
 import Language from "@skill_lang/Language";
-
 import { IntentTag } from "@utils/intentPrecept";
-import { seedRandom } from "@utils/seededRandom";
 import logger from "@utils/SpectralLogger";
+import { seedRandom } from "@utils/seededRandom";
+import { type AstSeedOptions, AstSeedWorker } from "@workers/AstSeedWorker";
+import type { SkillHandler } from "./skills";
 
 // ---------------------------------------------------------------------------
 // Default skill wiring

@@ -271,7 +271,7 @@ export function resolveE1Formula(
     if (start.antecedentIds.length === 0) continue;
 
     let consIds = start.consequentIds;
-    let opId = start.opId;
+    const opId = start.opId;
     let universal = start.universal;
     let modId = start.modifierId;
     const visited = new Set(start.antecedentScopes);

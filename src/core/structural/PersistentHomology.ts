@@ -1,6 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
-import { computeCurvature } from "@props/Curvature";
 import { GridIndex4D } from "@mutate/GridIndex4D";
+import { computeCurvature } from "@props/Curvature";
 
 export interface PersistenceBar {
   birth: number;
@@ -82,17 +82,7 @@ function buildEdges(
   const phys = DOPAT_CONFIG.PHYSICS;
   const actualRadius = Math.sqrt(phys.INFLUENCE_RADIUS);
   const grid = new GridIndex4D(Math.max(actualRadius, 0.5));
-  for (let i = 0; i < system.length; i++) {
-    if (system.isAllocated(i)) {
-      grid.insert(
-        i,
-        system.posX[i],
-        system.posY[i],
-        system.posZ[i],
-        system.posW[i]
-      );
-    }
-  }
+  grid.buildFromSystem(system);
 
   // Precompute phi for each of the topK atoms
   const phi = new Float64Array(n);

@@ -14,9 +14,9 @@
  * "unknown" - the current architecture requires explicit teaching.
  */
 
-import * as assert from "assert";
 import Runtime from "@core_i/Runtime";
 import logger from "@utils/SpectralLogger";
+import * as assert from "assert";
 import { describe, it } from "./utils/harness";
 
 export async function executeArithmeticSuite() {

@@ -12,10 +12,13 @@
   "dependencies": {
     "@duckdb/node-api": "^1.5.2-r.1",
     "@kmamal/gpu": "^0.2.1",
+    "@types/d3-force": "^3.0.10",
     "abstract-syntax-tree": "^2.22.0",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "compromise": "^14.15.0",
+    "d3-force-3d": "^3.0.6",
+    "d3-hexadectree": "^1.0.0",
     "en-dictionary": "^2.0.3",
     "ring-buffer-ts": "^1.2.0",
     "typescript": "^6.0.3",

@@ -7,7 +7,7 @@
  */
 
 import type Runtime from "@core_i/Runtime";
-import { IntentTag } from "@utils/intentPrecept";
+import type { IntentTag } from "@utils/intentPrecept";
 
 export class CognitiveLoop {
   constructor(private readonly runtime: Runtime) {}

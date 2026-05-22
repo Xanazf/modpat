@@ -1,6 +1,6 @@
-import logger from "@src/utils/SpectralLogger";
 import { executeEnduranceSuite } from "@root/tests/endurance.test";
 import { TestHarness } from "@root/tests/utils/harness";
+import logger from "@src/utils/SpectralLogger";
 
 async function main() {
   logger.header("RUNNING ENDURANCE TEST ONLY");

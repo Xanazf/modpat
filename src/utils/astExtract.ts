@@ -18,7 +18,7 @@
  * Together they produce AstTriple[] that AstSeedWorker crystallizes.
  */
 
-import { walk, find } from "abstract-syntax-tree";
+import { find, walk } from "abstract-syntax-tree";
 import ts from "typescript";
 
 export interface AstTriple {

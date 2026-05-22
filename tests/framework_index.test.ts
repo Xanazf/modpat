@@ -4,8 +4,8 @@ import System from "@core_i/System";
 import { buildNerveGraph } from "@core_s/TopologyMapper";
 import {
   buildFrameworkIndex,
-  resolveActiveAtoms,
   type FrameworkIndex,
+  resolveActiveAtoms,
 } from "@mutate/FrameworkIndex";
 import { describe, it } from "./utils/harness";
 

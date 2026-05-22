@@ -381,6 +381,9 @@ class System implements Root.ManifoldView {
   /** Current number of active precepts in the manifold. */
   public length: number;
 
+  /** Monotonically-increasing version/mutation counter. */
+  public version = 0;
+
   /** "Speed of Logic" - The rate at which information propagates through the manifold. */
   public readonly c: number = DOPAT_CONFIG.DELTA;
 
@@ -793,6 +796,9 @@ class System implements Root.ManifoldView {
    * @param id The index of the precept to update.
    */
   public update(id: number, from?: string): void {
+    if (from !== "reinforce") {
+      this.version++;
+    }
     const m = this.mass[id];
     // Scope is now a pure identity tag (symbolIdx); use the fixed PRECEPT_SCALE
     // constant instead so derived properties stay numerically stable regardless

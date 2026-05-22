@@ -7,8 +7,8 @@
  */
 
 import LogicAtomizer from "@atomics/LogicAtomizer";
-import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import Store from "@core_s/Memory";
 
 const CORPUS_SIZES = [100, 1_000, 5_000];

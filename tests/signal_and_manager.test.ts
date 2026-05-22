@@ -3,9 +3,9 @@ import type SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { OperatorClass } from "@core_i/System";
 import { DatabaseContext } from "@core_s/DatabaseContext";
-import { DeltaQueue } from "@mutate/DeltaQueue";
 import { ManifoldLifecycle, TMRFreeList } from "@core_s/ManifoldLifecycle";
 import { SystemPersistence } from "@core_s/Persistence";
+import { DeltaQueue } from "@mutate/DeltaQueue";
 import logger from "@utils/SpectralLogger";
 import {
   describe,

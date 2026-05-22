@@ -9,9 +9,9 @@
 import fs from "node:fs";
 import { parentPort } from "node:worker_threads";
 import {
-  extractAstTriples,
-  type AstTriple,
   type AstExtractOptions,
+  type AstTriple,
+  extractAstTriples,
 } from "@utils/astExtract";
 
 interface AstRequest {

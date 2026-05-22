@@ -9,9 +9,9 @@
  * `Learner.ts` becomes a back-compat shim.
  */
 
+import type Traveler from "@core_i/Traveler";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@mutate/Unfolder";
-import type Traveler from "@core_i/Traveler";
 import logger from "@utils/SpectralLogger";
 
 export type InquiryStatus =

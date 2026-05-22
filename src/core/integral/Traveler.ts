@@ -1,56 +1,54 @@
 import { createHash } from "node:crypto";
-import nlp from "compromise";
-
 import { DOPAT_CONFIG } from "@config";
+import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { TensorMath_GPU } from "@core_s/Math";
-import { metrics } from "@core_s/Metrics";
 import type Store from "@core_s/Memory";
+import { metrics } from "@core_s/Metrics";
+import { multiplyMatrices4x4 } from "@i_topology/HoTTKernel";
+import type {
+  FrameworkId,
+  Matrix4x4,
+  TravelerState,
+} from "@mutate/FrameworkIndex";
 import type Unfolder from "@mutate/Unfolder";
+import { type InquiryItem, InquiryQueue } from "@skill_cogi/InquiryQueue";
+import {
+  getMetricForceWithInnerDerivative as _locoGetMetricForceWithInnerDerivative,
+  buildGridIndex,
+  computeHolonomy,
+  detectHomotopy,
+  getMetricForce,
+  type LocomotionState,
+  makeLocomotionState,
+  regularizeChristoffels,
+  reinforcePath,
+  travel,
+} from "@skill_cogi/Locomotion";
+import {
+  makePerceptionCache,
+  type PerceptionCache,
+  type PerceptionDeps,
+  perceiveCapturing as perceptionCapturing,
+  perceiveCoherent as perceptionCoherent,
+  collectSequence as perceptionCollect,
+  observeSettlingGradient as perceptionOSG,
+  perceive as perceptionPerceive,
+  settleAtoms,
+} from "@skill_cogi/Perception";
+import type { Language } from "@skill_lang/Language";
+import type { WorkingMemory } from "@skill_lang/WorkingMemory";
 import {
   boostIntent,
   decayIntent,
   IntentTag,
   spawnIntent as spawnIntentPrecept,
 } from "@utils/intentPrecept";
-import {
-  type FrameworkId,
-  type Matrix4x4,
-  type TravelerState,
-} from "@mutate/FrameworkIndex";
-import { resolveE1Formula } from "./formula/E1Formula";
-import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
-
-import { multiplyMatrices4x4 } from "@i_topology/HoTTKernel";
-import type { SkillHandler } from "./skills";
-import {
-  type PerceptionDeps,
-  type PerceptionCache,
-  makePerceptionCache,
-  perceive as perceptionPerceive,
-  perceiveCapturing as perceptionCapturing,
-  perceiveCoherent as perceptionCoherent,
-  observeSettlingGradient as perceptionOSG,
-  collectSequence as perceptionCollect,
-  settleAtoms,
-} from "@skill_cogi/Perception";
-import {
-  type LocomotionState,
-  makeLocomotionState,
-  travel,
-  buildGridIndex,
-  getMetricForce,
-  getMetricForceWithInnerDerivative as _locoGetMetricForceWithInnerDerivative,
-  regularizeChristoffels,
-  detectHomotopy,
-  computeHolonomy,
-  reinforcePath,
-} from "@skill_cogi/Locomotion";
-import { InquiryQueue, type InquiryItem } from "@skill_cogi/InquiryQueue";
-import type { Language } from "@skill_lang/Language";
-import type { WorkingMemory } from "@skill_lang/WorkingMemory";
-import { classifyOperatorToken, OperatorClass, SystemRef } from "./System";
 import logger from "@utils/SpectralLogger";
 import { extractTopic } from "@utils/topicExtraction";
+import nlp from "compromise";
+import { resolveE1Formula } from "./formula/E1Formula";
+import { classifyOperatorToken, OperatorClass, SystemRef } from "./System";
+import type { SkillHandler } from "./skills";
 
 // Canonical definitions live in src/_types/Integral.d.ts (Mapping namespace).
 // These re-exports preserve existing import paths for downstream code.

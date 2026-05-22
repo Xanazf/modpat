@@ -33,6 +33,7 @@ declare namespace Root {
 
   interface ManifoldView {
     readonly length: number;
+    readonly version?: number;
 
     // Clock speed or frame delta
     // speed of information;

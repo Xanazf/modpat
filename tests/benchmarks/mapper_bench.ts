@@ -9,8 +9,8 @@
  */
 
 import { DOPAT_CONFIG } from "@config";
-import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import { random, seedRandom } from "@utils/seededRandom";
 
 const CORPUS = [100, 1_000, 10_000, 50_000, 100_000, 1_000_000];
@@ -44,6 +44,7 @@ function randomQuery(system: System): [number, number] {
 
 async function run(): Promise<void> {
   (DOPAT_CONFIG as any).MAX_PRECEPTS = 1_100_000;
+  (DOPAT_CONFIG as any).USE_GPU = false;
   seedRandom(DOPAT_CONFIG.SEED);
   console.log("Traveler benchmark, CPU path (no GPU)\n");
   console.log(

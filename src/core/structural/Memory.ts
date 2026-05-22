@@ -9,12 +9,12 @@ import {
 } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
 import { topoSignatureJaccard } from "@core_s/TopologyMapper";
-import type { TravelerState } from "@mutate/FrameworkIndex";
 import {
   type DuckDBConnection,
   DuckDBInstance,
   listValue,
 } from "@duckdb/node-api";
+import type { TravelerState } from "@mutate/FrameworkIndex";
 
 /**
  * Represents the stable, collapsed state of a logical derivation.

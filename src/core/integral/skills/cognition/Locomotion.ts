@@ -5,15 +5,14 @@
  * explicitly. No class instantiation required.
  */
 
-import nlp from "compromise";
-
 import { DOPAT_CONFIG } from "@config";
+import { SlotType } from "@core_i/System";
 import { TensorMath_GPU } from "@core_s/Math";
 import { metrics } from "@core_s/Metrics";
-import { CURVATURE_WGSL } from "@props/Curvature";
 import { GridIndex4D } from "@mutate/GridIndex4D";
-import { SlotType } from "@core_i/System";
 import type Unfolder from "@mutate/Unfolder";
+import { CURVATURE_WGSL } from "@props/Curvature";
+import nlp from "compromise";
 
 // ── State & deps ───────────────────────────────────────────────────────────
 
@@ -50,17 +49,7 @@ export function buildGridIndex(
   system: Root.ManifoldView,
   state: LocomotionState
 ): void {
-  state.gridIndex.clear();
-  const n = system.length;
-  for (let j = 0; j < n; j++) {
-    state.gridIndex.insert(
-      j,
-      system.posX[j],
-      system.posY[j],
-      system.posZ[j],
-      system.posW[j]
-    );
-  }
+  state.gridIndex.buildFromSystem(system);
 }
 
 // ── Metric force ───────────────────────────────────────────────────────────
@@ -669,7 +658,7 @@ export function reinforcePath(
     const m = system.mass[id];
     if (m <= 0) continue;
     system.mass[id] = Math.min(m * FACTOR, CAP);
-    system.update(id);
+    system.update(id, "reinforce");
   }
 }
 
@@ -754,10 +743,12 @@ function _extractIds(
   steps: number,
   preExpandLength: number,
   targetId: number,
-  system: Root.ManifoldView
+  system: Root.ManifoldView,
+  state: LocomotionState
 ): Uint32Array {
   const resultIds: number[] = [],
     maxPosYByLayer = new Map<number, number>();
+  let fallbackCount = 0;
   for (let i = 0; i <= steps; i++) {
     let bestId = -1,
       minDiff = Infinity;
@@ -784,7 +775,68 @@ function _extractIds(
         bestId = j;
       }
     };
-    for (let j = loopStart; j < system.length; j++) evalJ(j);
+
+    const sortedW = state.gridIndex.getSortedW();
+    const sortedIdsByW = state.gridIndex.getSortedIdsByW();
+    const count = sortedW.length;
+
+    if (count === 0) {
+      for (let j = loopStart; j < system.length; j++) evalJ(j);
+    } else {
+      // Binary search to find starting index in sortedW
+      let low = 0;
+      let high = count - 1;
+      let idx = 0;
+      const targetW = pa[i];
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (sortedW[mid] < targetW) {
+          low = mid + 1;
+          idx = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      // Scan outwards
+      let left = idx;
+      let right = idx + 1;
+      while (left >= 0 || right < count) {
+        let checkLeft = left >= 0;
+        let checkRight = right < count;
+
+        if (checkLeft) {
+          const dw = targetW - sortedW[left];
+          if (dw * dw * 1000000 >= minDiff) {
+            left = -1;
+            checkLeft = false;
+          }
+        }
+        if (checkRight) {
+          const dw = sortedW[right] - targetW;
+          if (dw * dw * 1000000 >= minDiff) {
+            right = count;
+            checkRight = false;
+          }
+        }
+
+        if (!checkLeft && !checkRight) {
+          break;
+        }
+
+        if (checkLeft) {
+          const id = sortedIdsByW[left];
+          if (id >= loopStart) evalJ(id);
+          left--;
+        }
+        if (checkRight) {
+          const id = sortedIdsByW[right];
+          if (id >= loopStart) evalJ(id);
+          right++;
+        }
+      }
+    }
+
     if (targetId >= 0 && targetId < loopStart) evalJ(targetId);
     if (
       bestId !== -1 &&
@@ -963,7 +1015,8 @@ export async function travel(
         steps,
         options.preExpandLength || 0,
         targetId,
-        system
+        system,
+        state
       );
       _updateChristoffels(1.0, state);
       break;
@@ -992,7 +1045,8 @@ export async function travel(
       steps,
       options.preExpandLength || 0,
       targetId,
-      system
+      system,
+      state
     );
   reinforcePath(result, system);
   return result;

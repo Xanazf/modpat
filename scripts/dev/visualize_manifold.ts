@@ -19,9 +19,9 @@
  */
 
 import { writeFileSync } from "node:fs";
-import { program } from "commander";
 import { DOPAT_CONFIG } from "@config";
 import Runtime from "@core_i/Runtime";
+import { program } from "commander";
 
 program
   .option("--db <path>", "DuckDB path", "./data/repl.db")

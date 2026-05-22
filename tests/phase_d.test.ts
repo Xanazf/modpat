@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { DOPAT_CONFIG } from "@config";
-import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
-import { SystemPersistence } from "@core_s/Persistence";
-import { detectSingularities } from "@props/Singularity";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import { metrics } from "@core_s/Metrics";
+import { SystemPersistence } from "@core_s/Persistence";
 import type { PersistenceBar } from "@core_s/PersistentHomology";
+import { GridIndex4D } from "@mutate/GridIndex4D";
+import { detectSingularities } from "@props/Singularity";
 import { describe, it } from "./utils/harness";
 
 // --- helpers -----------------------------------------------------------------

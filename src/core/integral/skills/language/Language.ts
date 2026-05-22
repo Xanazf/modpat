@@ -12,24 +12,19 @@
  * Listener, Talker, and LiveInference.
  */
 
-import nlp from "compromise";
-
 import { DOPAT_CONFIG } from "@config";
-
-import { isIdentityQueryAboutSelf, shiftPerspective } from "@props/Identity";
-import type Store from "@core_s/Memory";
-
 import { OperatorClass, type SystemRef } from "@core_i/System";
 import type { BridgeCandidate } from "@core_i/Traveler";
-
+import type Store from "@core_s/Memory";
+import { isIdentityQueryAboutSelf, shiftPerspective } from "@props/Identity";
+import logger from "@utils/SpectralLogger";
+import { random } from "@utils/seededRandom";
+import nlp from "compromise";
 import {
-  WorkingMemory,
   buildExplanation,
   type MemoryFrame,
+  WorkingMemory,
 } from "./WorkingMemory";
-
-import { random } from "@utils/seededRandom";
-import logger from "@utils/SpectralLogger";
 
 // ---- Intent classification ------------------------------------------------
 
@@ -761,7 +756,7 @@ export class Language {
     if (whatIsMatch) {
       attractionCenter = whatIsMatch[1];
       isArithmeticQuery =
-        /\d[\d\s]*([+\-*\/]|plus|minus|times|divided)[\d\s]*\d/i.test(
+        /\d[\d\s]*([+\-*/]|plus|minus|times|divided)[\d\s]*\d/i.test(
           attractionCenter.trim()
         );
       isOrdinalQuery =

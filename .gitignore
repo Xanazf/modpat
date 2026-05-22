@@ -21,3 +21,4 @@ data/*
 scripts/venv
 .env
 logs/
+plans/

@@ -16,10 +16,9 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { DOPAT_CONFIG, SYSTEM_CONFIG } from "@config";
 import Runtime from "@core_i/Runtime";
-import type Traveler from "@core_i/Traveler";
 import type System from "@core_i/System";
 import { OperatorClass } from "@core_i/System";
-import type { SelfConcept } from "@props/Identity";
+import type Traveler from "@core_i/Traveler";
 import {
   buildManifoldIndex,
   constellationGaps,
@@ -30,10 +29,11 @@ import {
   satellites,
 } from "@core_s/ManifoldMetrics";
 import type Store from "@core_s/Memory";
-import type Unfolder from "@mutate/Unfolder";
 import { VocabSeedWorker } from "@core_s/VocabSeed";
-import { AstSeedWorker } from "@workers/AstSeedWorker";
+import type Unfolder from "@mutate/Unfolder";
+import type { SelfConcept } from "@props/Identity";
 import { SpectralVisualizer } from "@utils/SpectralVisualizer";
+import { AstSeedWorker } from "@workers/AstSeedWorker";
 
 // ANSI helpers
 

@@ -5,10 +5,10 @@
  *   tsx scripts/dev/topology_summary.ts [--lens posX|mass|density] [--intervals N]
  */
 
-import { program } from "commander";
 import Runtime from "@core_i/Runtime";
 import { buildNerveGraph } from "@core_s/TopologyMapper";
 import { buildFrameworkIndex } from "@mutate/FrameworkIndex";
+import { program } from "commander";
 
 program
   .option("--lens <type>", "lens function: posX | mass | density", "posX")

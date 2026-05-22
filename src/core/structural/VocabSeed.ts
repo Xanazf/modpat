@@ -17,8 +17,8 @@
 
 import fs from "node:fs";
 import type Store from "@core_s/Memory";
-import type { DictionaryExpander, DictionaryExpansion } from "@mutate/Unfolder";
 import type { WorkerPool } from "@core_s/WorkerPool";
+import type { DictionaryExpander, DictionaryExpansion } from "@mutate/Unfolder";
 
 export interface SeedProgress {
   processed: number;

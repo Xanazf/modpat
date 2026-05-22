@@ -1,25 +1,24 @@
 import { DOPAT_CONFIG } from "@config";
-import { random } from "@utils/seededRandom";
-import System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
-import { OperatorClass, SystemRef } from "@core_i/System";
-import type { InquiryQueue } from "@skill_cogi/InquiryQueue";
-import { DeltaQueue } from "@mutate/DeltaQueue";
+import System, { OperatorClass, SystemRef } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
-import type Unfolder from "@mutate/Unfolder";
+import { DeltaQueue } from "@mutate/DeltaQueue";
+import {
+  buildFrameworkIndex,
+  type FrameworkIndex,
+} from "@mutate/FrameworkIndex";
 import { GridIndex4D } from "@mutate/GridIndex4D";
+import type Unfolder from "@mutate/Unfolder";
 import { computeCurvature } from "@props/Curvature";
 import { detectSingularities } from "@props/Singularity";
+import type { InquiryQueue } from "@skill_cogi/InquiryQueue";
+import { random } from "@utils/seededRandom";
 import type { SystemPersistence } from "./Persistence";
 import {
+  buildNerveGraph,
   type NerveGraph,
   type PersistenceBar,
-  buildNerveGraph,
 } from "./TopologyMapper";
-import {
-  type FrameworkIndex,
-  buildFrameworkIndex,
-} from "@mutate/FrameworkIndex";
 
 /**
  * D4 – Snapshot of the manifold's topological state at one topology tick.
@@ -698,11 +697,7 @@ export class ManifoldLifecycle {
 
     // Build a lightweight grid for the curvature neighbourhood queries.
     const grid = new GridIndex4D(Math.max(actualRadius, 0.5));
-    for (let i = 0; i < sys.length; i++) {
-      if (sys.isAllocated(i)) {
-        grid.insert(i, sys.posX[i], sys.posY[i], sys.posZ[i], sys.posW[i]);
-      }
-    }
+    grid.buildFromSystem(sys);
 
     let updated = 0;
     for (let i = 0; i < sys.length; i++) {
@@ -742,11 +737,7 @@ export class ManifoldLifecycle {
     const splitR = phys.SINGULARITY_SPLIT_RADIUS;
 
     const grid = new GridIndex4D(Math.max(actualRadius, 0.5));
-    for (let i = 0; i < sys.length; i++) {
-      if (sys.isAllocated(i)) {
-        grid.insert(i, sys.posX[i], sys.posY[i], sys.posZ[i], sys.posW[i]);
-      }
-    }
+    grid.buildFromSystem(sys);
 
     const candidates = detectSingularities(sys, grid);
     if (candidates.length === 0) return;
@@ -895,17 +886,7 @@ export class ManifoldLifecycle {
       // Falls back to topology-priority + linear scan when fewer than 10 atoms exist.
       const actualRadius = Math.sqrt(DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS);
       const curvGrid = new GridIndex4D(Math.max(actualRadius, 0.5));
-      for (let i = 0; i < sys.length; i++) {
-        if (sys.isAllocated(i)) {
-          curvGrid.insert(
-            i,
-            sys.posX[i],
-            sys.posY[i],
-            sys.posZ[i],
-            sys.posW[i]
-          );
-        }
-      }
+      curvGrid.buildFromSystem(sys);
       const ranked = this.unfolder.rankExpansionCandidates(curvGrid, 500);
       const scanOrder: number[] = ranked.map(c => c.id);
 

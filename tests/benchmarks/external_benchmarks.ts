@@ -17,9 +17,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import Traveler from "@core_i/Traveler";
-import System from "@core_i/System";
 import { createTestTraveler } from "@core_i/Runtime";
+import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import Store from "@core_s/Memory";
 
 // ---------------------------------------------------------------------------

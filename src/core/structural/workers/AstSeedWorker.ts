@@ -22,7 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type Store from "@core_s/Memory";
 import type { WorkerPool } from "@core_s/WorkerPool";
-import { extractAstTriples, type AstTriple } from "@utils/astExtract";
+import { type AstTriple, extractAstTriples } from "@utils/astExtract";
 
 export interface AstSeedProgress {
   processed: number;

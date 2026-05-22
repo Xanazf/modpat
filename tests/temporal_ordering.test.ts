@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { DOPAT_CONFIG } from "@config";
-import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import { describe, it } from "./utils/harness";
 
 /**

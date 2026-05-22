@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import {
-  fuzzyAnd,
-  fuzzyOr,
-  fuzzyNot,
-  subsethood,
-  evalFormula,
   entailment,
-  type ManifoldRegion,
+  evalFormula,
   type FormulaNode,
+  fuzzyAnd,
+  fuzzyNot,
+  fuzzyOr,
+  type ManifoldRegion,
+  subsethood,
 } from "@mutate/FrameworkIndex";
 import { describe, it } from "./utils/harness";
 

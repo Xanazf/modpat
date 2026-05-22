@@ -1,6 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
-import { computeCurvature } from "./Curvature";
 import type { GridIndex4D } from "@mutate/GridIndex4D";
+import { computeCurvature } from "./Curvature";
 
 export interface SingularityCandidate {
   atomId: number;

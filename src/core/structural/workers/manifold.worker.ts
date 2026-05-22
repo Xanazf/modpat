@@ -8,7 +8,6 @@
 
 import { parentPort, workerData } from "node:worker_threads";
 import type { ManifoldLayout } from "@core_i/System";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import type { Constellation } from "@core_s/ManifoldMetrics";
 import {
   constellations,
@@ -18,6 +17,7 @@ import {
   satellites,
 } from "@core_s/ManifoldMetrics";
 import { ManifoldReader } from "@core_s/ManifoldReader";
+import { GridIndex4D } from "@mutate/GridIndex4D";
 
 // Raw gap record: no labels (atomizer not available in worker; main thread enriches).
 export interface RawGap {
@@ -45,17 +45,7 @@ let cachedIndexLength = 0;
 function getIndex(length: number): GridIndex4D {
   if (!cachedIndex || length - cachedIndexLength > cachedIndexLength * 0.05) {
     cachedIndex = new GridIndex4D(50);
-    for (let i = 1; i < length; i++) {
-      if (reader.allocated[i] === 1) {
-        cachedIndex.insert(
-          i,
-          reader.posX[i],
-          reader.posY[i],
-          reader.posZ[i],
-          reader.posW[i]
-        );
-      }
-    }
+    cachedIndex.buildFromSystem(reader as unknown as Root.ManifoldView);
     cachedIndexLength = length;
   }
   return cachedIndex;

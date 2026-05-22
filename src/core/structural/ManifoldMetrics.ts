@@ -351,17 +351,7 @@ export function constellationGaps(
 export function buildManifoldIndex(system: Root.ManifoldView): GridIndex4D {
   const cellSize = Math.max(DOPAT_CONFIG.orbital.BASE_RADIUS * 0.5, 1);
   const index = new GridIndex4D(cellSize);
-  for (let i = 0; i < system.length; i++) {
-    if (system.isAllocated(i)) {
-      index.insert(
-        i,
-        system.posX[i],
-        system.posY[i],
-        system.posZ[i],
-        system.posW[i]
-      );
-    }
-  }
+  index.buildFromSystem(system);
   return index;
 }
 

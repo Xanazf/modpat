@@ -7,9 +7,9 @@
  */
 
 import assert from "node:assert/strict";
+import LogicAtomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import System from "@core_i/System";
-import LogicAtomizer from "@atomics/LogicAtomizer";
 import Store from "@core_s/Memory";
 import { describe, it } from "./utils/harness";
 

@@ -3,8 +3,8 @@
  * Does NOT require a running manifold, DuckDB, or worker threads.
  */
 import assert from "node:assert/strict";
-import logger from "@utils/SpectralLogger";
 import { extractAstTriples } from "@utils/astExtract";
+import logger from "@utils/SpectralLogger";
 import { describe, it } from "./utils/harness";
 
 const FIXTURE_TS = `

@@ -4,10 +4,10 @@ import { DOPAT_CONFIG } from "@config";
 import { SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
-import { extractTriples } from "@utils/tripleExtract";
-import { random } from "@utils/seededRandom";
-import { computeCurvature } from "@props/Curvature";
 import type { GridIndex4D } from "@mutate/GridIndex4D";
+import { computeCurvature } from "@props/Curvature";
+import { random } from "@utils/seededRandom";
+import { extractTriples } from "@utils/tripleExtract";
 import axios from "axios";
 import wiki from "wikipedia";
 

@@ -1,8 +1,8 @@
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import Traveler from "@core_i/Traveler";
 import { createTestTraveler } from "@core_i/Runtime";
 import System, { OperatorClass } from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import Store from "@core_s/Memory";

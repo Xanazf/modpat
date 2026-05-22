@@ -1,8 +1,8 @@
 import Atomizer from "@atomics/LogicAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
-import Traveler from "@core_i/Traveler";
 import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
 import Store from "@core_s/Memory";
 import logger from "@src/utils/SpectralLogger";
 
