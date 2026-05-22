@@ -23,7 +23,7 @@ import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { metrics } from "@core_s/Metrics";
 import { SystemPersistence } from "@core_s/Persistence";
-import Unfolder from "@core_s/Unfolder";
+import Unfolder from "@mutate/Unfolder";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 

@@ -8,7 +8,7 @@
 
 import { parentPort, workerData } from "node:worker_threads";
 import type { ManifoldLayout } from "@core_i/System";
-import { GridIndex4D } from "@core_s/GridIndex4D";
+import { GridIndex4D } from "@mutate/GridIndex4D";
 import type { Constellation } from "@core_s/ManifoldMetrics";
 import {
   constellations,

@@ -16,7 +16,7 @@
  */
 
 import { DOPAT_CONFIG } from "@config";
-import { GridIndex4D } from "@src/core/structural/GridIndex4D";
+import { GridIndex4D } from "@mutate/GridIndex4D";
 
 // Core geometry
 

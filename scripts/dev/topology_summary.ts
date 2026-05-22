@@ -8,7 +8,7 @@
 import { program } from "commander";
 import Runtime from "@core_i/Runtime";
 import { buildNerveGraph } from "@core_s/TopologyMapper";
-import { buildFrameworkIndex } from "@core_s/FrameworkIndex";
+import { buildFrameworkIndex } from "@mutate/FrameworkIndex";
 
 program
   .option("--lens <type>", "lens function: posX | mass | density", "posX")

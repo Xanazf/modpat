@@ -1,6 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
 import { SlotType } from "@core_i/System";
-import type { GridIndex4D } from "./GridIndex4D";
+import type { GridIndex4D } from "@mutate/GridIndex4D";
 
 export interface CurvatureResult {
   phi: number;

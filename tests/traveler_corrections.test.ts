@@ -3,7 +3,7 @@ import { DOPAT_CONFIG } from "@config";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import { buildNerveGraph } from "@core_s/TopologyMapper";
-import { buildFrameworkIndex } from "@core_s/FrameworkIndex";
+import { buildFrameworkIndex } from "@mutate/FrameworkIndex";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { SystemPersistence } from "@core_s/Persistence";
 import { DatabaseContext } from "@core_s/DatabaseContext";

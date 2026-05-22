@@ -1,7 +1,7 @@
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import type Store from "@core_s/Memory";
-import type Unfolder from "@core_s/Unfolder";
+import type Unfolder from "@mutate/Unfolder";
 import nlp from "compromise";
 // @ts-expect-error
 import Mapper from "./Mapper";

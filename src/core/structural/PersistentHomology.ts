@@ -1,6 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
-import { computeCurvature } from "./Curvature";
-import { GridIndex4D } from "./GridIndex4D";
+import { computeCurvature } from "@props/Curvature";
+import { GridIndex4D } from "@mutate/GridIndex4D";
 
 export interface PersistenceBar {
   birth: number;

@@ -8,7 +8,7 @@ import {
   entailment,
   type ManifoldRegion,
   type FormulaNode,
-} from "@core_s/FrameworkIndex";
+} from "@mutate/FrameworkIndex";
 import { describe, it } from "./utils/harness";
 
 // --- helpers -----------------------------------------------------------------

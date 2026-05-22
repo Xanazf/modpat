@@ -17,7 +17,7 @@ import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 
 import { DatabaseContext } from "@core_s/DatabaseContext";
-import { SelfConcept } from "@core_s/Identity";
+import { SelfConcept } from "@props/Identity";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import {
   buildManifoldIndex,
@@ -25,9 +25,9 @@ import {
   constellations,
 } from "@core_s/ManifoldMetrics";
 import Store from "@core_s/Memory";
-import Unfolder from "@core_s/Unfolder";
+import Unfolder from "@mutate/Unfolder";
 import { SystemPersistence } from "@core_s/Persistence";
-import { AstSeedWorker, type AstSeedOptions } from "@core_s/AstSeedWorker";
+import { AstSeedWorker, type AstSeedOptions } from "@workers/AstSeedWorker";
 import { WorkerPool } from "@core_s/WorkerPool";
 
 import Traveler from "@core_i/Traveler";

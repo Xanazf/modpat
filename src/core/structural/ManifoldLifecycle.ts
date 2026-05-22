@@ -4,19 +4,22 @@ import System from "@core_i/System";
 import type { TargetBuffer } from "@core_i/System";
 import { OperatorClass, SystemRef } from "@core_i/System";
 import type { InquiryQueue } from "@skill_cogi/InquiryQueue";
-import { DeltaQueue } from "@core_s/DeltaQueue";
+import { DeltaQueue } from "@mutate/DeltaQueue";
 import { metrics } from "@core_s/Metrics";
-import type Unfolder from "@core_s/Unfolder";
-import { GridIndex4D } from "@src/core/structural/GridIndex4D";
-import { computeCurvature } from "@core_s/Curvature";
-import { detectSingularities } from "@core_s/Singularity";
+import type Unfolder from "@mutate/Unfolder";
+import { GridIndex4D } from "@mutate/GridIndex4D";
+import { computeCurvature } from "@props/Curvature";
+import { detectSingularities } from "@props/Singularity";
 import type { SystemPersistence } from "./Persistence";
 import {
   type NerveGraph,
   type PersistenceBar,
   buildNerveGraph,
 } from "./TopologyMapper";
-import { type FrameworkIndex, buildFrameworkIndex } from "./FrameworkIndex";
+import {
+  type FrameworkIndex,
+  buildFrameworkIndex,
+} from "@mutate/FrameworkIndex";
 
 /**
  * D4 – Snapshot of the manifold's topological state at one topology tick.

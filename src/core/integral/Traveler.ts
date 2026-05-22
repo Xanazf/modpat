@@ -4,23 +4,23 @@ import nlp from "compromise";
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
 import { metrics } from "@core_s/Metrics";
-import { CURVATURE_WGSL } from "@core_s/Curvature";
+import { CURVATURE_WGSL } from "@props/Curvature";
 import type Store from "@core_s/Memory";
-import type Unfolder from "@core_s/Unfolder";
+import type Unfolder from "@mutate/Unfolder";
 import {
   boostIntent,
   decayIntent,
   IntentTag,
   spawnIntent as spawnIntentPrecept,
 } from "@utils/intentPrecept";
-import { GridIndex4D } from "@core_s/GridIndex4D";
+import { GridIndex4D } from "@mutate/GridIndex4D";
 import type { PersistenceBar } from "@core_s/PersistentHomology";
 import {
   resolveActiveAtoms,
   type FrameworkId,
   type Matrix4x4,
   type TravelerState,
-} from "@core_s/FrameworkIndex";
+} from "@mutate/FrameworkIndex";
 import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 
 import { multiplyMatrices4x4 } from "@i_topology/HoTTKernel";

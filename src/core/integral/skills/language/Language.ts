@@ -16,7 +16,7 @@ import nlp from "compromise";
 
 import { DOPAT_CONFIG } from "@config";
 
-import { isIdentityQueryAboutSelf, shiftPerspective } from "@core_s/Identity";
+import { isIdentityQueryAboutSelf, shiftPerspective } from "@props/Identity";
 import type Store from "@core_s/Memory";
 
 import { OperatorClass, type SystemRef } from "@core_i/System";

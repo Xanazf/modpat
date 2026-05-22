@@ -1,4 +1,4 @@
-import type { ClusterId } from "./FrameworkIndex";
+import type { ClusterId } from "@mutate/FrameworkIndex";
 
 // --- public interfaces --------------------------------------------------------
 

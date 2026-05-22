@@ -9,7 +9,7 @@ import {
 } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
 import { topoSignatureJaccard } from "@core_s/TopologyMapper";
-import type { TravelerState } from "@core_s/FrameworkIndex";
+import type { TravelerState } from "@mutate/FrameworkIndex";
 import {
   type DuckDBConnection,
   DuckDBInstance,

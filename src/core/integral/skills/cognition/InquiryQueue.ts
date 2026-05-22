@@ -10,7 +10,7 @@
  */
 
 import type Store from "@core_s/Memory";
-import type Unfolder from "@core_s/Unfolder";
+import type Unfolder from "@mutate/Unfolder";
 import type Traveler from "@core_i/Traveler";
 import logger from "@utils/SpectralLogger";
 

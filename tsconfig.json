@@ -31,14 +31,20 @@
       "@root/*": ["./*"],
       "@src/*": ["./src/*"],
       "@core/*": ["./src/core/*"],
+
       "@core_i/*": ["./src/core/integral/*"],
       "@i_skills/*": ["./src/core/integral/skills/*"],
       "@skill_cogi/*": ["./src/core/integral/skills/cognition/*"],
       "@skill_lang/*": ["./src/core/integral/skills/language/*"],
       "@skill_code/*": ["./src/core/integral/skills/code/*"],
       "@i_topology/*": ["./src/core/integral/topology/*"],
+
       "@core_s/*": ["./src/core/structural/*"],
       "@atomics/*": ["./src/core/structural/atomizers/*"],
+      "@mutate/*": ["./src/core/structural/mutations/*"],
+      "@props/*": ["./src/core/structural/properties/*"],
+      "@workers/*": ["./src/core/structural/workers/*"],
+
       "@utils/*": ["./src/utils/*"],
       "@config": ["./src/config.ts"]
     }

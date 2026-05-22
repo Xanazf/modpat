@@ -1,6 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
 import { TensorMath_GPU } from "@core_s/Math";
-import type Unfolder from "@core_s/Unfolder";
+import type Unfolder from "@mutate/Unfolder";
 import logger from "@utils/SpectralLogger";
 // @ts-expect-error
 import type System from "./System";

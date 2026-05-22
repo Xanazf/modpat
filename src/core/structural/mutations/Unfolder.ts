@@ -6,8 +6,8 @@ import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { extractTriples } from "@utils/tripleExtract";
 import { random } from "@utils/seededRandom";
-import { computeCurvature } from "@core_s/Curvature";
-import type { GridIndex4D } from "@core_s/GridIndex4D";
+import { computeCurvature } from "@props/Curvature";
+import type { GridIndex4D } from "@mutate/GridIndex4D";
 import axios from "axios";
 import wiki from "wikipedia";
 

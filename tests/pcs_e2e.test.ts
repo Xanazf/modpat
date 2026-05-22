@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { createTestTraveler } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
-import Unfolder from "@core_s/Unfolder";
+import Unfolder from "@mutate/Unfolder";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeE2ETest() {

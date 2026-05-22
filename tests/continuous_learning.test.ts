@@ -7,7 +7,7 @@ import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import Store from "@core_s/Memory";
 import { SystemPersistence } from "@core_s/Persistence";
-import Unfolder from "@core_s/Unfolder";
+import Unfolder from "@mutate/Unfolder";
 import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";

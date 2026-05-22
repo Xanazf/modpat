@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { computeSessionSheaf, type SessionSheaf } from "@core_s/SessionSheaf";
-import type { ClusterId } from "@core_s/FrameworkIndex";
+import type { ClusterId } from "@mutate/FrameworkIndex";
 import { describe, it } from "./utils/harness";
 
 // --- helpers -----------------------------------------------------------------

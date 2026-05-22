@@ -1,5 +1,5 @@
 import { DOPAT_CONFIG } from "@config";
-import type { NerveGraph } from "./TopologyMapper";
+import type { NerveGraph } from "@core_s/TopologyMapper";
 
 declare const __superBrand: unique symbol;
 declare const __clusterBrand: unique symbol;

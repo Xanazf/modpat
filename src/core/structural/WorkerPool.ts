@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import type { ManifoldLayout } from "@core_i/System";
 import type { Constellation } from "@core_s/ManifoldMetrics";
-import type { DictionaryExpansion } from "@core_s/Unfolder";
+import type { DictionaryExpansion } from "@mutate/Unfolder";
 import type { RawGap } from "@core_s/workers/manifold.worker";
 import type { AstTriple, AstExtractOptions } from "@utils/astExtract";
 
