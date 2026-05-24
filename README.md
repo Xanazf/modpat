@@ -130,7 +130,7 @@ Deduction finds the optimal coordinate path (geodesic) connecting two precepts t
 
 * **Path Relaxation:** The system uses gradient descent to optimize path coordinates toward high-density local minima while maintaining path continuity via spring forces.
 * **Learned Christoffel Symbols:** The Traveler accumulates a $4 \times 4 \times 4$ correction tensor $\Delta\Gamma^{i}_{jk}$ from prior traversals.
-  Each step applies the geodesic deviation $\sum_{j,k} \Delta\Gamma^{i}_{jk},v^j v^k$ to bias future paths toward historically successful routes.
+  * Each step applies the geodesic deviation $\sum_{j,k} \Delta\Gamma^{i}_{jk},v^j v^k$ to bias future paths toward historically successful routes.
 * **Parallel Transport and Holonomy:** After each traversal the Traveler computes a $4 \times 4$ holonomy matrix (accumulated 4D plane rotations along the path). A high Frobenius norm $|H - I|_F$ signals a winding, creative inference rather than a straight deduction.
 * **Time Monotonicity:** Node coordinates along the $W$ axis (Age) are constrained to be non-decreasing, ensuring sequential temporal order in derivations.
 * **Trap Detection:** Sinks with high mass/density but near-zero entropy rate are identified as logic traps (representing circular definitions) and bypassed.
