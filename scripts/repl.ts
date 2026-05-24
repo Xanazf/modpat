@@ -23,12 +23,12 @@ import {
   buildManifoldIndex,
   constellationGaps,
   constellations,
-  distance4D,
   orbitalParent,
   orbitRadius,
   satellites,
 } from "@core_s/ManifoldMetrics";
 import type Store from "@core_s/Memory";
+import { SystemPersistence } from "@core_s/Persistence";
 import { VocabSeedWorker } from "@core_s/VocabSeed";
 import type Unfolder from "@mutate/Unfolder";
 import type { SelfConcept } from "@props/Identity";
@@ -98,6 +98,7 @@ let system: System;
 let atomizer: Atomic.Engine;
 let resolver: Traveler;
 let store: Store;
+let persistence: SystemPersistence;
 let unfolder: Unfolder;
 let inference: Traveler;
 let self: SelfConcept | null = null;
@@ -143,6 +144,7 @@ async function init(): Promise<void> {
   });
 
   ({ system, atomizer, resolver, store, unfolder, inference } = runtime);
+  persistence = new SystemPersistence(store.connection);
   atomMode = runtime.atomizerMode;
   self = runtime.identity;
 
@@ -175,6 +177,7 @@ async function init(): Promise<void> {
               `Vocab seed: ${pct}% - ${p.matured.toLocaleString()} constellations formed`
             );
           }
+          pushUpdateToVisualizer().catch(() => {});
         },
       });
     }
@@ -502,7 +505,7 @@ async function handleCommand(raw: string): Promise<void> {
       process.stdout.write(
         `\n  ${bold("Self-test report")} ${gray(`(${ms} ms)`)}\n` +
           `    challenged: ${report.challenged}  promoted: ${green(String(report.promoted))}  failed: ${report.failed > 0 ? red(String(report.failed)) : gray("0")}\n` +
-          `    knowledge: ${gray(k.heard + "H")} ${k.remembered > 0 ? dim(k.remembered + "R") : gray("0R")} ${k.learned > 0 ? green(k.learned + "L") : gray("0L")} ${k.generalized > 0 ? cyan(k.generalized + "G") : ""}\n` +
+          `    knowledge: ${gray(`${k.heard}H`)} ${k.remembered > 0 ? dim(`${k.remembered}R`) : gray("0R")} ${k.learned > 0 ? green(`${k.learned}L`) : gray("0L")} ${k.generalized > 0 ? cyan(`${k.generalized}G`) : ""}\n` +
           (report.expandedTopics.length > 0
             ? `    expanded: ${report.expandedTopics.map(t => yellow(t)).join(", ")}\n`
             : "") +
@@ -540,7 +543,7 @@ async function handleCommand(raw: string): Promise<void> {
       }
       const probeText = queryText.endsWith("|-")
         ? queryText
-        : queryText + " |-";
+        : `${queryText} |-`;
       process.stdout.write(
         gray(`  Coherence loop (probe mode): "${probeText}"\n`)
       );
@@ -604,6 +607,7 @@ async function handleCommand(raw: string): Promise<void> {
                   `AST seed: ${pct}% - ${p.triples.toLocaleString()} triples crystallized`
                 );
               }
+              pushUpdateToVisualizer().catch(() => {});
             },
           });
           process.stdout.write(`  ${green("▶")} AST seeder running...\n\n`);
@@ -672,6 +676,7 @@ async function handleCommand(raw: string): Promise<void> {
                 `Vocab seed: ${pct}% - ${p.matured.toLocaleString()} constellations formed`
               );
             }
+            pushUpdateToVisualizer().catch(() => {});
           },
         });
         process.stdout.write(`  ${green("▶")} Vocab seeder resumed.\n\n`);
@@ -892,11 +897,49 @@ async function handleCommand(raw: string): Promise<void> {
     case "q": {
       await shutdown();
       process.exit(0);
+      break;
     }
 
     default: {
       warn(`Unknown command: :${cmd}  (try :help)`);
     }
+  }
+}
+
+let visualizerSrc: string | null = null;
+let visualizerTgt: string | null = null;
+
+async function pushUpdateToVisualizer(): Promise<void> {
+  try {
+    let pathNodeIds: number[] = [];
+    if (visualizerSrc && visualizerTgt) {
+      try {
+        const srcResult = atomizer.ingestSequence(visualizerSrc, system);
+        const tgtResult = atomizer.ingestSequence(visualizerTgt, system);
+        if (srcResult.length > 0 && tgtResult.length > 0) {
+          const pathIds = await runtime.mapper.traverse(
+            srcResult[0],
+            tgtResult[tgtResult.length - 1],
+            { steps: 16, maxIterations: 60 }
+          );
+          pathNodeIds = Array.from(pathIds);
+        }
+      } catch {
+        // Ignore traversal errors
+      }
+    }
+
+    const res = await store.pushManifoldUpdate(2000, pathNodeIds);
+    if (res) {
+      if (res.src !== undefined) {
+        visualizerSrc = res.src;
+      }
+      if (res.tgt !== undefined) {
+        visualizerTgt = res.tgt;
+      }
+    }
+  } catch {
+    // Ignore error
   }
 }
 
@@ -907,6 +950,10 @@ async function handleInput(line: string): Promise<void> {
 
   if (line.startsWith(":")) {
     await handleCommand(line);
+    if (dbPath !== ":memory:") {
+      await system.snapshot(persistence).catch(() => {});
+      await pushUpdateToVisualizer().catch(() => {});
+    }
     return;
   }
 
@@ -966,6 +1013,11 @@ async function handleInput(line: string): Promise<void> {
   // After responding, drain one backlog item (dict → wiki → ask user).
   // Fire-and-forget: result is shown before the next prompt.
   await drainInquiryQueue();
+
+  if (dbPath !== ":memory:") {
+    await system.snapshot(persistence).catch(() => {});
+    await pushUpdateToVisualizer().catch(() => {});
+  }
 }
 
 /**

@@ -12,7 +12,7 @@ const DOPAT_CONFIG = {
   /** Capacity of the scope-sequence index ring used for O(ring) forward-match lookups. */
   SEQUENCE_INDEX_SIZE: 4096,
   DECAY_RATE: 0.95,
-  USE_GPU: true,
+  USE_GPU: false,
   DRIFT_THRESHOLD: 100.0,
   /** PHYSICS is uppercase by convention: these are invariant physical laws, not a component config. All other sub-namespaces (resolver, mapper, structural…) configure runtime components and use lowercase. */
   PHYSICS: {
