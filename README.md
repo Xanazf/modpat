@@ -22,7 +22,7 @@ ModPAT is an experimental reasoning engine designed to explore logic through the
 1. Clone the repository:
    ```bash
    git clone https://github.com/Xanazf/modpat.git
-   cd mpat
+   cd modpat
    ```
 
 2. Install Node.js dependencies:
@@ -71,60 +71,69 @@ This architecture is highly abstract and hard to conceptualize, so keeping unuse
 
 ## Core Concepts
 
-### 1. The Gravity of Operators
+### 1. Attractor Fields of Operator Precepts
 
-The system is built on the premise that operators (relationships) are the primary structural elements, while variables are secondary.
+The coordinate system is designed such that logical operators (relationships) act as primary structural anchors, while variables are secondary coordinates.
 
-* **Operators as Attractors:** Logic operators such as `AND`, `OR`, and `IMPLIES` are treated as "massive" points of attraction within a coordinate system. They define the "gravity" of the local logical space.
-* **Variable Abstraction:** Variables (the atoms of a statement) are treated as low-mass particles that cluster around these operators. This allows the system to identify logical patterns based on their topological shape rather than their specific symbolic labels.
+* **Operator Attraction:** Logic operators (e.g., `AND`, `OR`, `IMPLIES`) are initialized with high mass/density at fixed coordinates. During path relaxation, they exert potential attraction forces that pull path nodes toward them.
+* **Variable Clustering:** Variable precepts (representing the tokens of a statement) are placed at low-mass coordinates clustered around these operator attractors. This allows the system to identify logical structures based on their geometric distribution rather than specific symbolic labels.
 
-### 2. Topology
+### 2. Topological Manifold Layout
 
-Rules and axioms are not stored as a list, but as a topography.
+Logical rules and assertions are represented as coordinate positions and spatial relations rather than discrete symbolic lists.
 
-* **Pathways:** A logical rule like `A implies B` creates a specific gradient or pathway between coordinates in the manifold.
-* **Axiomatic Templates:** By abstracting variables into generic placeholders, the system generates universal signatures. This allows a rule learned in one context to be recognized in another if the topological "shape" of the statement matches.
+* **Coordinate Gradients:** An assertion or rule (such as `A implies B`) creates a coordinate path connecting those concepts within the manifold.
+* **Structural Signatures:** By abstracting concrete variable names into generic relative offsets, the system matches statements of identical logical forms using their spatial layout. A rule learned in one context is recognized in another if its geometric signature matches.
 
 ## System Architecture
 
-The integral layer has exactly two conceptual residents:
+The core runtime contains two primary components:
 
-* **System** - the world. Precepts are terrain. The topology encodes everything the system knows.
-* **Mapper** - the traveler. It observes the terrain (perception), moves through it (locomotion), and leaves trails (learning). Thinking IS movement. `mapper.process(text)` is the single entry point for all input.
+* **System**: The manifold state. Holds the property arrays and enforces the coordinate schema.
+* **Traveler**: The execution engine (exposed as `mapper` in the Runtime). It propagates activation/density across coordinates (perception), relaxes coordinate paths using gradient descent (locomotion), and reinforces successful paths in memory (learning). `mapper.process(text)` is the single entry point for all input.
 
-A thin **Language** layer sits at the boundary: it converts raw text into System precepts (ingest direction) and decodes a Mapper terminal position back into text (express direction). This is translation, not thinking.
+A thin **Language** layer sits at the boundary: it tokenizes and projects natural language into manifold coordinates (ingest direction), and decodes final traveler coordinates back to text (express direction).
 
 ```
-Natural language → Language.ingest() → Manifold (DOPAT) → Mapper.perceive() + traverse()
+Natural language → Language.ingest() → Manifold (DOPAT) → Traveler.perceive() + traverse()
                          ↑                                          ↕
-                  Language.express() ←-- Mapper.process() --  Memory Vault (DuckDB)
+                  Language.express() ←-- Traveler.process() --  Memory Vault (DuckDB)
+                                                    ↕
+                                        Topology layer (TDA, Ricci flow,
+                                        persistent homology, singularity remediation)
 ```
 
 ### Contiguous Memory Manifold (DOPAT)
 
-The core state is managed in a contiguous system buffer for high-performance topological calculations. Every logical "precept" is stored as a physical entity within a dual-layer manifold with the following properties:
+State is stored in a single contiguous SharedArrayBuffer managed by `System.ts` for zero-copy concurrency. Each logical precept is represented as an index in this buffer, with the following properties:
 
-* **Matter (Mass):** The logical importance or content density of the precept.
-* **Kind (Scope):** The structural reach or category identifier.
-* **Energy (Depth):** The logical potential or consequence depth.
-* **Age (Time):** The temporal state or context within the logical loom.
-* **4D Position:** Coordinates in Matter (X), Kind (Y), Energy (Z), and Age (W).
+* **Mass:** The structural attraction weight of the precept (used to calculate potential fields).
+* **Scope:** The structural scope or category identifier.
+* **Depth:** The logical hierarchy or consequence depth.
+* **Time:** Freshness tracking used for decay.
+* **4D Coordinates (posX, posY, posZ, posW):** Location vectors mapping Matter (X), Kind (Y), Energy (Z), and Age (W).
 
-### Spectral Logic (Resonance Propagation)
+The manifold is a living geometry. A conformal factor $\phi$ (derived from local density) continuously warps distances: $g\_{ij} = e^{2\phi} \delta\_{ij}$. Ricci flow ($\partial g / \partial t = -2,\mathrm{Ric}$) flattens high-curvature zones over time, preventing runaway attractor sinks. Topological events (component births/deaths, $H\_1$ loop appearances) are detected every 100 ticks and drive the dream/expansion cycle toward underexplored regions.
 
-The engine models logical operations as energy vibrations propagating through a manifold. This is implemented via a Transfer Matrix (W) that defines the conductivity of logic between precepts:
+### Semantic Resonance Propagation
 
-* **Constructive Interference (AND):** Logical conjunctions result in signal amplification through shared semantic scopes.
-* **Destructive Interference (NOT):** Negation is modeled as a 180-degree phase shift, creating repelling potential fields.
-* **Gravitational Lensing:** Identity shifts (e.g., "is", "are") and quantifiers act as lenses that bend the logical path, allowing energy to bypass structural operators.
+Deductive inference propagates activation values across coordinates. The potential field equations and spatial indexes dictate signal propagation between precepts:
+
+* **Conjunction (AND):** Overlapping semantic scopes amplify local density values.
+* **Inversion (NOT):** Negation is represented by complementary coordinates, inducing localized potential repulsion fields (forces pointing away from the precept).
+* **Geometric Lensing:** Identity transformations (e.g. "is", "are") and quantifiers project coordinates, warping the distance metric to connect disjoint semantic regions.
+* **Conformal Potential:** The scalar potential $\phi$ at each point scales the metric as $g\_{ij} = e^{2\phi} \delta\_{ij}$. Force is $F = -\nabla\phi$; scalar curvature is $R = -6,e^{-2\phi}!\left(\nabla^2\phi + |\nabla\phi|^2\right)$.
 
 ### Geodesic Pathfinding
 
-Deduction is performed by finding the "geodesic" (the shortest logical path) through the 4D manifold potential field.
+Deduction finds the optimal coordinate path (geodesic) connecting two precepts through the 4D potential field.
 
-* **Iterative Relaxation:** The system uses gradient descent to move path nodes toward high-density logic attractors while maintaining path smoothness through simulated spring forces.
-* **Monotonic Age Traversal:** Paths are constrained by the Temporal Anisotropy, ensuring temporal consistency in derivations.
-* **Trap Detection:** A self-review mechanism identifies "Logic Traps" - zones of high mass but low entropy that indicate circular reasoning or semantic dead-ends.
+* **Path Relaxation:** The system uses gradient descent to optimize path coordinates toward high-density local minima while maintaining path continuity via spring forces.
+* **Learned Christoffel Symbols:** The Traveler accumulates a $4 \times 4 \times 4$ correction tensor $\Delta\Gamma^{i}_{jk}$ from prior traversals. Each step applies the geodesic deviation $\sum_{j,k} \Delta\Gamma^{i}\_{jk},v^j v^k$ to bias future paths toward historically successful routes.
+* **Parallel Transport and Holonomy:** After each traversal the Traveler computes a $4 \times 4$ holonomy matrix (accumulated 4D plane rotations along the path). A high Frobenius norm $|H - I|\_F$ signals a winding, creative inference rather than a straight deduction.
+* **Time Monotonicity:** Node coordinates along the $W$ axis (Age) are constrained to be non-decreasing, ensuring sequential temporal order in derivations.
+* **Trap Detection:** Sinks with high mass/density but near-zero entropy rate are identified as logic traps (representing circular definitions) and bypassed.
+* **Path Homotopy / Analogy:** Two paths that are non-homotopic relative to a persistent $H\_1$ generator are analogy candidates. A winding-number test around each generator atom produces a scalar $\mathrm{analogyScore} \in \[0, 1]$.
 
 ### Skill Registry
 
@@ -142,25 +151,38 @@ mapper.registerSkill(preceptId, async (ctx) => {
 });
 ```
 
-As a skill is used successfully, `reinforcePath` grows the capability precept's mass, making it a stronger attractor for similar future queries - routing by physics, not code.
+As a skill is used successfully, `reinforcePath` increases the capability precept's density and mass, making its coordinates a stronger attractor for future query paths, resulting in geometry-based routing.
 
 ## Implementation Details
 
 ### Core Components
 
-* **Mapper** (`src/core/integral/Mapper.ts`) - the single thinker. Owns perception (resonance propagation, Phase 0–7 pipeline), locomotion (geodesic traversal via gradient descent), learning (`learnCycle`), and autonomous motivation (`startAutonomy`). The entry point for all input is `mapper.process(text)`.
-* **Language** (`src/core/integral/language/Language.ts`) - the translation boundary. `ingest(text)` tokenizes and classifies input; `ingestAssertion()` crystallizes declarative facts into the vault; `express(ids)` decodes precept sequences back to text.
-* **System** (`src/core/integral/System.ts`) - defines the DOPAT manifold, `TargetBuffer` enum (14 property buffers), `OperatorClass` enum (12 types). This is the topology schema.
-* **Skills** (`src/core/integral/skills/`) - open-ended skill registry. `Coder.ts` registers the code-synthesis handler.
-* **Synthesizer** (`src/core/integral/Coder.ts`) - collapses `Uint32Array` geodesic paths into executable TypeScript code. Used internally by the Mapper perception pipeline.
-* **Atomizers** (`src/core/structural/atomizers/`) - convert natural language or external signals into atomic logical quanta, mapping them to specific coordinates in the manifold. `SemanticAtomizer` uses 50D GloVe vectors projected to 192-dim manifold coordinates.
-* **Memory Vault** (`src/core/structural/Memory.ts`) - uses DuckDB to crystallize proven logical paths, allowing them to be recalled by their topological signature.
-* **Runtime** (`src/core/integral/Runtime.ts`) - boot/wiring only. `Runtime.boot(opts)` creates System → Atomizer → Store → Mapper → Language → Skills. Exposes `rt.mapper`, `rt.language`, `rt.store`.
+**Integral layer** (`src/core/integral/`)
+
+* **Traveler** (`Traveler.ts`) - the single thinker. Owns perception (resonance propagation, Phase 0–7 pipeline), locomotion (geodesic traversal via gradient descent), learning (`learnCycle`), and autonomous motivation (`startAutonomy`). Tracks `position[4]`, accumulated `holonomyFrame`, and `deltaGamma[64]` (learned Christoffel correction). Entry point: `mapper.process(text)`.
+* **System** (`System.ts`) - defines the DOPAT manifold, `TargetBuffer` enum (14 property buffers), `OperatorClass` enum (13 values: `None` through `Capability`). This is the topology schema.
+* **Runtime** (`Runtime.ts`) - boot/wiring only. `Runtime.boot(opts)` creates System → Atomizer → Store → Traveler → Language → Skills. Exposes `rt.mapper`, `rt.language`, `rt.store`.
+* **Topology** (`topology/`) - manifold geometry primitives. `HoTTKernel.ts` (homotopy-type-theory path combinators, $4 \times 4$ matrix ops), `Walkspace.ts` (geodesic walk space).
+* **Skills** (`skills/`) - open-ended skill registry under subdirectory categories.
+  * `language/Language.ts` - translation boundary. `ingest(text)` tokenizes/classifies; `ingestAssertion()` crystallizes facts; `express(ids)` decodes to text.
+  * `language/WorkingMemory.ts` - short-term conversational context for reference resolution.
+  * `code/Coder.ts` - `Synthesizer` class: collapses `Uint32Array` geodesic paths into executable TypeScript. Used internally by the Traveler perception pipeline.
+  * `cognition/InquiryQueue.ts` - queues open-ended inquiry tasks for the Traveler.
+  * `cognition/CognitiveLoop.ts` - back-compat shim; delegates to `Traveler.startAutonomy()`.
+
+**Structural layer** (`src/core/structural/`)
+
+* **Atomizers** (`atomizers/`) - convert language/signals to manifold coordinates. `SemanticAtomizer` uses 50D GloVe vectors projected to 192-dim (96 logic + 96 semantic) coordinates.
+* **Memory Vault** (`Memory.ts`) - DuckDB-backed. `crystallizeProof()` saves proven paths with topological fingerprints; `checkInterferencePattern()` recalls them by topo-signature Jaccard similarity to skip re-computation. Persists Traveler session state (`traveler_sessions` table) and long-horizon $\phi$ (`session_phi` table).
+* **Topology** - `PersistentHomology.ts` (Vietoris-Rips H₀/H₁ via GF(2) boundary reduction), `TopologyMapper.ts` (TDA Mapper nerve graph; fuzzy connectives `AND/OR/NOT/IMPLIES` over `ManifoldRegion`), `SessionSheaf.ts` (Čech H¹ over session overlaps).
+* **Curvature / Geometry** - `Curvature.ts` (scalar curvature $R = -6,e^{-2\phi}(\nabla^2\phi + |\nabla\phi|^2)$; plugged into geodesic WGSL shader), `Singularity.ts` (detects and remediates $\phi$-singularities by atom splitting), `FrameworkIndex.ts` (three-tier union-find hierarchy; $O(1)$ active-atom filtering for path relaxation).
+* **Manifold Infrastructure** - `ManifoldLifecycle.ts` (Triple Modular Redundancy, Ricci flow, topology ticks, singularity ticks, dream cycle), `ManifoldMetrics.ts`, `ManifoldReader.ts`, `Math.ts` (WebGPU `TensorMath_GPU` with CPU fallback).
+* **Workers** (`workers/`) - off-thread: `manifold.worker.ts`, `seed.worker.ts`, `ast.worker.ts`, `wiki.worker.ts`, `AstSeedWorker.ts`.
 
 ### Computation
 
 * **Hardware Acceleration:** Supports both SIMD-optimized CPU execution and GPU-accelerated matrix operations via WebGPU.
-* **Self-Correction:** Implements Triple Modular Redundancy (TMR) for critical system pointers to ensure stability during intensive topological shifts.
+* **Self-Correction:** Implements Triple Modular Redundancy (TMR) for the free-list allocator (consisting of three redundant allocator tracks with majority voting) to ensure structural stability during intensive manifold allocations.
 
 ## Usage
 
