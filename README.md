@@ -113,7 +113,7 @@ State is stored in a single contiguous SharedArrayBuffer managed by `System.ts` 
 * **Time:** Freshness tracking used for decay.
 * **4D Coordinates (posX, posY, posZ, posW):** Location vectors mapping Matter (X), Kind (Y), Energy (Z), and Age (W).
 
-The manifold is a living geometry. A conformal factor $\phi$ (derived from local density) continuously warps distances: $g\_{ij} = e^{2\phi} \delta\_{ij}$. Ricci flow ($\partial g / \partial t = -2,\mathrm{Ric}$) flattens high-curvature zones over time, preventing runaway attractor sinks. Topological events (component births/deaths, $H\_1$ loop appearances) are detected every 100 ticks and drive the dream/expansion cycle toward underexplored regions.
+The manifold is a living geometry. A conformal factor $\phi$ (derived from local density) continuously warps distances: $g_{ij} = e^{2\phi} \delta_{ij}$. Ricci flow ($\partial g / \partial t = -2,\mathrm{Ric}$) flattens high-curvature zones over time, preventing runaway attractor sinks. Topological events (component births/deaths, $H_1$ loop appearances) are detected every 100 ticks and drive the dream/expansion cycle toward underexplored regions.
 
 ### Semantic Resonance Propagation
 
@@ -122,18 +122,19 @@ Deductive inference propagates activation values across coordinates. The potenti
 * **Conjunction (AND):** Overlapping semantic scopes amplify local density values.
 * **Inversion (NOT):** Negation is represented by complementary coordinates, inducing localized potential repulsion fields (forces pointing away from the precept).
 * **Geometric Lensing:** Identity transformations (e.g. "is", "are") and quantifiers project coordinates, warping the distance metric to connect disjoint semantic regions.
-* **Conformal Potential:** The scalar potential $\phi$ at each point scales the metric as $g\_{ij} = e^{2\phi} \delta\_{ij}$. Force is $F = -\nabla\phi$; scalar curvature is $R = -6,e^{-2\phi}!\left(\nabla^2\phi + |\nabla\phi|^2\right)$.
+* **Conformal Potential:** The scalar potential $\phi$ at each point scales the metric as $g_{ij} = e^{2\phi} \delta_{ij}$. Force is $F = -\nabla\phi$; scalar curvature is $R = -6,e^{-2\phi}!\left(\nabla^2\phi + |\nabla\phi|^2\right)$.
 
 ### Geodesic Pathfinding
 
 Deduction finds the optimal coordinate path (geodesic) connecting two precepts through the 4D potential field.
 
 * **Path Relaxation:** The system uses gradient descent to optimize path coordinates toward high-density local minima while maintaining path continuity via spring forces.
-* **Learned Christoffel Symbols:** The Traveler accumulates a $4 \times 4 \times 4$ correction tensor $\Delta\Gamma^{i}_{jk}$ from prior traversals. Each step applies the geodesic deviation $\sum_{j,k} \Delta\Gamma^{i}\_{jk},v^j v^k$ to bias future paths toward historically successful routes.
-* **Parallel Transport and Holonomy:** After each traversal the Traveler computes a $4 \times 4$ holonomy matrix (accumulated 4D plane rotations along the path). A high Frobenius norm $|H - I|\_F$ signals a winding, creative inference rather than a straight deduction.
+* **Learned Christoffel Symbols:** The Traveler accumulates a $4 \times 4 \times 4$ correction tensor $\Delta\Gamma^{i}_{jk}$ from prior traversals.
+  Each step applies the geodesic deviation $\sum_{j,k} \Delta\Gamma^{i}_{jk},v^j v^k$ to bias future paths toward historically successful routes.
+* **Parallel Transport and Holonomy:** After each traversal the Traveler computes a $4 \times 4$ holonomy matrix (accumulated 4D plane rotations along the path). A high Frobenius norm $|H - I|_F$ signals a winding, creative inference rather than a straight deduction.
 * **Time Monotonicity:** Node coordinates along the $W$ axis (Age) are constrained to be non-decreasing, ensuring sequential temporal order in derivations.
 * **Trap Detection:** Sinks with high mass/density but near-zero entropy rate are identified as logic traps (representing circular definitions) and bypassed.
-* **Path Homotopy / Analogy:** Two paths that are non-homotopic relative to a persistent $H\_1$ generator are analogy candidates. A winding-number test around each generator atom produces a scalar $\mathrm{analogyScore} \in \[0, 1]$.
+* **Path Homotopy / Analogy:** Two paths that are non-homotopic relative to a persistent $H_1$ generator are analogy candidates. A winding-number test around each generator atom produces a scalar $\mathrm{analogyScore} \in [0, 1]$.
 
 ### Skill Registry
 
