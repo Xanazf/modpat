@@ -1,5 +1,5 @@
 /**
- * E1 – Logical lift: resolve compound logical formulas using scope-based inference.
+ * Logical lift: resolve compound logical formulas using scope-based inference.
  *
  * Pure function: takes only atom IDs and the manifold view, returns concluded
  * atom IDs or null. No Traveler instance state is required.
@@ -42,7 +42,7 @@ interface ParsedClause {
  * inference rules. Returns the concluded atom ID sequence, or null when no
  * rule fires (caller should fall through to the settling probe).
  */
-export function resolveE1Formula(
+export function resolveLogicFormula(
   ids: Uint32Array,
   system: Root.ManifoldView
 ): Uint32Array | null {

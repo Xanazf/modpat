@@ -7,7 +7,7 @@
  */
 
 import { DOPAT_CONFIG } from "@config";
-import { resolveE1Formula } from "@core_i/formula/E1Formula";
+import { resolveLogicFormula } from "@core_i/formula/E1Formula";
 import { OperatorClass, SlotType } from "@core_i/System";
 import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import type Store from "@core_s/Memory";
@@ -17,7 +17,7 @@ import { type CodePattern, Synthesizer } from "@skill_code/Coder";
 import type { Language } from "@skill_lang/Language";
 import nlp from "compromise";
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// -- Types ------------------------------------------------------------------
 
 type PerceptionOptions = Mapping.PerceptionOptions;
 type CoherentResult = Mapping.CoherentResult;
@@ -68,7 +68,7 @@ export function makePerceptionCache(): PerceptionCache {
   };
 }
 
-// ── Public API ─────────────────────────────────────────────────────────────
+// -- Public API -------------------------------------------------------------
 
 export async function perceive(
   ids: Uint32Array,
@@ -130,7 +130,7 @@ export async function perceiveCoherent(
   };
 }
 
-// ── Observe → Follow → Read ────────────────────────────────────────────────
+// -- Observe → Follow → Read ------------------------------------------------
 
 export async function observeSettlingGradient(
   ids: Uint32Array,
@@ -199,7 +199,7 @@ export async function observeSettlingGradient(
 
   // Phase E1: fuzzy connective formula resolution
   if (!opts.probeMode) {
-    const e1Result = resolveE1Formula(ids, system);
+    const e1Result = resolveLogicFormula(ids, system);
     if (e1Result !== null && e1Result.length > 0) {
       if (store) {
         await store.crystallizeProof(ids, e1Result, 1.0);
@@ -326,7 +326,7 @@ export async function observeSettlingGradient(
   return { ids: result, sinkStrength: 0 };
 }
 
-// ── Settling helpers ────────────────────────────────────────────────────────
+// -- Settling helpers --------------------------------------------------------
 
 export function settleAtoms(
   ids: Uint32Array,
@@ -472,7 +472,7 @@ function _heaviestInput(ids: Uint32Array, system: Root.ManifoldView): number {
   return bestId;
 }
 
-// ── Code synthesis ──────────────────────────────────────────────────────────
+// -- Code synthesis ----------------------------------------------------------
 
 async function _resolveCodeSynthesis(
   ids: Uint32Array,
@@ -538,7 +538,7 @@ async function _resolveCodeSynthesis(
   return atomizer.ingestSequence("unknown", system);
 }
 
-// ── Semantic lookup ─────────────────────────────────────────────────────────
+// -- Semantic lookup ---------------------------------------------------------
 
 export function collectSequence(
   startId: number,

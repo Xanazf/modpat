@@ -14,7 +14,7 @@ import type Unfolder from "@mutate/Unfolder";
 import { CURVATURE_WGSL } from "@props/Curvature";
 import nlp from "compromise";
 
-// ── State & deps ───────────────────────────────────────────────────────────
+// -- State & deps -----------------------------------------------------------
 
 /** All mutable locomotion state owned by the Traveler. Create with makeLocomotionState(). */
 export interface LocomotionState {
@@ -43,7 +43,7 @@ export function makeLocomotionState(): LocomotionState {
   };
 }
 
-// ── Grid index ─────────────────────────────────────────────────────────────
+// -- Grid index -------------------------------------------------------------
 
 export function buildGridIndex(
   system: Root.ManifoldView,
@@ -52,7 +52,7 @@ export function buildGridIndex(
   state.gridIndex.buildFromSystem(system);
 }
 
-// ── Metric force ───────────────────────────────────────────────────────────
+// -- Metric force -----------------------------------------------------------
 
 export function getMetricForce(
   px: number,
@@ -213,7 +213,7 @@ export function getMetricForceWithInnerDerivative(
   }
 }
 
-// ── CPU path relaxation ────────────────────────────────────────────────────
+// -- CPU path relaxation ----------------------------------------------------
 
 export function relaxPath(
   px: Float64Array,
@@ -277,7 +277,7 @@ export function relaxPath(
   state._lastPathVelocity = [tvx / vMag, tvy / vMag, tvz / vMag, tvw / vMag];
 }
 
-// ── GPU path relaxation ────────────────────────────────────────────────────
+// -- GPU path relaxation ----------------------------------------------------
 
 export async function relaxPathGPU(
   px: Float64Array,
@@ -480,7 +480,7 @@ async function _initGPUPipeline(state: LocomotionState): Promise<void> {
   });
 }
 
-// ── C4: Christoffel corrections ────────────────────────────────────────────
+// -- C4: Christoffel corrections --------------------------------------------
 
 function _christoffelForce(
   vx: number,
@@ -517,7 +517,7 @@ export function regularizeChristoffels(state: LocomotionState): void {
   for (let i = 0; i < 64; i++) state.deltaGamma[i] *= decay;
 }
 
-// ── D2: Holonomy ───────────────────────────────────────────────────────────
+// -- D2: Holonomy -----------------------------------------------------------
 
 export function computeHolonomy(
   px: Float64Array,
@@ -586,7 +586,7 @@ export function computeHolonomy(
   state.lastInferentialEffort = Math.sqrt(frobSq) / 4;
 }
 
-// ── D3: Homotopy ───────────────────────────────────────────────────────────
+// -- D3: Homotopy -----------------------------------------------------------
 
 export function detectHomotopy(
   pathA: Uint32Array,
@@ -643,7 +643,7 @@ function _windingNumber(
   return wn;
 }
 
-// ── Path helpers ───────────────────────────────────────────────────────────
+// -- Path helpers -----------------------------------------------------------
 
 export function reinforcePath(
   path: Uint32Array,
@@ -866,7 +866,7 @@ function _extractIds(
   return new Uint32Array(resultIds);
 }
 
-// ── Main traversal ─────────────────────────────────────────────────────────
+// -- Main traversal ---------------------------------------------------------
 
 export async function travel(
   sourceId: number,

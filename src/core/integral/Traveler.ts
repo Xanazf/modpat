@@ -46,7 +46,7 @@ import {
 import logger from "@utils/SpectralLogger";
 import { extractTopic } from "@utils/topicExtraction";
 import nlp from "compromise";
-import { resolveE1Formula } from "./formula/E1Formula";
+import { resolveLogicFormula } from "./formula/E1Formula";
 import { classifyOperatorToken, OperatorClass, SystemRef } from "./System";
 import type { SkillHandler } from "./skills";
 
@@ -491,8 +491,8 @@ class Traveler implements Mapping.Engine {
   }
 
   /** Delegate to the pure E1Formula module (formula/E1Formula.ts). */
-  private _resolveE1Formula(ids: Uint32Array): Uint32Array | null {
-    return resolveE1Formula(ids, this.system);
+  private _resolveLogicFormula(ids: Uint32Array): Uint32Array | null {
+    return resolveLogicFormula(ids, this.system);
   }
 
   /**

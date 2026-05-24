@@ -198,7 +198,7 @@ function computePrincipalCurvatures(sdf: ScalarField, p: Vector): number {
  */
 
 /**
- * SCALAR CURVATURE (Curvature.ts — phase C1)
+ * SCALAR CURVATURE (Curvature.ts - phase C1)
  * The conformal metric $g_{ij} = e^{2\phi} \delta_{ij}$ has scalar curvature:
  *
  *   $$R = -6\,e^{-2\phi}\!\left(\nabla^2\phi + |\nabla\phi|^2\right)$$
@@ -208,7 +208,7 @@ function computePrincipalCurvatures(sdf: ScalarField, p: Vector): number {
  */
 
 /**
- * LEARNED CHRISTOFFEL SYMBOLS (Traveler.ts — phase C4)
+ * LEARNED CHRISTOFFEL SYMBOLS (Traveler.ts - phase C4)
  * The Traveler maintains a $4 \times 4 \times 4$ correction tensor
  * $\Delta\Gamma^{i}_{jk}$ trained from traversal history.
  * At each path step, the geodesic deviation is added to the gradient force:
@@ -221,7 +221,7 @@ function computePrincipalCurvatures(sdf: ScalarField, p: Vector): number {
  */
 
 /**
- * PARALLEL TRANSPORT AND HOLONOMY (Traveler.ts — phase D2)
+ * PARALLEL TRANSPORT AND HOLONOMY (Traveler.ts - phase D2)
  * After each call to `relaxPath()`, the Traveler computes the holonomy matrix
  * $H \in SO(4)$ by composing 4D plane rotations (via Rodrigues formula) along
  * successive tangent vectors of the path:
@@ -237,7 +237,7 @@ function computePrincipalCurvatures(sdf: ScalarField, p: Vector): number {
  */
 
 /**
- * PATH HOMOTOPY AND ANALOGY (Traveler.ts — phase D3)
+ * PATH HOMOTOPY AND ANALOGY (Traveler.ts - phase D3)
  * Two paths $\gamma_A$ and $\gamma_B$ sharing start/end atoms are homotopic
  * (equivalent inferences) when their loop $\gamma_A \cdot \gamma_B^{-1}$ has
  * winding number 0 around every persistent $H_1$ generator.
