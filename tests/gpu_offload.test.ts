@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TensorMath_GPU } from "@core_s/Math";
+import { gpu_math } from "@core_s/Math";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
@@ -35,7 +35,7 @@ export async function executeGPUOffloadTest() {
       // GPU fence: await the device instead of an arbitrary timeout.
       // setGPUEnabled fires an async device-init that completes before getDevice resolves.
       env.resolver.setGPUEnabled(true);
-      await TensorMath_GPU.getDevice(); // f32 GPU; accept up to 1e-4 relative error vs f64 CPU
+      await gpu_math.getDevice(); // f32 GPU; accept up to 1e-4 relative error vs f64 CPU
 
       const gpuStart = performance.now();
       const gpuResult = await env.resolver.resolveSequence(ids);
@@ -70,7 +70,7 @@ export async function executeGPUOffloadTest() {
       }
 
       env.resolver.setGPUEnabled(true);
-      await TensorMath_GPU.getDevice();
+      await gpu_math.getDevice();
       const gpuPath = await env.resolver.calculateGeodesic(skyId, waterId, 64);
       assert.ok(
         gpuPath.length > 0,

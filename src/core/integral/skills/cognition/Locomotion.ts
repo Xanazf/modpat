@@ -7,7 +7,15 @@
 
 import { DOPAT_CONFIG } from "@config";
 import { SlotType } from "@core_i/System";
-import { TensorMath_GPU } from "@core_s/Math";
+import {
+  computeHolonomy as computeHolonomyMath,
+  computeChristoffelForce,
+  updateChristoffels,
+  regularizeChristoffels as regularizeChristoffelsMath,
+  windingNumber2D,
+  distance4DPoints,
+  gpu_math,
+} from "@core_s/Math";
 import { metrics } from "@core_s/Metrics";
 import { GridIndex4D } from "@mutate/GridIndex4D";
 import type Unfolder from "@mutate/Unfolder";
@@ -18,7 +26,7 @@ import nlp from "compromise";
 
 /** All mutable locomotion state owned by the Traveler. Create with makeLocomotionState(). */
 export interface LocomotionState {
-  gpu: TensorMath_GPU | null;
+  gpu: PMath.Engine | null;
   geodesicPipeline: GPUComputePipeline | null;
   readonly gridIndex: GridIndex4D;
   readonly lastHolonomy: Float64Array; // 4×4 – updated each traverse
@@ -229,6 +237,8 @@ export function relaxPath(
   system: Root.ManifoldView,
   state: LocomotionState
 ): void {
+  const v = new Float64Array(4);
+  const cf = new Float64Array(4);
   for (let iter = 0; iter < maxIterations; iter++) {
     for (let i = 1; i < steps; i++) {
       const [, fx, fy, fz, fw] = getMetricForce(
@@ -246,13 +256,17 @@ export function relaxPath(
         sy = (py[i - 1] + py[i + 1]) / 2 - py[i];
       const se = (pe[i - 1] + pe[i + 1]) / 2 - pe[i],
         sa = (pa[i - 1] + pa[i + 1]) / 2 - pa[i];
-      const [cfx, cfy, cfz, cfw] = _christoffelForce(
-        px[i] - px[i - 1],
-        py[i] - py[i - 1],
-        pe[i] - pe[i - 1],
-        pa[i] - pa[i - 1],
-        state
-      );
+      
+      v[0] = px[i] - px[i - 1];
+      v[1] = py[i] - py[i - 1];
+      v[2] = pe[i] - pe[i - 1];
+      v[3] = pa[i] - pa[i - 1];
+      computeChristoffelForce(v, state.deltaGamma, cf);
+      const cfx = cf[0],
+        cfy = cf[1],
+        cfz = cf[2],
+        cfw = cf[3];
+
       px[i] += lr * (sx * 2 - fx - cfx);
       py[i] += lr * (sy * 2 - fy - cfy);
       pe[i] += lr * (se * 2 - fz - cfz);
@@ -293,7 +307,7 @@ export async function relaxPathGPU(
   state: LocomotionState
 ): Promise<void> {
   if (!state.geodesicPipeline) await _initGPUPipeline(state);
-  const device = await TensorMath_GPU.getDevice();
+  const device = await gpu_math.getDevice();
   const sysLength = system.length;
   const sysInfluence = new Float32Array(sysLength),
     sysSlotType = new Uint32Array(sysLength);
@@ -417,7 +431,7 @@ export async function relaxPathGPU(
 }
 
 async function _initGPUPipeline(state: LocomotionState): Promise<void> {
-  const device = await TensorMath_GPU.getDevice();
+  const device = await gpu_math.getDevice();
   const shader = device.createShaderModule({
     code: `
     @group(0) @binding(0) var<storage, read_write> pathData: array<vec4<f32>>;
@@ -482,39 +496,13 @@ async function _initGPUPipeline(state: LocomotionState): Promise<void> {
 
 // -- C4: Christoffel corrections --------------------------------------------
 
-function _christoffelForce(
-  vx: number,
-  vy: number,
-  vz: number,
-  vw: number,
-  state: LocomotionState
-): [number, number, number, number] {
-  const v = [vx, vy, vz, vw],
-    f = [0, 0, 0, 0],
-    dG = state.deltaGamma;
-  for (let i = 0; i < 4; i++)
-    for (let j = 0; j < 4; j++) {
-      const base = i * 16 + j * 4;
-      for (let k = 0; k < 4; k++) f[i] += dG[base + k] * v[j] * v[k];
-    }
-  return [f[0], f[1], f[2], f[3]];
-}
-
 function _updateChristoffels(scale: number, state: LocomotionState): void {
-  const [vx, vy, vz, vw] = state._lastPathVelocity,
-    v = [vx, vy, vz, vw];
-  const delta = DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_LR * scale,
-    dG = state.deltaGamma;
-  for (let i = 0; i < 4; i++)
-    for (let j = 0; j < 4; j++) {
-      const base = i * 16 + j * 4;
-      for (let k = 0; k < 4; k++) dG[base + k] += delta * v[i] * v[j] * v[k];
-    }
+  const delta = DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_LR * scale;
+  updateChristoffels(state._lastPathVelocity, delta, state.deltaGamma);
 }
 
 export function regularizeChristoffels(state: LocomotionState): void {
-  const decay = 1 - DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_REGULARIZATION;
-  for (let i = 0; i < 64; i++) state.deltaGamma[i] *= decay;
+  regularizeChristoffelsMath(state.deltaGamma, DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_REGULARIZATION);
 }
 
 // -- D2: Holonomy -----------------------------------------------------------
@@ -527,63 +515,7 @@ export function computeHolonomy(
   steps: number,
   state: LocomotionState
 ): void {
-  const H = state.lastHolonomy;
-  H.fill(0);
-  H[0] = H[5] = H[10] = H[15] = 1;
-  const R = new Float64Array(16);
-  for (let i = 1; i < steps; i++) {
-    const ux = px[i] - px[i - 1],
-      uy = py[i] - py[i - 1],
-      uz = pe[i] - pe[i - 1],
-      uw = pa[i] - pa[i - 1];
-    const vx = px[i + 1] - px[i],
-      vy = py[i + 1] - py[i],
-      vz = pe[i + 1] - pe[i],
-      vw = pa[i + 1] - pa[i];
-    const uMag = Math.sqrt(ux * ux + uy * uy + uz * uz + uw * uw) + 1e-12,
-      vMag = Math.sqrt(vx * vx + vy * vy + vz * vz + vw * vw) + 1e-12;
-    const ûx = ux / uMag,
-      ûy = uy / uMag,
-      ûz = uz / uMag,
-      ûw = uw / uMag;
-    const v̂x = vx / vMag,
-      v̂y = vy / vMag,
-      v̂z = vz / vMag,
-      v̂w = vw / vMag;
-    const cosT = Math.max(
-      -1,
-      Math.min(1, ûx * v̂x + ûy * v̂y + ûz * v̂z + ûw * v̂w)
-    );
-    if (Math.abs(cosT) > 1 - 1e-10) continue;
-    const sinT = Math.sqrt(1 - cosT * cosT);
-    const px_ = (v̂x - cosT * ûx) / sinT,
-      py_ = (v̂y - cosT * ûy) / sinT,
-      pz_ = (v̂z - cosT * ûz) / sinT,
-      pw_ = (v̂w - cosT * ûw) / sinT;
-    const û = [ûx, ûy, ûz, ûw],
-      p_ = [px_, py_, pz_, pw_];
-    for (let a = 0; a < 4; a++)
-      for (let b = 0; b < 4; b++)
-        R[a * 4 + b] =
-          (a === b ? 1 : 0) +
-          sinT * (p_[a] * û[b] - û[a] * p_[b]) +
-          (cosT - 1) * (û[a] * û[b] + p_[a] * p_[b]);
-    const h = Array.from(H);
-    for (let a = 0; a < 4; a++)
-      for (let c = 0; c < 4; c++)
-        H[a * 4 + c] =
-          R[a * 4] * h[c] +
-          R[a * 4 + 1] * h[4 + c] +
-          R[a * 4 + 2] * h[8 + c] +
-          R[a * 4 + 3] * h[12 + c];
-  }
-  let frobSq = 0;
-  for (let a = 0; a < 4; a++)
-    for (let b = 0; b < 4; b++) {
-      const d = H[a * 4 + b] - (a === b ? 1 : 0);
-      frobSq += d * d;
-    }
-  state.lastInferentialEffort = Math.sqrt(frobSq) / 4;
+  state.lastInferentialEffort = computeHolonomyMath(px, py, pe, pa, steps, state.lastHolonomy);
 }
 
 // -- D3: Homotopy -----------------------------------------------------------
@@ -613,7 +545,7 @@ export function detectHomotopy(
   for (const bar of qualified) {
     const id = bar.generatorAtomId;
     if (!system.isAllocated(id)) continue;
-    if (_windingNumber(loop, system.posX[id], system.posY[id]) !== 0)
+        if (windingNumber2D(loop, system.posX[id], system.posY[id]) !== 0)
       straddled.push(bar);
   }
   return {
@@ -622,25 +554,6 @@ export function detectHomotopy(
     analogyScore:
       qualified.length > 0 ? straddled.length / qualified.length : 0,
   };
-}
-
-function _windingNumber(
-  loop: [number, number][],
-  gx: number,
-  gy: number
-): number {
-  let wn = 0,
-    n = loop.length;
-  for (let i = 0; i < n; i++) {
-    const [x1, y1] = loop[i],
-      [x2, y2] = loop[(i + 1) % n];
-    if (y1 <= gy) {
-      if (y2 > gy && (x2 - x1) * (gy - y1) - (y2 - y1) * (gx - x1) > 0) wn++;
-    } else {
-      if (y2 <= gy && (x2 - x1) * (gy - y1) - (y2 - y1) * (gx - x1) < 0) wn--;
-    }
-  }
-  return wn;
 }
 
 // -- Path helpers -----------------------------------------------------------

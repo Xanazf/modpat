@@ -3,6 +3,7 @@ import {
   type HexadectreeNode,
   hexadectree,
 } from "d3-hexadectree";
+import { distance4DPoints } from "@core_s/Math";
 
 export interface BHAtom {
   id: number;
@@ -188,11 +189,7 @@ export class BarnesHut4D {
       const info = this.nodeInfo.get(node);
       if (!info || info.mass === 0) continue;
 
-      const dx = info.x - qx;
-      const dy = info.y - qy;
-      const dz = info.z - qz;
-      const dw = info.w - qw;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+            const dist = distance4DPoints(info.x, info.y, info.z, info.w, qx, qy, qz, qw);
 
       if (dist === 0) continue;
 

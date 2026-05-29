@@ -17,6 +17,7 @@
 
 import { DOPAT_CONFIG } from "@config";
 import { GridIndex4D } from "@mutate/GridIndex4D";
+import { distance4DPoints } from "@core_s/Math";
 
 // Core geometry
 
@@ -26,11 +27,16 @@ export function distance4D(
   id2: number,
   system: Root.ManifoldView
 ): number {
-  const dx = system.posX[id1] - system.posX[id2];
-  const dy = system.posY[id1] - system.posY[id2];
-  const dz = system.posZ[id1] - system.posZ[id2];
-  const dw = system.posW[id1] - system.posW[id2];
-  return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+  return distance4DPoints(
+    system.posX[id1],
+    system.posY[id1],
+    system.posZ[id1],
+    system.posW[id1],
+    system.posX[id2],
+    system.posY[id2],
+    system.posZ[id2],
+    system.posW[id2]
+  );
 }
 
 /**

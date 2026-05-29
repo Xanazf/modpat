@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
 import { DOPAT_CONFIG } from "@config";
 import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
-import { TensorMath_GPU } from "@core_s/Math";
+import { gpu_math, multiplyMatrices4x4 } from "@core_s/Math";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
-import { multiplyMatrices4x4 } from "@i_topology/HoTTKernel";
 import type {
   FrameworkId,
   Matrix4x4,
@@ -64,33 +63,6 @@ export type PerceptionCapture = Mapping.PerceptionCapture;
 export type HomotopyResult = Mapping.HomotopyResult;
 
 /**
- * Integer winding number of the 2D polygon `loop` around the point (gx, gy).
- * Uses the non-zero rule: +1 for upward crossings left of the point, −1 for downward.
- */
-function windingNumber(
-  loop: [number, number][],
-  gx: number,
-  gy: number
-): number {
-  let wn = 0;
-  const n = loop.length;
-  for (let i = 0; i < n; i++) {
-    const [x1, y1] = loop[i];
-    const [x2, y2] = loop[(i + 1) % n];
-    if (y1 <= gy) {
-      if (y2 > gy) {
-        if ((x2 - x1) * (gy - y1) - (y2 - y1) * (gx - x1) > 0) wn++;
-      }
-    } else {
-      if (y2 <= gy) {
-        if ((x2 - x1) * (gy - y1) - (y2 - y1) * (gx - x1) < 0) wn--;
-      }
-    }
-  }
-  return wn;
-}
-
-/**
  * The Mapper is THE thinker. It owns perception (resonance propagation
  * through the manifold) AND locomotion (geodesic traversal). Thinking IS
  * movement through the world; there is no separate deliberation step.
@@ -116,7 +88,7 @@ class Traveler implements Mapping.Engine {
   /** Persistent storage for logical proofs. */
   private store: Store | null = null;
   /** Optional GPU math engine for acceleration. */
-  private gpu: TensorMath_GPU | null = null;
+  private gpu: PMath.Engine | null = null;
   /** Optional Fractal Unfolder for expanding logical voids. */
   private unfolder: Unfolder | null = null;
   /** Optional decomposer for compound query prerequisite resolution. */
@@ -212,7 +184,7 @@ class Traveler implements Mapping.Engine {
     system: Root.ManifoldView | SystemRef,
     atomizer?: Atomic.Engine,
     store: Store | null = null,
-    gpu: TensorMath_GPU | null = null,
+    gpu: PMath.Engine | null = null,
     unfolder: Unfolder | null = null
   ) {
     this.systemRef =
@@ -235,10 +207,10 @@ class Traveler implements Mapping.Engine {
 
     // Initialize GPU offloading if configured.
     if (DOPAT_CONFIG.USE_GPU && !this.gpu) {
-      TensorMath_GPU.getDevice()
+      gpu_math.getDevice()
         .then(() => {
-          this.gpu = new TensorMath_GPU();
-          this._loco.gpu = this.gpu;
+          this.gpu = gpu_math;
+          this._loco.gpu = gpu_math;
         })
         .catch(e => {
           console.warn("GPU init failed, using CPU:", e.message);
@@ -250,7 +222,7 @@ class Traveler implements Mapping.Engine {
   // GPU / Unfolder wiring
   // -------------------------------------------------------------------------
 
-  public setGPU(gpu: TensorMath_GPU | null): void {
+  public setGPU(gpu: PMath.Engine | null): void {
     this.gpu = gpu;
     this._loco.gpu = gpu;
     this._loco.geodesicPipeline = null; // force re-creation with updated shader
@@ -260,8 +232,9 @@ class Traveler implements Mapping.Engine {
   public setGPUEnabled(enabled: boolean): void {
     if (enabled) {
       if (!this.gpu) {
-        TensorMath_GPU.getDevice().then(() => {
-          this.gpu = new TensorMath_GPU();
+        gpu_math.getDevice().then(() => {
+          this.gpu = gpu_math;
+          this._loco.gpu = gpu_math;
         });
       }
     } else {

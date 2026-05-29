@@ -12,44 +12,11 @@
  */
 
 import type { PersistenceBar } from "@core_s/PersistentHomology";
-
-// --- 4×4 matrix utilities -----------------------------------------------------
-
-/** In-place 4×4 Float64Array multiplication: result = A × B. */
-export function multiplyMatrices4x4(
-  A: Float64Array,
-  B: Float64Array
-): Float64Array {
-  const C = new Float64Array(16);
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      let sum = 0;
-      for (let k = 0; k < 4; k++) {
-        sum += A[r * 4 + k] * B[k * 4 + c];
-      }
-      C[r * 4 + c] = sum;
-    }
-  }
-  return C;
-}
-
-/** Transpose a 4×4 Float64Array in place. */
-export function transposeMatrix4x4(M: Float64Array): Float64Array {
-  const T = new Float64Array(16);
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      T[c * 4 + r] = M[r * 4 + c];
-    }
-  }
-  return T;
-}
-
-/** Return the 4×4 identity matrix. */
-function identity4x4(): Float64Array {
-  const I = new Float64Array(16);
-  I[0] = I[5] = I[10] = I[15] = 1;
-  return I;
-}
+import {
+  multiplyMatrices4x4,
+  transposeMatrix4x4,
+  identity4x4,
+} from "@core_s/Math";
 
 // --- ProofPath ----------------------------------------------------------------
 

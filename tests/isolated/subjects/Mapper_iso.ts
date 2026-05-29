@@ -1,5 +1,5 @@
 import { DOPAT_CONFIG } from "@config";
-import { TensorMath_GPU } from "@core_s/Math";
+import { gpu_math } from "@core_s/Math";
 import type Unfolder from "@mutate/Unfolder";
 import logger from "@utils/SpectralLogger";
 // @ts-expect-error
@@ -19,7 +19,7 @@ class Mapper implements Mapping.Engine {
   /** The logical manifold providing the physical state of all precepts. */
   private system: System;
   /** Optional GPU math engine for acceleration. */
-  private gpu: TensorMath_GPU | null = null;
+  private gpu: PMath.Engine | null = null;
   /** Optional Fractal Unfolder for expanding logical voids. */
   private unfolder: Unfolder | null = null;
   /** WebGPU pipeline for geodesic calculations. */
@@ -30,7 +30,7 @@ class Mapper implements Mapping.Engine {
    */
   constructor(
     system: System,
-    gpu: TensorMath_GPU | null = null,
+    gpu: PMath.Engine | null = null,
     unfolder: Unfolder | null = null
   ) {
     this.system = system;
@@ -41,7 +41,7 @@ class Mapper implements Mapping.Engine {
   /**
    * Sets or updates the GPU engine used by the mapper.
    */
-  public setGPU(gpu: TensorMath_GPU | null): void {
+  public setGPU(gpu: PMath.Engine | null): void {
     this.gpu = gpu;
     this.geodesicPipeline = null;
   }
@@ -213,7 +213,7 @@ class Mapper implements Mapping.Engine {
     penalties: any[]
   ): Promise<void> {
     if (!this.geodesicPipeline) await this.initGPUPipeline();
-    const device = await TensorMath_GPU.getDevice();
+    const device = await gpu_math.getDevice();
     const sysLength = this.system.length;
 
     const c2 = this.system.c * this.system.c;
@@ -342,7 +342,7 @@ class Mapper implements Mapping.Engine {
    * Initializes the GPU compute pipeline for 4D geodesic calculations.
    */
   private async initGPUPipeline(): Promise<void> {
-    const device = await TensorMath_GPU.getDevice();
+    const device = await gpu_math.getDevice();
     const geodesicShader = device.createShaderModule({
       code: `
         @group(0) @binding(0) var<storage, read_write> pathData: array<vec4<f32>>;

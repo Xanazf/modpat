@@ -1,6 +1,7 @@
 import { DOPAT_CONFIG } from "@config";
 import { GridIndex4D } from "@mutate/GridIndex4D";
 import { computeCurvature } from "@props/Curvature";
+import { distance4DPoints } from "@core_s/Math";
 
 export interface PersistenceBar {
   birth: number;
@@ -104,12 +105,17 @@ function buildEdges(
   for (let i = 0; i < n; i++) {
     const ai = atoms[i];
     for (let j = i + 1; j < n; j++) {
-      const aj = atoms[j];
-      const dx = system.posX[ai] - system.posX[aj];
-      const dy = system.posY[ai] - system.posY[aj];
-      const dz = system.posZ[ai] - system.posZ[aj];
-      const dw = system.posW[ai] - system.posW[aj];
-      let dist = Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+            const aj = atoms[j];
+      let dist = distance4DPoints(
+        system.posX[ai],
+        system.posY[ai],
+        system.posZ[ai],
+        system.posW[ai],
+        system.posX[aj],
+        system.posY[aj],
+        system.posZ[aj],
+        system.posW[aj]
+      );
 
       if (conformalEnabled) {
         // Conformal metric scale factor: g_ij = e^{2phi} delta_ij

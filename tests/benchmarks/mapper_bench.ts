@@ -46,7 +46,10 @@ async function run(): Promise<void> {
   (DOPAT_CONFIG as any).MAX_PRECEPTS = 1_100_000;
   (DOPAT_CONFIG as any).USE_GPU = false;
   seedRandom(DOPAT_CONFIG.SEED);
-  console.log("Traveler benchmark, CPU path (no GPU)\n");
+  console.log("Traveler benchmark, CPU path\n");
+  console.log(
+    "GPU path is too slow on WebGPU because of how node handles GPU calls\n"
+  );
   console.log(
     `${"n".padStart(8)}  ${"ms/query".padStart(10)}  ${"queries".padStart(8)}`
   );

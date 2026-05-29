@@ -1,5 +1,5 @@
 import { DOPAT_CONFIG } from "@config";
-import { TensorMath_GPU } from "@core_s/Math";
+import { gpu_math } from "@core_s/Math";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@mutate/Unfolder";
 import nlp from "compromise";
@@ -23,7 +23,7 @@ export default class Resolver implements Resolution.Engine {
   /** Persistent storage for logical proofs. */
   private store: Store | null = null;
   /** GPU-accelerated tensor operations for high-density manifolds. */
-  private gpu: TensorMath_GPU | null = null;
+  private gpu: PMath.Engine | null = null;
   /** Mapper for calculating geodesic paths through the manifold. */
   private mapper: Mapper;
   /** Synthesizer for collapsing logical paths into TypeScript code. */
@@ -78,9 +78,9 @@ export default class Resolver implements Resolution.Engine {
 
     // Initialize GPU offloading if configured.
     if (DOPAT_CONFIG.USE_GPU) {
-      TensorMath_GPU.getDevice()
+      gpu_math.getDevice()
         .then(() => {
-          this.gpu = new TensorMath_GPU();
+          this.gpu = gpu_math;
           this.mapper.setGPU(this.gpu);
         })
         .catch(e => {
@@ -100,8 +100,8 @@ export default class Resolver implements Resolution.Engine {
   public setGPUEnabled(enabled: boolean): void {
     if (enabled) {
       if (!this.gpu) {
-        TensorMath_GPU.getDevice().then(() => {
-          this.gpu = new TensorMath_GPU();
+        gpu_math.getDevice().then(() => {
+          this.gpu = gpu_math;
           this.mapper.setGPU(this.gpu);
         });
       }
