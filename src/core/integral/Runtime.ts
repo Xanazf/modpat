@@ -33,6 +33,7 @@ import { SelfConcept } from "@props/Identity";
 import { createCoderSkill } from "@skill_code/Coder";
 import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
 import Language from "@skill_lang/Language";
+import { expressFromSinks } from "@skill_lang/SurfaceExpression";
 import { IntentTag } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
 import { seedRandom } from "@utils/seededRandom";
@@ -67,13 +68,35 @@ function _registerDefaultSkills(
     }
     const opts = { contextScopes: ctx.language.contextScopes() };
     const result = await mapper.perceiveCoherent(ctx.queryIds, opts);
-    const decoded = ctx.atomizer.decodeSequence(result.ids, ctx.system).trim();
 
-    // Detect physics echo: when perception can't converge, the physics pass
-    // returns the input tokens as sinkCandidates. If the result IDs heavily
-    // overlap with the query IDs, there's no real answer - return "unknown"
-    // so the Traveler's inquiry path can take over (mirrors old Listener behaviour).
-    if (decoded && decoded !== "unknown" && result.ids.length > 0) {
+    // --- Surface expression (the "flip" geometry) ---
+    // Perception converged inward along the bulk potential field; now expand
+    // outward from the sink candidates along the PartLayer surface to recover
+    // the coherent phrase context those atoms belong to.  This produces fluent
+    // natural-language text from the ingested source material rather than a
+    // geodesic-order atom sequence that mixes content with logical operators.
+    const sinks = result.diagnostics?.sinkCandidates ?? [];
+    const surfaceAnswer = expressFromSinks(
+      sinks,
+      ctx.queryIds,
+      ctx.system,
+      ctx.atomizer
+    );
+
+    // Fall back to the bulk-decoded sequence only when the surface walk fails
+    // (no PartLayer chains available - e.g. atoms were ingested in isolation).
+    const decoded =
+      surfaceAnswer ??
+      ctx.atomizer.decodeSequence(result.ids, ctx.system).trim();
+
+    // Detect physics echo: if the bulk result heavily overlaps with the query,
+    // and the surface walk also failed, there is no real answer yet.
+    if (
+      !surfaceAnswer &&
+      decoded &&
+      decoded !== "unknown" &&
+      result.ids.length > 0
+    ) {
       const querySet = new Set(Array.from(ctx.queryIds));
       let overlap = 0;
       for (const id of result.ids) {
