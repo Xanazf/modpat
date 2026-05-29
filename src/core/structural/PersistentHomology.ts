@@ -105,7 +105,7 @@ function buildEdges(
   for (let i = 0; i < n; i++) {
     const ai = atoms[i];
     for (let j = i + 1; j < n; j++) {
-            const aj = atoms[j];
+      const aj = atoms[j];
       let dist = distance4DPoints(
         system.posX[ai],
         system.posY[ai],

@@ -207,7 +207,8 @@ class Traveler implements Mapping.Engine {
 
     // Initialize GPU offloading if configured.
     if (DOPAT_CONFIG.USE_GPU && !this.gpu) {
-      gpu_math.getDevice()
+      gpu_math
+        .getDevice()
         .then(() => {
           this.gpu = gpu_math;
           this._loco.gpu = gpu_math;

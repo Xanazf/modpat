@@ -78,7 +78,8 @@ export default class Resolver implements Resolution.Engine {
 
     // Initialize GPU offloading if configured.
     if (DOPAT_CONFIG.USE_GPU) {
-      gpu_math.getDevice()
+      gpu_math
+        .getDevice()
         .then(() => {
           this.gpu = gpu_math;
           this.mapper.setGPU(this.gpu);

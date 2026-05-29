@@ -189,7 +189,16 @@ export class BarnesHut4D {
       const info = this.nodeInfo.get(node);
       if (!info || info.mass === 0) continue;
 
-            const dist = distance4DPoints(info.x, info.y, info.z, info.w, qx, qy, qz, qw);
+      const dist = distance4DPoints(
+        info.x,
+        info.y,
+        info.z,
+        info.w,
+        qx,
+        qy,
+        qz,
+        qw
+      );
 
       if (dist === 0) continue;
 

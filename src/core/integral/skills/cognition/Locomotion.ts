@@ -256,7 +256,7 @@ export function relaxPath(
         sy = (py[i - 1] + py[i + 1]) / 2 - py[i];
       const se = (pe[i - 1] + pe[i + 1]) / 2 - pe[i],
         sa = (pa[i - 1] + pa[i + 1]) / 2 - pa[i];
-      
+
       v[0] = px[i] - px[i - 1];
       v[1] = py[i] - py[i - 1];
       v[2] = pe[i] - pe[i - 1];
@@ -502,7 +502,10 @@ function _updateChristoffels(scale: number, state: LocomotionState): void {
 }
 
 export function regularizeChristoffels(state: LocomotionState): void {
-  regularizeChristoffelsMath(state.deltaGamma, DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_REGULARIZATION);
+  regularizeChristoffelsMath(
+    state.deltaGamma,
+    DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_REGULARIZATION
+  );
 }
 
 // -- D2: Holonomy -----------------------------------------------------------
@@ -515,7 +518,14 @@ export function computeHolonomy(
   steps: number,
   state: LocomotionState
 ): void {
-  state.lastInferentialEffort = computeHolonomyMath(px, py, pe, pa, steps, state.lastHolonomy);
+  state.lastInferentialEffort = computeHolonomyMath(
+    px,
+    py,
+    pe,
+    pa,
+    steps,
+    state.lastHolonomy
+  );
 }
 
 // -- D3: Homotopy -----------------------------------------------------------
@@ -545,7 +555,7 @@ export function detectHomotopy(
   for (const bar of qualified) {
     const id = bar.generatorAtomId;
     if (!system.isAllocated(id)) continue;
-        if (windingNumber2D(loop, system.posX[id], system.posY[id]) !== 0)
+    if (windingNumber2D(loop, system.posX[id], system.posY[id]) !== 0)
       straddled.push(bar);
   }
   return {

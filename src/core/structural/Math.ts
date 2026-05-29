@@ -287,7 +287,7 @@ const cpu_math: PMath.Engine = {
       mat4d.multiply(B, A, res);
       return res;
     }
-        if (rowsA === 3 && colsB === 3 && innerDim === 3) {
+    if (rowsA === 3 && colsB === 3 && innerDim === 3) {
       mat3d.multiply(B, A, res);
       return res;
     }
@@ -370,7 +370,7 @@ const cpu_math: PMath.Engine = {
     return exp.map(v => v / sum);
   },
 
-  async dispose(): Promise<void> {}
+  async dispose(): Promise<void> {},
 };
 
 const gpu_math: PMath.Engine & {
@@ -630,7 +630,7 @@ const gpu_math: PMath.Engine & {
       gpuDevice = null;
     }
     gpuInstance = null;
-  }
+  },
 };
 
 // Vectorized Math Helper Functions
