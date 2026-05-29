@@ -307,6 +307,48 @@ export function resolveActiveAtoms(
   return allowed;
 }
 
+// --- Framework scope helpers (used by the vault for domain-scoped matching) ---
+
+/**
+ * Returns true when two concept scopes both have allocated atoms inside the
+ * same SuperclusterTier of the current framework index.
+ *
+ * Only atoms that have settled away from the manifold pole are considered -
+ * atoms still near the origin (|pos| ≤ POLE_DIST) were ingested but have not
+ * yet drifted to their semantic positions and carry no reliable topology signal.
+ *
+ * Used by the vault to allow factual proofs to generalise to related concepts
+ * within the same domain (e.g. an "iridium is dense" query can match a
+ * "titanium is dense" proof once both live in the metallurgy supercluster)
+ * while still rejecting cross-domain matches (sky → titanium).
+ */
+export function scopesInSameSupercluster(
+  scopeA: number,
+  scopeB: number,
+  index: FrameworkIndex,
+  system: Root.ManifoldView
+): boolean {
+  if (scopeA === scopeB) return true;
+  // Atoms within this radius of origin are considered unsettled (pole-position)
+  // and are excluded from framework membership checks.
+  const POLE_DIST_SQ = 0.25; // 0.5 units; 5× max pole jitter when enabled
+  for (const sc of index.superclusters) {
+    let hasA = false;
+    let hasB = false;
+    for (const id of sc.memberAtomIds) {
+      const px = system.posX[id];
+      const py = system.posY[id];
+      const pz = system.posZ[id];
+      if (px * px + py * py + pz * pz <= POLE_DIST_SQ) continue; // skip pole
+      const s = system.scope[id];
+      if (s === scopeA) hasA = true;
+      else if (s === scopeB) hasB = true;
+      if (hasA && hasB) return true;
+    }
+  }
+  return false;
+}
+
 // --- private helpers ----------------------------------------------------------
 
 function ufComponents(

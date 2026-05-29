@@ -14,7 +14,11 @@ import {
   DuckDBInstance,
   listValue,
 } from "@duckdb/node-api";
-import type { TravelerState } from "@mutate/FrameworkIndex";
+import {
+  type FrameworkIndex,
+  scopesInSameSupercluster,
+  type TravelerState,
+} from "@mutate/FrameworkIndex";
 
 /**
  * Represents the stable, collapsed state of a logical derivation.
@@ -61,6 +65,12 @@ export default class Store implements Memory.Vault {
   private dbPath: string;
   /** Promise that resolves when the vault is fully initialized. */
   private initPromise: Promise<void>;
+  /**
+   * Latest three-tier framework index from ManifoldLifecycle.
+   * Used by checkInterferencePattern to verify that factual abstract matches
+   * belong to the same conceptual domain as the current query.
+   */
+  private _frameworkIndex: FrameworkIndex | null = null;
 
   /**
    * Initializes a new persistent vault.
@@ -155,6 +165,8 @@ export default class Store implements Memory.Vault {
       "reproduction_count INTEGER DEFAULT 0",
       "context_hash VARCHAR DEFAULT ''",
       "topo_signature VARCHAR DEFAULT ''",
+      "is_factual INTEGER DEFAULT 0",
+      "framework_scope BIGINT DEFAULT 0",
     ]) {
       try {
         await this._connection.run(
@@ -202,6 +214,47 @@ export default class Store implements Memory.Vault {
   /** Maps a coordinate to its grid cell integer. */
   private gridKey(v: number): number {
     return Math.floor(v / DOPAT_CONFIG.memory.GRID_CELL) | 0;
+  }
+
+  /**
+   * Provide the latest FrameworkIndex so factual vault matches can be
+   * validated against the current domain topology.  Call after each
+   * ManifoldLifecycle.consolidateAround() to keep the index fresh.
+   */
+  public setFrameworkIndex(index: FrameworkIndex | null): void {
+    this._frameworkIndex = index;
+  }
+
+  /** Extract the scope of the first non-operator atom in a sequence. */
+  private _primaryScope(ids: Uint32Array): bigint {
+    for (const id of ids) {
+      if (
+        this.system.isAllocated(id) &&
+        this.system.operatorClass[id] === OperatorClass.None
+      ) {
+        return BigInt(Math.round(this.system.scope[id]));
+      }
+    }
+    return 0n;
+  }
+
+  /**
+   * True when storedScope and queryScope refer to the same conceptual domain.
+   * Phase 1: exact scope identity (same concept).
+   * Phase 2: same supercluster in the current FrameworkIndex - allows related
+   *          concepts that have clustered together (e.g. titanium ↔ iridium in
+   *          the metallurgy supercluster) to share factual vault patterns.
+   */
+  private _fwScopeOverlap(storedScope: bigint, queryScope: bigint): boolean {
+    if (storedScope === queryScope) return true;
+    const index = this._frameworkIndex;
+    if (!index) return false;
+    return scopesInSameSupercluster(
+      Number(storedScope),
+      Number(queryScope),
+      index,
+      this.system
+    );
   }
 
   /**
@@ -392,6 +445,24 @@ export default class Store implements Memory.Vault {
     const targetPattern = this.abstractTarget(outputSequence, varMap);
     const [ax, ay, az, aw] = this.calculateCentroid(inputSequence);
 
+    // A proof is "factual" when its output contains at least one semantic atom
+    // whose scope did NOT appear in the input (i.e. the conclusion introduces
+    // new content rather than re-arranging input variables).  Factual proofs
+    // must not match abstract signatures across different conceptual domains -
+    // "sky is blue" should not answer "what is titanium?" via VAR_N generalisation.
+    const isFactual = Array.from(outputSequence).some(
+      id =>
+        this.system.isAllocated(id) &&
+        this.system.operatorClass[id] === OperatorClass.None &&
+        !varMap.has(this.system.scope[id])
+    );
+    // The framework scope is the scope of the first non-operator input atom -
+    // the "subject" of the proof.  This stable identifier lets checkInterference
+    // verify that a factual abstract match originates from the same domain as
+    // the current query, either by exact scope identity or by shared supercluster
+    // membership in the current FrameworkIndex.
+    const frameworkScope = this._primaryScope(inputSequence);
+
     // Deduplicate: if this exact abstract signature already exists at a spatially
     // close anchor (within 0.5 units), update its energy rather than inserting a
     // duplicate row. This prevents unbounded table growth from repeated ingestion
@@ -426,7 +497,9 @@ export default class Store implements Memory.Vault {
             target_pattern = ?,
             anchor_x = ?, anchor_y = ?, anchor_z = ?, anchor_w = ?,
             grid_x = ?, grid_y = ?, grid_z = ?, grid_w = ?,
-            topo_signature = CASE WHEN ? != '' THEN ? ELSE topo_signature END
+            topo_signature = CASE WHEN ? != '' THEN ? ELSE topo_signature END,
+            is_factual = ?,
+            framework_scope = CASE WHEN COALESCE(framework_scope, 0) != 0 THEN framework_scope ELSE ? END
         WHERE signature = ?
           AND ABS(anchor_x - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
           AND ABS(anchor_y - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
@@ -445,9 +518,11 @@ export default class Store implements Memory.Vault {
         upd.bindInteger(10, this.gridKey(aw));
         upd.bindVarchar(11, topoSignature);
         upd.bindVarchar(12, topoSignature);
-        upd.bindVarchar(13, signature);
-        upd.bindDouble(14, ax);
-        upd.bindDouble(15, ay);
+        upd.bindInteger(13, isFactual ? 1 : 0);
+        upd.bindBigInt(14, frameworkScope);
+        upd.bindVarchar(15, signature);
+        upd.bindDouble(16, ax);
+        upd.bindDouble(17, ay);
         await upd.run();
       } finally {
         upd.destroySync();
@@ -459,8 +534,8 @@ export default class Store implements Memory.Vault {
     const stmt = await this._connection.prepare(`
       INSERT INTO wave_forms
         (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w, slot_flags,
-         grid_x, grid_y, grid_z, grid_w, topo_signature)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         grid_x, grid_y, grid_z, grid_w, topo_signature, is_factual, framework_scope)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
@@ -477,6 +552,8 @@ export default class Store implements Memory.Vault {
       stmt.bindInteger(11, this.gridKey(az));
       stmt.bindInteger(12, this.gridKey(aw));
       stmt.bindVarchar(13, topoSignature);
+      stmt.bindInteger(14, isFactual ? 1 : 0);
+      stmt.bindBigInt(15, frameworkScope);
       await stmt.run();
     } finally {
       stmt.destroySync();
@@ -531,7 +608,9 @@ export default class Store implements Memory.Vault {
       SELECT target_pattern, slot_flags, signature AS matched_sig,
              (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2)) as resonance,
              net_energy * (1 + LN(1 + COALESCE(usage_count, 0)) * ${uw}) AS combined_score,
-             net_energy, COALESCE(topo_signature, '') AS topo_sig
+             net_energy, COALESCE(topo_signature, '') AS topo_sig,
+             COALESCE(is_factual, 0) AS is_factual,
+             COALESCE(framework_scope, 0) AS framework_scope
       FROM wave_forms
       WHERE signature = ?
         AND (grid_x IS NULL OR grid_x BETWEEN ? AND ?)
@@ -577,6 +656,28 @@ export default class Store implements Memory.Vault {
           }
         }
 
+        if (chosen) {
+          // Framework scope guard: factual proofs (output introduced new content)
+          // must originate from the same conceptual domain as the current query.
+          // Phase 1 - exact scope identity; Phase 2 - shared supercluster once
+          // the topology has been enriched (e.g. titanium ↔ iridium in metallurgy).
+          // Structural proofs (all output variables derived from input variables)
+          // are always safe to apply and bypass this check.
+          const storedIsFactual = Number(chosen[7] ?? 0) !== 0;
+          const storedFwScope = BigInt(String(chosen[8] ?? "0"));
+          if (storedIsFactual && storedFwScope !== 0n) {
+            const queryScope = this._primaryScope(inputSequence);
+            if (
+              queryScope !== 0n &&
+              !this._fwScopeOverlap(storedFwScope, queryScope)
+            ) {
+              // Different domain - suppress this factual match entirely.
+              metrics.increment("vault.framework_miss");
+              targetPattern = null;
+              chosen = null as any;
+            }
+          }
+        }
         if (chosen) {
           targetPattern = chosen[0]?.toString() || null;
           slotFlags = BigInt(String(chosen[1] ?? "0"));

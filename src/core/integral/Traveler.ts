@@ -10,6 +10,8 @@ import type {
   Matrix4x4,
   TravelerState,
 } from "@mutate/FrameworkIndex";
+import type QueryDecomposer from "@mutate/QueryDecomposer";
+import type { SubQuery } from "@mutate/QueryDecomposer";
 import type Unfolder from "@mutate/Unfolder";
 import { type InquiryItem, InquiryQueue } from "@skill_cogi/InquiryQueue";
 import {
@@ -117,6 +119,8 @@ class Traveler implements Mapping.Engine {
   private gpu: TensorMath_GPU | null = null;
   /** Optional Fractal Unfolder for expanding logical voids. */
   private unfolder: Unfolder | null = null;
+  /** Optional decomposer for compound query prerequisite resolution. */
+  private _decomposer: QueryDecomposer | null = null;
   /** The language translation boundary. */
   public language: Language | null = null;
   /** Optional structural manifold lifecycle for framework indexing. */
@@ -269,6 +273,10 @@ class Traveler implements Mapping.Engine {
 
   public setUnfolder(unfolder: Unfolder | null): void {
     this.unfolder = unfolder;
+  }
+
+  public setDecomposer(decomposer: QueryDecomposer | null): void {
+    this._decomposer = decomposer;
   }
 
   public setLanguage(language: Language): void {
@@ -1321,6 +1329,43 @@ class Traveler implements Mapping.Engine {
     } catch {}
   }
 
+  // ---- Compound query prerequisite resolution --------------------------------
+
+  /**
+   * Enriches the manifold for a single sub-query topic.
+   *
+   * The Traveler asks "what do I need to know?" before traversing a long path.
+   * This method answers one such prerequisite: it checks if the topic is
+   * already represented (fast-exit via perceiveCoherent), and if not, calls
+   * the Unfolder to fetch and ingest the missing knowledge.  The return value
+   * is discarded; the side-effect on the manifold is the only goal.
+   */
+  private async _resolveSubQuery(subQuery: SubQuery): Promise<void> {
+    if (!this.language || !this.unfolder) return;
+
+    const ingestResult = this.language.ingest(subQuery.text);
+    if (ingestResult.ids.length === 0) return;
+
+    // Expand manifold knowledge for this prerequisite topic via Unfolder.
+    // No vault fast-exit here: vault patterns are abstract (VAR_N) and can
+    // falsely match unrelated entities (e.g. "sky is blue" matches any "X is Y"
+    // query).  The Unfolder is idempotent - re-expanding a known topic is safe.
+    const topic =
+      ingestResult.attractionCenter ||
+      subQuery.text
+        .replace(/^what is |^how to /i, "")
+        .replace(/\?$/, "")
+        .trim();
+    logger.log(
+      `[Mapper] _resolveSubQuery: expanding "${topic}" (${subQuery.purpose})`
+    );
+    await this.unfolder.expand(
+      ingestResult.ids[0],
+      topic,
+      this.store ?? undefined
+    );
+  }
+
   // ---- Process (Phase 4 lightweight stub) ---------------------------------
 
   /**
@@ -1427,6 +1472,37 @@ class Traveler implements Mapping.Engine {
       return decoded;
     }
 
+    // 4b. Compound query pre-pass: identify knowledge prerequisites and resolve
+    // them step-by-step before attempting full traversal.  This lets the
+    // Traveler ask "what do I need to know to answer this?" and fill the gaps
+    // so that perceiveCoherent can bridge the enriched manifold in one pass.
+    let skillQueryIds = ids;
+    if (
+      this._decomposer &&
+      this.unfolder &&
+      intent === "question" &&
+      this._decomposer.isCompound(result)
+    ) {
+      const subQueries = this._decomposer.decompose(text, result);
+      if (subQueries.length > 0) {
+        logger.log(
+          `[Mapper] compound query: resolving ${subQueries.length} prerequisites`
+        );
+        for (const sq of subQueries) {
+          await this._resolveSubQuery(sq);
+        }
+        // Force a topology rebuild so newly ingested atoms form domain clusters
+        // (e.g. titanium + iridium + alloy → metallurgy supercluster) before the
+        // synthesis perceiveCoherent runs and stores its framework-scoped proof.
+        if (this.lifecycle) {
+          this.lifecycle.consolidateAround([]);
+          this.store?.setFrameworkIndex(this.lifecycle.getFrameworkIndex());
+        }
+        // Re-ingest the original query so the IDs reflect the enriched manifold
+        skillQueryIds = this.language.ingest(text).ids;
+      }
+    }
+
     // 5. Elect a skill
     const skillId = this.electSkill(ids, intent);
     const handler = this.skills.get(skillId);
@@ -1447,7 +1523,7 @@ class Traveler implements Mapping.Engine {
     try {
       const skillResult = await handler({
         query: shifted,
-        queryIds: ids,
+        queryIds: skillQueryIds,
         system: this.system,
         store: this.store!,
         atomizer: this.atomizer,

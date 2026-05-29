@@ -177,6 +177,13 @@ declare namespace Memory {
       generalized: number;
     }>;
 
+    /**
+     * Provide the latest FrameworkIndex so factual vault matches can be
+     * validated against the current domain topology.  Call after each
+     * ManifoldLifecycle.consolidateAround() invocation.
+     */
+    setFrameworkIndex(index: any): void;
+
     flush(): Promise<void>;
     close?(): Promise<void>;
   }

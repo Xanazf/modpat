@@ -27,6 +27,7 @@ import {
 import Store from "@core_s/Memory";
 import { SystemPersistence } from "@core_s/Persistence";
 import { WorkerPool } from "@core_s/WorkerPool";
+import QueryDecomposer from "@mutate/QueryDecomposer";
 import Unfolder from "@mutate/Unfolder";
 import { SelfConcept } from "@props/Identity";
 import { createCoderSkill } from "@skill_code/Coder";
@@ -351,6 +352,9 @@ export class Runtime {
 
     const unfolder = new Unfolder(system, atomizer);
     mapper.setUnfolder(unfolder);
+
+    const decomposer = new QueryDecomposer();
+    mapper.setDecomposer(decomposer);
 
     // Register standard skills
     _registerDefaultSkills(mapper, language, store, atomizer);

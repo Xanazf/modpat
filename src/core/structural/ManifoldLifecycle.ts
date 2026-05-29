@@ -515,6 +515,28 @@ export class ManifoldLifecycle {
   }
 
   /**
+   * Forces an immediate topology rebuild (nerve graph + three-tier framework
+   * index) so that newly ingested atoms are reflected in the FrameworkIndex
+   * before the next normal tick fires.
+   *
+   * Call this after bulk atom additions (e.g. after each Unfolder expansion in
+   * the compound pre-pass) so the Store's framework-scope check can see the
+   * emerging domain clusters straight away.
+   *
+   * @param _atomIds  Reserved for future focused-consolidation optimisation;
+   *                  currently unused - a full rebuild is always performed.
+   */
+  public consolidateAround(_atomIds: number[] = []): void {
+    if (this._isTopoRunning) return;
+    this._isTopoRunning = true;
+    try {
+      this._runTopologyTickBody();
+    } finally {
+      this._isTopoRunning = false;
+    }
+  }
+
+  /**
    * Low-frequency topology tick: persistent homology + TDA Mapper.
    * Runs asynchronously (fire-and-forget) so it never blocks the tick loop.
    * A running guard prevents concurrent analyses.
