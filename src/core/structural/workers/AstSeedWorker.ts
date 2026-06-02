@@ -20,6 +20,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { groundAstIntoSystem } from "@core_s/grounding/AstGrounding";
 import type Store from "@core_s/Memory";
 import type { WorkerPool } from "@core_s/WorkerPool";
 import { type AstTriple, extractAstTriples } from "@utils/astExtract";
@@ -39,6 +40,8 @@ export interface AstSeedOptions {
   includeCallSites?: boolean;
   onProgress?: (p: AstSeedProgress) => void;
   pool?: WorkerPool;
+  /** Node cap above which structural placement is skipped (Phase-4 boundary). */
+  maxPlacementNodes?: number;
 }
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx"]);
@@ -89,6 +92,10 @@ export class AstSeedWorker {
   private _triples = 0;
   private _processed = 0;
   private _timer: ReturnType<typeof setTimeout> | null = null;
+  /** Triples accumulated across batches; grounded as one graph on completion. */
+  private _accum: AstTriple[] = [];
+  /** Guards the one-shot finalize (ground + place + crystallize). */
+  private _finalized = false;
 
   get running(): boolean {
     return this._running;
@@ -144,21 +151,22 @@ export class AstSeedWorker {
       includeCallSites = true,
       onProgress,
       pool,
+      maxPlacementNodes = 3000,
     } = opts;
 
     const tick = () => {
-      if (!this._running || this.isDone) {
-        this._running = false;
+      if (!this._running) return;
+      if (this.isDone) {
+        // All files parsed - ground the accumulated graph once, then stop.
+        this._finalizeOnce(system, atomizer, store, maxPlacementNodes)
+          .catch(err => console.error("[AstSeed] finalize error:", err))
+          .finally(() => {
+            this._running = false;
+            onProgress?.(this.snapshot());
+          });
         return;
       }
-      this._processBatch(
-        system,
-        atomizer,
-        store,
-        batchSize,
-        { callDepthLimit, includeCallSites },
-        pool
-      )
+      this._processBatch(batchSize, { callDepthLimit, includeCallSites }, pool)
         .then(() => {
           onProgress?.(this.snapshot());
           this._timer = setTimeout(tick, intervalMs);
@@ -181,9 +189,6 @@ export class AstSeedWorker {
   }
 
   private async _processBatch(
-    system: Root.ManifoldView,
-    atomizer: Atomic.Engine,
-    store: Store,
     batchSize: number,
     extractOpts: { callDepthLimit: number; includeCallSites: boolean },
     pool?: WorkerPool
@@ -214,10 +219,7 @@ export class AstSeedWorker {
         }
       }
 
-      for (const triple of fileTriples) {
-        await this._crystallize(triple, system, atomizer, store);
-      }
-
+      for (const triple of fileTriples) this._accum.push(triple);
       this._processed++;
       this._triples += fileTriples.length;
     }
@@ -225,58 +227,72 @@ export class AstSeedWorker {
     this.cursor = end;
   }
 
-  private async _crystallize(
-    triple: AstTriple,
+  /**
+   * Grounds the accumulated code graph into the manifold with structure-derived
+   * coordinates (one precept per node, graph-adjacent terms metric-near), then
+   * crystallizes each edge as a proof against the final, faithful positions.
+   * Runs once, after every file has been parsed - so vault anchors are never
+   * computed against provisional coordinates.
+   */
+  private async _finalizeOnce(
     system: Root.ManifoldView,
     atomizer: Atomic.Engine,
-    store: Store
+    store: Store,
+    maxPlacementNodes: number
   ): Promise<void> {
-    // Check for contradicting facts before crystallizing high-energy triples.
-    if (triple.energy >= 1.2) {
-      try {
-        const existing = await store.findContradictingFacts(
-          triple.subject,
-          triple.predicate
-        );
-        for (const conflictFact of existing) {
-          if (conflictFact !== triple.text) {
-            const sig = store.signatureForText(conflictFact);
-            await store.adjustEnergy(sig, -0.5);
+    if (this._finalized) return;
+    this._finalized = true;
+    if (this._accum.length === 0) return;
+
+    const { labelToPrecept, placement } = groundAstIntoSystem(
+      this._accum,
+      system,
+      atomizer,
+      { seed: 0, maxPlacementNodes }
+    );
+    if (!placement) {
+      console.warn(
+        `[AstSeed] ${labelToPrecept.size} nodes exceeds placement cap ` +
+          `${maxPlacementNodes}; coordinates left unplaced ` +
+          `(Phase 4: incremental anchored placement).`
+      );
+    }
+
+    for (const triple of this._accum) {
+      const subjId = labelToPrecept.get(triple.subject);
+      const objId = labelToPrecept.get(triple.object);
+      if (subjId === undefined || objId === undefined || subjId === objId)
+        continue;
+
+      // Demote contradicting prior facts before crystallizing high-energy edges.
+      if (triple.energy >= 1.2) {
+        try {
+          const existing = await store.findContradictingFacts(
+            triple.subject,
+            triple.predicate
+          );
+          for (const conflictFact of existing) {
+            if (conflictFact !== triple.text) {
+              await store.adjustEnergy(
+                store.signatureForText(conflictFact),
+                -0.5
+              );
+            }
           }
-        }
-      } catch {
-        // Non-fatal - proceed with crystallization even if contradiction check fails.
-      }
-    }
-
-    // Ingest separately: subject and object get distinct precepts.
-    const subjectIds = atomizer.ingestSequence(triple.subject, system);
-    const objectIds = atomizer.ingestSequence(triple.object, system);
-
-    // Apply Kind-axis (posY) placement to distinguish declaration types.
-    for (const id of [...subjectIds, ...objectIds]) {
-      if ((system as any).posY) {
-        (system as any).posY[id] = triple.kindY;
-        (system as any).update?.(id);
-      }
-    }
-
-    // Apply call-depth (posZ) for function-call triples.
-    if (triple.callDepth > 0) {
-      for (const id of subjectIds) {
-        if ((system as any).posZ) {
-          (system as any).posZ[id] += triple.callDepth * 0.1;
-          (system as any).update?.(id);
+        } catch {
+          // Non-fatal - proceed even if the contradiction check fails.
         }
       }
+
+      await store.crystallizeProof(
+        new Uint32Array([subjId]),
+        new Uint32Array([objId]),
+        triple.energy
+      );
+      const sig = store.signatureForText(triple.text);
+      await store.storeFact(triple.text, "ast", triple.energy, sig);
+      // knowledge_state=2 (Learned) - the compiler already "reproduced" these.
+      await store.updateKnowledgeState(sig, 2, 3, "ast:parse");
     }
-
-    await store.crystallizeProof(subjectIds, objectIds, triple.energy);
-
-    const sig = store.signatureForText(triple.text);
-    await store.storeFact(triple.text, "ast", triple.energy, sig);
-    // Start at knowledge_state=2 (Learned) - AST facts have been "reproduced"
-    // by the compiler already; no need for the Learner to re-verify from scratch.
-    await store.updateKnowledgeState(sig, 2, 3, "ast:parse");
   }
 }

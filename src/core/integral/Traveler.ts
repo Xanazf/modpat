@@ -1482,8 +1482,10 @@ class Traveler implements Mapping.Engine {
     const handler = this.skills.get(skillId);
 
     if (!handler) {
-      // Fallback to pure topology-only perception if no skill handler matches
-      const percResult = await this.perceive(ids);
+      // Fallback to pure topology-only perception if no skill handler matches.
+      // User-facing path: run with the Phase 2 emission gate so wrong-but-
+      // coherent salads (echoed premises, etc.) abstain to "unknown" instead.
+      const percResult = await this.perceive(ids, { gated: true });
       const decoded = this.atomizer
         .decodeSequence(percResult, this.system)
         .trim();

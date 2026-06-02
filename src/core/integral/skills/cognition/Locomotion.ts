@@ -34,6 +34,48 @@ export interface LocomotionState {
   readonly deltaGamma: Float64Array; // 64 floats – C4 Christoffel corrections
   phiClippedCount: number;
   _lastPathVelocity: [number, number, number, number];
+  // -- getMetricForce scratch (reused across calls; no per-call allocation) --
+  _candScratch: number[]; // candidate ids from the grid query
+  _mfInfl: Float64Array; // per-surviving-candidate base influence
+  _mfExp: Float64Array; // per-surviving-candidate exp(-d²/F) (the shared, costly term)
+  _mfDx: Float64Array;
+  _mfDy: Float64Array;
+  _mfDz: Float64Array;
+  _mfDw: Float64Array;
+  // -- relaxPath per-point candidate cache (exact: keyed by integer cell coords) --
+  _pcCands: number[][]; // one reused candidate-id list per path point
+  _pcCellX: Int32Array; // last queried cell coords per point (cache key)
+  _pcCellY: Int32Array;
+  _pcCellZ: Int32Array;
+  _pcCellW: Int32Array;
+}
+
+/** Grow the per-candidate scratch caches to hold at least `n` survivors. */
+function ensureMetricForceCapacity(state: LocomotionState, n: number): void {
+  if (state._mfInfl.length >= n) return;
+  const cap = Math.max(n, state._mfInfl.length * 2, 64);
+  state._mfInfl = new Float64Array(cap);
+  state._mfExp = new Float64Array(cap);
+  state._mfDx = new Float64Array(cap);
+  state._mfDy = new Float64Array(cap);
+  state._mfDz = new Float64Array(cap);
+  state._mfDw = new Float64Array(cap);
+}
+
+const CELL_SENTINEL = 0x7fffffff;
+
+/** Grow + invalidate the per-point candidate cache for a path of `steps` segments. */
+function resetPathCandCache(state: LocomotionState, steps: number): void {
+  const n = steps + 1;
+  if (state._pcCellX.length < n) {
+    state._pcCellX = new Int32Array(n);
+    state._pcCellY = new Int32Array(n);
+    state._pcCellZ = new Int32Array(n);
+    state._pcCellW = new Int32Array(n);
+    const cands: number[][] = state._pcCands;
+    while (cands.length < n) cands.push([]);
+  }
+  state._pcCellX.fill(CELL_SENTINEL, 0, n); // invalidate every point's cache
 }
 
 export function makeLocomotionState(): LocomotionState {
@@ -48,6 +90,18 @@ export function makeLocomotionState(): LocomotionState {
     deltaGamma: new Float64Array(64),
     phiClippedCount: 0,
     _lastPathVelocity: [0, 0, 0, 0],
+    _candScratch: [],
+    _mfInfl: new Float64Array(64),
+    _mfExp: new Float64Array(64),
+    _mfDx: new Float64Array(64),
+    _mfDy: new Float64Array(64),
+    _mfDz: new Float64Array(64),
+    _mfDw: new Float64Array(64),
+    _pcCands: [],
+    _pcCellX: new Int32Array(0),
+    _pcCellY: new Int32Array(0),
+    _pcCellZ: new Int32Array(0),
+    _pcCellW: new Int32Array(0),
   };
 }
 
@@ -73,6 +127,48 @@ export function getMetricForce(
   system: Root.ManifoldView,
   state: LocomotionState
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {
+  const candidates = state._candScratch;
+  state.gridIndex.candidatesInRadiusInto(
+    px,
+    py,
+    pz,
+    pw,
+    Math.sqrt(DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS),
+    candidates
+  );
+  return forceFromCandidates(
+    candidates,
+    px,
+    py,
+    pz,
+    pw,
+    pens,
+    boost,
+    activeAtoms,
+    system,
+    state
+  );
+}
+
+/**
+ * Core metric-force computation over an already-gathered candidate-id list.
+ * Split out from getMetricForce so relaxPath can supply a candidate list cached
+ * per path point (recomputed only when the point crosses a grid cell), avoiding
+ * a fresh 81-cell grid walk on every relaxation iteration. Numerically identical
+ * to the inline query path.
+ */
+function forceFromCandidates(
+  candidates: number[],
+  px: number,
+  py: number,
+  pz: number,
+  pw: number,
+  pens: any[],
+  boost: Set<number> | undefined,
+  activeAtoms: Set<number> | undefined,
+  system: Root.ManifoldView,
+  state: LocomotionState
+): [V: number, fx: number, fy: number, fz: number, fw: number] {
   const phys = DOPAT_CONFIG.PHYSICS,
     F = phys.INFLUENCE_FALLOFF;
   let V = 1.0,
@@ -80,18 +176,21 @@ export function getMetricForce(
     fy = 0.0,
     fz = 0.0,
     fw = 0.0;
-  const actualRadius = Math.sqrt(phys.INFLUENCE_RADIUS);
-  const candidates = state.gridIndex.candidatesInRadius(
-    px,
-    py,
-    pz,
-    pw,
-    actualRadius
-  );
+  ensureMetricForceCapacity(state, candidates.length);
+  const mfInfl = state._mfInfl,
+    mfExp = state._mfExp,
+    mfDx = state._mfDx,
+    mfDy = state._mfDy,
+    mfDz = state._mfDz,
+    mfDw = state._mfDw;
 
-  // First pass: compute φ(p)
+  // First pass: compute φ(p) over surviving candidates, caching the per-atom
+  // base influence and the shared exp(-d²/F) so the force pass needn't recompute
+  // the spatial filter, the influence sum, or the costly exponential.
   let phi = 0.0;
-  for (const j of candidates) {
+  let m = 0;
+  for (let c = 0; c < candidates.length; c++) {
+    const j = candidates[c];
     if (activeAtoms !== undefined && !activeAtoms.has(j)) continue;
     const dx = px - system.posX[j],
       dy = py - system.posY[j],
@@ -104,32 +203,32 @@ export function getMetricForce(
     const st = system.slotType[j];
     if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
     if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
-    phi += infl * Math.exp(-d2 / F);
+    const ek = Math.exp(-d2 / F);
+    phi += infl * ek;
+    mfInfl[m] = infl;
+    mfExp[m] = ek;
+    mfDx[m] = dx;
+    mfDy[m] = dy;
+    mfDz[m] = dz;
+    mfDw[m] = dw;
+    m++;
   }
   if (phi > phys.PHI_MAX) {
     state.phiClippedCount++;
     phi = phys.PHI_MAX;
   }
 
-  // Second pass: V and force
-  for (const j of candidates) {
-    if (activeAtoms !== undefined && !activeAtoms.has(j)) continue;
-    const dx = px - system.posX[j],
-      dy = py - system.posY[j],
-      dz = pz - system.posZ[j],
-      dw = pw - system.posW[j];
-    const d2 = dx * dx + dy * dy + dz * dz + dw * dw;
-    if (d2 >= phys.INFLUENCE_RADIUS) continue;
-    let infl = system.density[j] * 2.0 + system.intensity[j] * 1.5 + 5.0;
-    if (boost?.has(system.scope[j])) infl += 50.0;
-    const st = system.slotType[j];
-    if (st & SlotType.Body) infl += phys.BODY_SLOT_ATTRACTION;
-    if (st & SlotType.Condition) infl += phys.COND_SLOT_ATTRACTION;
-    infl *= Math.exp(
-      -phys.PHI_TEMPORAL_DECAY * Math.max(0, pw - system.posW[j])
-    );
-    if (phys.CONFORMAL_ENABLED) infl *= Math.exp(-2.0 * phi);
-    const e = infl * Math.exp(-d2 / F);
+  // Second pass: V and force, reusing the cached survivors.
+  const conformal = phys.CONFORMAL_ENABLED ? Math.exp(-2.0 * phi) : 1.0;
+  for (let k = 0; k < m; k++) {
+    const dx = mfDx[k],
+      dy = mfDy[k],
+      dz = mfDz[k],
+      dw = mfDw[k];
+    let infl = mfInfl[k];
+    infl *= Math.exp(-phys.PHI_TEMPORAL_DECAY * Math.max(0, dw));
+    if (phys.CONFORMAL_ENABLED) infl *= conformal;
+    const e = infl * mfExp[k];
     V -= e;
     const f = (2.0 * e) / F;
     fx += f * dx;
@@ -239,9 +338,40 @@ export function relaxPath(
 ): void {
   const v = new Float64Array(4);
   const cf = new Float64Array(4);
+  // Per-point candidate cache: a path point moves by tiny lr steps each
+  // iteration and rarely crosses a grid cell (cellSize ≫ step), so its 81-cell
+  // candidate block is usually unchanged. Re-walk the grid only on a cell cross.
+  resetPathCandCache(state, steps);
+  const cs = state.gridIndex.cellSizeValue;
+  const radius = Math.sqrt(DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS);
+  const pcX = state._pcCellX,
+    pcY = state._pcCellY,
+    pcZ = state._pcCellZ,
+    pcW = state._pcCellW,
+    pcCands = state._pcCands;
   for (let iter = 0; iter < maxIterations; iter++) {
     for (let i = 1; i < steps; i++) {
-      const [, fx, fy, fz, fw] = getMetricForce(
+      const cx = Math.floor(px[i] / cs) | 0,
+        cy = Math.floor(py[i] / cs) | 0,
+        cz = Math.floor(pe[i] / cs) | 0,
+        cw = Math.floor(pa[i] / cs) | 0;
+      const cands = pcCands[i];
+      if (cx !== pcX[i] || cy !== pcY[i] || cz !== pcZ[i] || cw !== pcW[i]) {
+        state.gridIndex.candidatesInRadiusInto(
+          px[i],
+          py[i],
+          pe[i],
+          pa[i],
+          radius,
+          cands
+        );
+        pcX[i] = cx;
+        pcY[i] = cy;
+        pcZ[i] = cz;
+        pcW[i] = cw;
+      }
+      const [, fx, fy, fz, fw] = forceFromCandidates(
+        cands,
         px[i],
         py[i],
         pe[i],

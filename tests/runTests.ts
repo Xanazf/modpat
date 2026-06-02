@@ -29,6 +29,9 @@ import { runSessionSheafTests } from "./session_sheaf.test";
 import { executeSignalManagerSuite } from "./signal_and_manager.test";
 import { runSignatureConsistencyTests } from "./signature_consistency.test";
 import { runSpatialHashTests } from "./spatial_hash.test";
+import { runCoherenceGateTests } from "./coherence_gate.test";
+import { runReductionTests } from "./reduction.test";
+import { runStructuralGroundingTests } from "./structural_grounding.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
 import { runTravelerCorrectionsTests } from "./traveler_corrections.test";
@@ -123,6 +126,9 @@ async function run() {
     await runWithTimeout("hott_kernel", runHoTTKernelTests);
     await runWithTimeout("phi_session", runPhiSessionTest);
     await runWithTimeout("spatial_hash", runSpatialHashTests);
+    await runWithTimeout("structural_grounding", runStructuralGroundingTests);
+    await runWithTimeout("coherence_gate", runCoherenceGateTests);
+    await runWithTimeout("reduction", runReductionTests);
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

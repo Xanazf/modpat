@@ -5,7 +5,15 @@ import {
   OperatorClass,
   type SlotType,
 } from "@core_i/System";
+import { NUMBER_LINE_SCALE } from "@skill_cogi/Reduction";
 import { BaseAtomizer } from "./BaseAtomizer";
+
+/** Parses an integer numeral; returns null for non-numeric tokens. */
+function numeralValue(token: string): number | null {
+  if (!/^-?\d+$/.test(token)) return null;
+  const v = Number(token);
+  return Number.isFinite(v) ? v : null;
+}
 
 /**
  * The Atomizer is a low-level logical parser responsible for converting
@@ -24,15 +32,19 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
   public async init(): Promise<void> {}
 
   /**
-   * Calculates the structural Scope (frequency) for a symbol by automatically
-   * detecting if it represents a logical operator.
+   * Calculates the structural Scope (frequency) for a symbol. Auto-detects
+   * operator status from the token unless the caller supplies an explicit
+   * override (numerals, for instance, must not be treated as operators even
+   * when they appear next to one).
    *
    * @param symbol The string token.
+   * @param isOperator Optional override for the operator flag.
    * @returns The calculated physical scope.
    */
-  public getSymbolScope(symbol: string): number {
-    const isOperator = classifyOperatorToken(symbol) != OperatorClass.None;
-    return super.getSymbolScope(symbol, isOperator);
+  public getSymbolScope(symbol: string, isOperator?: boolean): number {
+    const flag =
+      isOperator ?? classifyOperatorToken(symbol) != OperatorClass.None;
+    return super.getSymbolScope(symbol, flag);
   }
 
   /**
@@ -99,6 +111,15 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
       system.posZ[id] = system.depth[id];
       // posW: Age coordinate (matches Time content).
       system.posW[id] = DOPAT_CONFIG.PHYSICS.AGE_FRESHNESS; // freshly ingested = maximally recent
+
+      // Number-line grounding: integer numerals get posW = value × scale and
+      // decayRate = 0, so the geometry of W carries the value and additive
+      // reductions compose by traversal. (Reduction.ts uses the same scale.)
+      const numVal = numeralValue(token);
+      if (numVal !== null) {
+        system.posW[id] = numVal * NUMBER_LINE_SCALE;
+        system.decayRate[id] = 0;
+      }
 
       // Finalize derived properties.
       system.update(id);

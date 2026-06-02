@@ -26,6 +26,11 @@ export class GridIndex4D {
   private lastBuiltSystemAge = -1;
   private lastBuiltVersion = -1;
 
+  /** Cell edge length - lets callers quantize a point to its grid cell. */
+  public get cellSizeValue(): number {
+    return this.cellSize;
+  }
+
   public getSortedW(): Float32Array {
     return this.sortedW;
   }
@@ -293,7 +298,33 @@ export class GridIndex4D {
     const cw = Math.floor(qw / this.cellSize) | 0;
 
     const result: number[] = [];
+    this.candidatesInRadiusInto(qx, qy, qz, qw, radius, result);
+    return result;
+  }
 
+  /**
+   * Allocation-free variant of candidatesInRadius: writes the candidate ids into
+   * a caller-owned, reused array (`out`), truncating it first. V8 retains the
+   * backing store across `length = 0`, so the hot locomotion loop avoids a fresh
+   * allocation on every force evaluation. Returns the candidate count.
+   */
+  candidatesInRadiusInto(
+    qx: number,
+    qy: number,
+    qz: number,
+    qw: number,
+    radius: number,
+    out: number[]
+  ): number {
+    this.build();
+    out.length = 0;
+    const r = Math.ceil(radius / this.cellSize);
+    const cx = Math.floor(qx / this.cellSize) | 0;
+    const cy = Math.floor(qy / this.cellSize) | 0;
+    const cz = Math.floor(qz / this.cellSize) | 0;
+    const cw = Math.floor(qw / this.cellSize) | 0;
+
+    let n = 0;
     for (let dx = -r; dx <= r; dx++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dz = -r; dz <= r; dz++) {
@@ -304,14 +335,14 @@ export class GridIndex4D {
 
             const [start, count] = range;
             for (let i = 0; i < count; i++) {
-              result.push(this.ids[start + i]);
+              out[n++] = this.ids[start + i];
             }
           }
         }
       }
     }
-
-    return result;
+    out.length = n;
+    return n;
   }
 
   private hashCoords(cx: number, cy: number, cz: number, cw: number): number {

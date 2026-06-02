@@ -51,6 +51,7 @@ declare namespace PMath {
     relu(A: Matrix): Promise<Matrix>;
     softmax(vector: Vector): Promise<Vector>;
     dispose?(): Promise<void>;
+    reluV(A: Vector): Promise<Vector>;
   }
 }
 

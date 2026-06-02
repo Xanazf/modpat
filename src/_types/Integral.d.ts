@@ -178,6 +178,12 @@ declare namespace Mapping {
     contextScopes?: Set<number>;
     /** Skip vault recall and NLP rules; used by learnCycle/challenge for physics-only verification. */
     probeMode?: boolean;
+    /**
+     * Run the Phase 2 emission gate (coherence + anti-echo). If the candidate
+     * fails the gate, "unknown" is returned instead. Off by default so internal
+     * probes / learn-cycles see raw results; the user-facing path enables it.
+     */
+    gated?: boolean;
   }
 
   /** Backward-compat alias for PerceptionOptions. */

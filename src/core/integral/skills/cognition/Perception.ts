@@ -11,11 +11,25 @@ import { resolveLogicFormula } from "@core_i/formula/E1Formula";
 import { OperatorClass, SlotType } from "@core_i/System";
 import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import type Store from "@core_s/Memory";
+import { metrics } from "@core_s/Metrics";
 import { type FrameworkId, resolveActiveAtoms } from "@mutate/FrameworkIndex";
 import { GridIndex4D } from "@mutate/GridIndex4D";
 import { type CodePattern, Synthesizer } from "@skill_code/Coder";
+import { gateEmit } from "@skill_cogi/Coherence";
+import {
+  parseIsFacts,
+  reduceAdditive,
+  reduceEntailment,
+} from "@skill_cogi/Reduction";
 import type { Language } from "@skill_lang/Language";
 import nlp from "compromise";
+
+/** Parses an integer numeral; null for non-numeric tokens. */
+function _numeralValue(token: string): number | null {
+  if (!/^-?\d+$/.test(token)) return null;
+  const v = Number(token);
+  return Number.isFinite(v) ? v : null;
+}
 
 // -- Types ------------------------------------------------------------------
 
@@ -82,7 +96,29 @@ export async function perceive(
       `Sequence length ${ids.length} exceeds max DOD buffer capacity ${maxLen}`
     );
   }
-  return observeSettlingGradient(ids, opts, deps, cache);
+  const result = await observeSettlingGradient(ids, opts, deps, cache);
+  if (!opts.gated || result.ids.length === 0) return result;
+
+  // Phase 2 emission gate. "unknown" is already an abstain, pass it through.
+  const decoded = deps.atomizer
+    .decodeSequence(result.ids, deps.system)
+    .trim()
+    .toLowerCase();
+  if (decoded === "unknown") return result;
+
+  deps.buildGridIndex();
+  const verdict = gateEmit(
+    ids,
+    result.ids,
+    deps.system,
+    deps.gridIndex,
+    deps.lastInferentialEffort
+  );
+  if (verdict.emit) return result;
+  return {
+    ids: deps.atomizer.ingestSequence("unknown", deps.system),
+    sinkStrength: 0,
+  };
 }
 
 export async function perceiveCapturing(
@@ -162,6 +198,23 @@ export async function observeSettlingGradient(
         boostAtomMasses(derivation);
       }
       return { ids: derivation, sinkStrength: 1.0 };
+    }
+  }
+
+  // Phase 0c: reduction-as-traversal. Computing IS moving - additive arithmetic
+  // composes the operands' grounded W positions to the reduct, and universal
+  // instantiation walks the IS-graph from the subject to a derived predicate
+  // (hop >= 2 means a rule fired; anything less is just a restatement of the
+  // premises, so we leave those to the existing path).
+  if (!opts.probeMode) {
+    const reduct = _resolveReduction(ids, system, atomizer);
+    if (reduct && reduct.length > 0) {
+      if (store) {
+        await store.crystallizeProof(ids, reduct, 1.0);
+        boostAtomMasses(ids);
+        boostAtomMasses(reduct);
+      }
+      return { ids: reduct, sinkStrength: 1.0 };
     }
   }
 
@@ -303,7 +356,19 @@ export async function observeSettlingGradient(
       : -1;
   if (sourceId === -1) sourceId = _heaviestInput(ids, system);
 
+  // When the naive source (traveler position / heaviest input) collapses onto
+  // the settled sink, a premise→conclusion geodesic would be a zero-length
+  // self-loop - the path that historically routed real queries into the
+  // mass-ranked cluster fallback below (a fluent-echo failure mode), leaving the
+  // geodesic dormant. Recover a DISTINCT source from the remaining inputs so a
+  // genuine multi-premise query actually traverses the faithful map.
+  if (sourceId === sinkId) {
+    metrics.increment("perception.source_collapsed");
+    sourceId = _heaviestInputExcluding(ids, system, sinkId);
+  }
+
   if (sourceId === -1 || sourceId === sinkId) {
+    metrics.increment("perception.cluster_fallback");
     const candidates = gridIndex
       .candidatesInRadius(sx, sy, sz, sw, nearRadius)
       .filter(id => system.isAllocated(id));
@@ -319,6 +384,7 @@ export async function observeSettlingGradient(
   }
 
   // Read: traverse source → sink
+  metrics.increment("perception.geodesic");
   const result = await traverse(sourceId, sinkId, {
     boostScopes: effectiveBoost,
     activeAtoms,
@@ -470,6 +536,99 @@ function _heaviestInput(ids: Uint32Array, system: Root.ManifoldView): number {
     }
   }
   return bestId;
+}
+
+/** Heaviest allocated input atom whose id differs from `exclude` (-1 if none). */
+function _heaviestInputExcluding(
+  ids: Uint32Array,
+  system: Root.ManifoldView,
+  exclude: number
+): number {
+  let bestId = -1,
+    bestMass = -Infinity;
+  for (let k = 0; k < ids.length; k++) {
+    const id = ids[k];
+    if (id === exclude || !system.isAllocated(id)) continue;
+    const m = system.mass[id];
+    if (m > bestMass) {
+      bestMass = m;
+      bestId = id;
+    }
+  }
+  return bestId;
+}
+
+// -- Reduction-as-traversal --------------------------------------------------
+
+/**
+ * Tries the two reduction fast-paths:
+ *   1) additive arithmetic - Arithmetic operator flanked by numeric operands;
+ *      reduceAdditive composes them on the W number line.
+ *   2) universal instantiation - Sink-terminated query whose premises form an
+ *      IS-graph; reduceEntailment walks it from the subject. Fires only when
+ *      a rule was applied (hop >= 2), so it cannot regress transitivity
+ *      cases (where the subject is a chain end with no outgoing edges).
+ */
+function _resolveReduction(
+  ids: Uint32Array,
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine
+): Uint32Array | null {
+  // 1) additive arithmetic
+  for (let i = 1; i < ids.length - 1; i++) {
+    const opId = ids[i];
+    if (system.operatorClass[opId] !== OperatorClass.Arithmetic) continue;
+    const aId = ids[i - 1];
+    const bId = ids[i + 1];
+    if (system.operatorClass[aId] !== OperatorClass.None) continue;
+    if (system.operatorClass[bId] !== OperatorClass.None) continue;
+    const aTok = atomizer.decodeSequence(new Uint32Array([aId]), system).trim();
+    const bTok = atomizer.decodeSequence(new Uint32Array([bId]), system).trim();
+    if (_numeralValue(aTok) === null || _numeralValue(bTok) === null) continue;
+    const opTok = atomizer
+      .decodeSequence(new Uint32Array([opId]), system)
+      .trim();
+    const r = reduceAdditive(opTok, aId, bId, system, atomizer);
+    if (r) return new Uint32Array([r.resultId]);
+  }
+
+  // 2) universal instantiation
+  const N = ids.length;
+  if (N === 0) return null;
+  if (system.operatorClass[ids[N - 1]] !== OperatorClass.Sink) return null;
+
+  let subjectId = -1;
+  for (let i = N - 2; i >= 0; i--) {
+    if (system.operatorClass[ids[i]] === OperatorClass.None) {
+      subjectId = ids[i];
+      break;
+    }
+  }
+  if (subjectId === -1) return null;
+  const subject = atomizer
+    .decodeSequence(new Uint32Array([subjectId]), system)
+    .trim();
+  if (!subject) return null;
+
+  const text = atomizer.decodeSequence(ids, system);
+  const facts = parseIsFacts(text);
+  if (facts.length === 0) return null;
+
+  const r = reduceEntailment(subject, facts);
+  if (r.derived.length === 0) return null;
+
+  // Deepest-hop derivation wins - it represents the longest applied chain of
+  // rules and is the genuinely downstream conclusion.
+  let best = r.derived[0];
+  let bestHop = r.hops.get(best) ?? 0;
+  for (const c of r.derived) {
+    const h = r.hops.get(c) ?? 0;
+    if (h > bestHop) {
+      best = c;
+      bestHop = h;
+    }
+  }
+  return atomizer.ingestSequence(best, system);
 }
 
 // -- Code synthesis ----------------------------------------------------------
