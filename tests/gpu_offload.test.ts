@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DOPAT_CONFIG } from "@config";
 import { gpu_math } from "@core_s/Math";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
@@ -54,37 +55,51 @@ export async function executeGPUOffloadTest() {
       const skyId = env.atomizer.ingestSequence("sky", env.system)[0];
       const waterId = env.atomizer.ingestSequence("water", env.system)[0];
 
-      env.resolver.setGPUEnabled(false);
-      const cpuPath = await env.resolver.calculateGeodesic(skyId, waterId, 64);
-      assert.ok(
-        cpuPath.length > 0,
-        "CPU geodesic must return at least one node"
-      );
-
-      // Path should be internally consistent: all IDs must be allocated.
-      for (const id of cpuPath) {
-        assert.ok(
-          env.system.isAllocated(id),
-          `CPU geodesic returned unallocated node id=${id}`
-        );
+      // This test validates the relaxPath GPU path (the rollback mechanism), so
+      // pin it: directed settling is CPU-only and would make both runs identical.
+      const prevPrimary = DOPAT_CONFIG.PHYSICS.SETTLING_TRAVERSE_PRIMARY;
+      (
+        DOPAT_CONFIG.PHYSICS as { SETTLING_TRAVERSE_PRIMARY: boolean }
+      ).SETTLING_TRAVERSE_PRIMARY = false;
+      try {
+        await runGeodesicCpuVsGpu(env, skyId, waterId);
+      } finally {
+        (
+          DOPAT_CONFIG.PHYSICS as { SETTLING_TRAVERSE_PRIMARY: boolean }
+        ).SETTLING_TRAVERSE_PRIMARY = prevPrimary;
       }
-
-      env.resolver.setGPUEnabled(true);
-      await gpu_math.getDevice();
-      const gpuPath = await env.resolver.calculateGeodesic(skyId, waterId, 64);
-      assert.ok(
-        gpuPath.length > 0,
-        "GPU geodesic must return at least one node"
-      );
-
-      // Both paths should start near the source and end near the target.
-      assert.strictEqual(
-        gpuPath[0],
-        cpuPath[0],
-        "CPU and GPU geodesics must share the same start node"
-      );
     });
 
     await TestHarness.disposeEnvironment(env);
   });
+}
+
+async function runGeodesicCpuVsGpu(
+  env: Awaited<ReturnType<typeof TestHarness.getEnvironment>>,
+  skyId: number,
+  waterId: number
+): Promise<void> {
+  env.resolver.setGPUEnabled(false);
+  const cpuPath = await env.resolver.calculateGeodesic(skyId, waterId, 64);
+  assert.ok(cpuPath.length > 0, "CPU geodesic must return at least one node");
+
+  // Path should be internally consistent: all IDs must be allocated.
+  for (const id of cpuPath) {
+    assert.ok(
+      env.system.isAllocated(id),
+      `CPU geodesic returned unallocated node id=${id}`
+    );
+  }
+
+  env.resolver.setGPUEnabled(true);
+  await gpu_math.getDevice();
+  const gpuPath = await env.resolver.calculateGeodesic(skyId, waterId, 64);
+  assert.ok(gpuPath.length > 0, "GPU geodesic must return at least one node");
+
+  // Both paths should start near the source and end near the target.
+  assert.strictEqual(
+    gpuPath[0],
+    cpuPath[0],
+    "CPU and GPU geodesics must share the same start node"
+  );
 }

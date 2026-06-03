@@ -11,6 +11,7 @@
  *   • Modus tollens            (A ⇒ B) ∧ ¬B         ⊢ ¬A
  *   • Universal instantiation  (∀A.B) ∧ (x is A)   ⊢ x is B
  *   • Transitivity (chained)   (A ⇒ B) ∧ (B ⇒ C)   ⊢ A ⇒ C  (follows full chain)
+ *   • Conjunction elimination  A ∧ B                ⊢ A  (last resort, ≥2 clauses)
  *
  * Connective operators are identified by OperatorClass values; the numeric
  * constants mirror the OperatorClass enum in System.ts to avoid an import
@@ -305,6 +306,21 @@ export function resolveLogicFormula(
         opId,
         ...consIds,
       ]);
+    }
+  }
+
+  // Rule 4: Conjunction elimination – A ∧ B ⊢ A. When the formula is a
+  // conjunction of ≥2 clauses and no directional rule above fired, the
+  // conjunction is itself assertible, so reduce to its first conjunct: return
+  // that clause's predicate (consequent), or its subject (antecedent) for a
+  // bare-fact clause. Restores the R4/R5 conjunction behaviour dropped in the
+  // Traveler rewrite (commit 18158be); the perceive pipeline then reports a
+  // positive sink for the returned conjunct.
+  if (clauses.length >= 2) {
+    for (const c of parsed) {
+      if (c.isQuantifier) continue;
+      if (c.consequentIds.length > 0) return new Uint32Array(c.consequentIds);
+      if (c.antecedentIds.length > 0) return new Uint32Array(c.antecedentIds);
     }
   }
 

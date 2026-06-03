@@ -8,13 +8,13 @@
 import { DOPAT_CONFIG } from "@config";
 import { SlotType } from "@core_i/System";
 import {
-  computeHolonomy as computeHolonomyMath,
   computeChristoffelForce,
-  updateChristoffels,
-  regularizeChristoffels as regularizeChristoffelsMath,
-  windingNumber2D,
+  computeHolonomy as computeHolonomyMath,
   distance4DPoints,
   gpu_math,
+  regularizeChristoffels as regularizeChristoffelsMath,
+  updateChristoffels,
+  windingNumber2D,
 } from "@core_s/Math";
 import { metrics } from "@core_s/Metrics";
 import { GridIndex4D } from "@mutate/GridIndex4D";
@@ -48,6 +48,23 @@ export interface LocomotionState {
   _pcCellY: Int32Array;
   _pcCellZ: Int32Array;
   _pcCellW: Int32Array;
+  // -- reusable traversal path buffers (grown per query, never per call) --
+  _px: Float64Array;
+  _py: Float64Array;
+  _pe: Float64Array;
+  _pa: Float64Array;
+  readonly _relaxV: Float64Array; // length-4 scratch for relaxPath
+  readonly _relaxCF: Float64Array;
+}
+
+/** Grow the reusable path-coordinate buffers to hold a path of `steps` segments. */
+function ensurePathBuffers(state: LocomotionState, steps: number): void {
+  if (state._px.length >= steps + 1) return;
+  const n = steps + 1;
+  state._px = new Float64Array(n);
+  state._py = new Float64Array(n);
+  state._pe = new Float64Array(n);
+  state._pa = new Float64Array(n);
 }
 
 /** Grow the per-candidate scratch caches to hold at least `n` survivors. */
@@ -63,6 +80,9 @@ function ensureMetricForceCapacity(state: LocomotionState, n: number): void {
 }
 
 const CELL_SENTINEL = 0x7fffffff;
+
+/** Shared empty penalty list - reused to avoid per-force-eval allocation. */
+const EMPTY_PENALTIES: never[] = [];
 
 /** Grow + invalidate the per-point candidate cache for a path of `steps` segments. */
 function resetPathCandCache(state: LocomotionState, steps: number): void {
@@ -102,6 +122,12 @@ export function makeLocomotionState(): LocomotionState {
     _pcCellY: new Int32Array(0),
     _pcCellZ: new Int32Array(0),
     _pcCellW: new Int32Array(0),
+    _px: new Float64Array(0),
+    _py: new Float64Array(0),
+    _pe: new Float64Array(0),
+    _pa: new Float64Array(0),
+    _relaxV: new Float64Array(4),
+    _relaxCF: new Float64Array(4),
   };
 }
 
@@ -125,7 +151,8 @@ export function getMetricForce(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: LocomotionState,
+  conformalOverride?: boolean
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {
   const candidates = state._candScratch;
   state.gridIndex.candidatesInRadiusInto(
@@ -146,7 +173,8 @@ export function getMetricForce(
     boost,
     activeAtoms,
     system,
-    state
+    state,
+    conformalOverride
   );
 }
 
@@ -167,10 +195,15 @@ function forceFromCandidates(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: LocomotionState,
+  conformalOverride?: boolean
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {
   const phys = DOPAT_CONFIG.PHYSICS,
     F = phys.INFLUENCE_FALLOFF;
+  // Per-call conformal control: directed settling needs the full un-muted wells
+  // (conformal OFF) while relaxPath/perception use the global. `?? ` preserves an
+  // explicit `false` (only undefined falls through to the global flag).
+  const cEnabled = conformalOverride ?? phys.CONFORMAL_ENABLED;
   let V = 1.0,
     fx = 0.0,
     fy = 0.0,
@@ -219,7 +252,7 @@ function forceFromCandidates(
   }
 
   // Second pass: V and force, reusing the cached survivors.
-  const conformal = phys.CONFORMAL_ENABLED ? Math.exp(-2.0 * phi) : 1.0;
+  const conformal = cEnabled ? Math.exp(-2.0 * phi) : 1.0;
   for (let k = 0; k < m; k++) {
     const dx = mfDx[k],
       dy = mfDy[k],
@@ -227,7 +260,7 @@ function forceFromCandidates(
       dw = mfDw[k];
     let infl = mfInfl[k];
     infl *= Math.exp(-phys.PHI_TEMPORAL_DECAY * Math.max(0, dw));
-    if (phys.CONFORMAL_ENABLED) infl *= conformal;
+    if (cEnabled) infl *= conformal;
     const e = infl * mfExp[k];
     V -= e;
     const f = (2.0 * e) / F;
@@ -254,7 +287,7 @@ function forceFromCandidates(
       fw += f * dw;
     }
   }
-  if (phys.A_B_FULL_GRADIENT && phys.CONFORMAL_ENABLED) {
+  if (phys.A_B_FULL_GRADIENT && cEnabled) {
     const V_sum = 1.0 - Math.max(0.01, V);
     let gpx = 0,
       gpy = 0,
@@ -336,8 +369,8 @@ export function relaxPath(
   system: Root.ManifoldView,
   state: LocomotionState
 ): void {
-  const v = new Float64Array(4);
-  const cf = new Float64Array(4);
+  const v = state._relaxV;
+  const cf = state._relaxCF;
   // Per-point candidate cache: a path point moves by tiny lr steps each
   // iteration and rarely crosses a grid cell (cellSize ≫ step), so its 81-cell
   // candidate block is usually unchanged. Re-walk the grid only on a cell cross.
@@ -799,39 +832,71 @@ function _extractIds(
   system: Root.ManifoldView,
   state: LocomotionState
 ): Uint32Array {
-  const resultIds: number[] = [],
-    maxPosYByLayer = new Map<number, number>();
-  let fallbackCount = 0;
-  for (let i = 0; i <= steps; i++) {
-    let bestId = -1,
-      minDiff = Infinity;
-    const loopStart = preExpandLength > 0 ? preExpandLength : 0;
-    const evalJ = (j: number) => {
-      const dx = system.posX[j] - px[i],
-        dy = system.posY[j] - py[i],
-        dz = system.posZ[j] - pe[i],
-        dw = system.posW[j] - pa[i];
-      const distSq = dx * dx + dy * dy + dz * dz + dw * dw;
-      let tot = distSq + dw * dw * 1e6;
-      const layJ = Math.floor(
-        system.posZ[j] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
-      );
-      if (system.posY[j] < (maxPosYByLayer.get(layJ) ?? -Infinity)) tot += 1e6;
-      if (
-        tot < minDiff &&
-        !(
-          system.density[j] > DOPAT_CONFIG.PHYSICS.TRAP_MASS_THRESHOLD &&
-          system.entropyRate[j] < DOPAT_CONFIG.PHYSICS.TRAP_ENTROPY_THRESHOLD
-        )
-      ) {
-        minDiff = tot;
-        bestId = j;
+  const resultIds: number[] = [];
+  // Max posY seen per Z-layer, as parallel arrays scanned linearly: a single
+  // source→sink path visits only a handful of layers, so a linear probe beats a
+  // Map.get's hashing on the per-candidate lookup (the old FindOrderedHashMapEntry
+  // hotspot). Same semantics as the previous Map<layer, maxPosY>.
+  const layerKeys: number[] = [];
+  const layerMaxY: number[] = [];
+  let nLayers = 0;
+  // Hoist config reads, typed-array refs, and the candidate set: all constant
+  // across path points. The number-line index is rebuilt only when the system
+  // changes, so it is safe to fetch once.
+  const LBS = DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE;
+  const trapMass = DOPAT_CONFIG.PHYSICS.TRAP_MASS_THRESHOLD;
+  const trapEntropy = DOPAT_CONFIG.PHYSICS.TRAP_ENTROPY_THRESHOLD;
+  const loopStart = preExpandLength > 0 ? preExpandLength : 0;
+  const posX = system.posX,
+    posY = system.posY,
+    posZ = system.posZ,
+    posW = system.posW,
+    density = system.density,
+    entropyRate = system.entropyRate;
+  const sortedW = state.gridIndex.getSortedW();
+  const sortedIdsByW = state.gridIndex.getSortedIdsByW();
+  const count = sortedW.length;
+  // Per-point query state, hoisted so evalJ is ONE closure (not one per point).
+  let cpx = 0,
+    cpy = 0,
+    cpz = 0,
+    cpw = 0,
+    minDiff = Infinity,
+    bestId = -1;
+  // Equivalent to the original nearest-under-custom-metric scan, but skips the
+  // layer-Map lookup and trap check for candidates already farther than the
+  // running best - the layer penalty only ever increases `tot`, so an early
+  // `tot >= minDiff` cannot change the outcome.
+  const evalJ = (j: number): void => {
+    const dx = posX[j] - cpx,
+      dy = posY[j] - cpy,
+      dz = posZ[j] - cpz,
+      dw = posW[j] - cpw;
+    let tot = dx * dx + dy * dy + dz * dz + dw * dw + dw * dw * 1e6;
+    if (tot >= minDiff) return;
+    const layJ = Math.floor(posZ[j] / LBS);
+    let layMaxY = Number.NEGATIVE_INFINITY;
+    for (let q = 0; q < nLayers; q++)
+      if (layerKeys[q] === layJ) {
+        layMaxY = layerMaxY[q];
+        break;
       }
-    };
+    if (posY[j] < layMaxY) {
+      tot += 1e6;
+      if (tot >= minDiff) return;
+    }
+    if (density[j] > trapMass && entropyRate[j] < trapEntropy) return;
+    minDiff = tot;
+    bestId = j;
+  };
 
-    const sortedW = state.gridIndex.getSortedW();
-    const sortedIdsByW = state.gridIndex.getSortedIdsByW();
-    const count = sortedW.length;
+  for (let i = 0; i <= steps; i++) {
+    bestId = -1;
+    minDiff = Infinity;
+    cpx = px[i];
+    cpy = py[i];
+    cpz = pe[i];
+    cpw = pa[i];
 
     if (count === 0) {
       for (let j = loopStart; j < system.length; j++) evalJ(j);
@@ -895,14 +960,10 @@ function _extractIds(
       bestId !== -1 &&
       (resultIds.length === 0 || resultIds[resultIds.length - 1] !== bestId)
     ) {
-      const layB = Math.floor(
-        system.posZ[bestId] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
-      );
+      const layB = Math.floor(posZ[bestId] / LBS);
       if (resultIds.length > 0) {
         const lastId = resultIds[resultIds.length - 1],
-          layL = Math.floor(
-            system.posZ[lastId] / DOPAT_CONFIG.structural.LAYER_BUCKET_SIZE
-          );
+          layL = Math.floor(posZ[lastId] / LBS);
         if (
           layL === layB &&
           bestId > lastId &&
@@ -911,12 +972,237 @@ function _extractIds(
           for (let f = lastId + 1; f < bestId; f++) resultIds.push(f);
       }
       resultIds.push(bestId);
-      const cur = maxPosYByLayer.get(layB) ?? -Infinity;
-      if (system.posY[bestId] > cur)
-        maxPosYByLayer.set(layB, system.posY[bestId]);
+      // Update the per-layer max posY (find-or-append on the parallel arrays).
+      let lq = 0;
+      for (; lq < nLayers; lq++) if (layerKeys[lq] === layB) break;
+      if (lq === nLayers) {
+        layerKeys[nLayers] = layB;
+        layerMaxY[nLayers] = posY[bestId];
+        nLayers++;
+      } else if (posY[bestId] > layerMaxY[lq]) {
+        layerMaxY[lq] = posY[bestId];
+      }
     }
   }
   return new Uint32Array(resultIds);
+}
+
+// -- Directed settling traversal --------------------------------------------
+
+/**
+ * One clean directed settle from src at a fixed bias λ. Returns the deduped
+ * visited-atom precept-id walk and whether the settled point's nearest atom IS
+ * the target (the graph-free arrival test). Forces are evaluated conformal-OFF
+ * (via the per-call `getMetricForce` override) - the regime in which settling is
+ * faithful; conformal-ON mutes the field so only the goal bias acts and the
+ * particle beelines.
+ */
+function _settleOnce(
+  sourceId: number,
+  targetId: number,
+  lambda: number,
+  boost: Set<number> | undefined,
+  activeAtoms: Set<number> | undefined,
+  system: Root.ManifoldView,
+  state: LocomotionState
+): { walk: number[]; arrived: boolean } {
+  const phys = DOPAT_CONFIG.PHYSICS;
+  const dt = phys.SETTLE_TRAVERSE_DT,
+    gamma = phys.SETTLE_TRAVERSE_DAMPING;
+  const innerMax = phys.SETTLE_TRAVERSE_MAX_STEPS;
+  const nearR = Math.sqrt(phys.INFLUENCE_RADIUS) * 4;
+  const tx = system.posX[targetId],
+    ty = system.posY[targetId],
+    tz = system.posZ[targetId],
+    tw = system.posW[targetId];
+  let px = system.posX[sourceId],
+    py = system.posY[sourceId],
+    pz = system.posZ[sourceId],
+    pw = system.posW[sourceId];
+  let vx = 0,
+    vy = 0,
+    vz = 0,
+    vw = 0;
+  const walk: number[] = [sourceId];
+  let lastId = sourceId;
+  const drag = 1 - gamma * dt;
+  for (let t = 0; t < innerMax; t++) {
+    const [, fx, fy, fz, fw] = getMetricForce(
+      px,
+      py,
+      pz,
+      pw,
+      EMPTY_PENALTIES,
+      boost,
+      activeAtoms,
+      system,
+      state,
+      false // conformal OFF: settling needs the full un-muted attractor wells
+    );
+    // a = −∇V_field − λ(p − tgt); semi-implicit Euler with velocity drag.
+    vx = (vx + dt * (-fx - lambda * (px - tx))) * drag;
+    vy = (vy + dt * (-fy - lambda * (py - ty))) * drag;
+    vz = (vz + dt * (-fz - lambda * (pz - tz))) * drag;
+    vw = (vw + dt * (-fw - lambda * (pw - tw))) * drag;
+    px += dt * vx;
+    py += dt * vy;
+    pz += dt * vz;
+    pw += dt * vw;
+    const nId = state.gridIndex.nearest(
+      px,
+      py,
+      pz,
+      pw,
+      nearR,
+      system,
+      activeAtoms
+    );
+    if (nId >= 0 && nId !== lastId) {
+      walk.push(nId);
+      lastId = nId;
+    }
+    if (vx * vx + vy * vy + vz * vz + vw * vw < 1e-8) break;
+  }
+  const finalNearest = state.gridIndex.nearest(
+    px,
+    py,
+    pz,
+    pw,
+    nearR,
+    system,
+    activeAtoms
+  );
+  return { walk, arrived: finalNearest === targetId };
+}
+
+/**
+ * Directed-settling traversal with a SELF-CALIBRATING goal bias - the validated
+ * replacement for relaxPath's boundary-value relaxation. Escalate-until-arrival:
+ * double λ until a fresh settle from src reaches the target, then return that
+ * round's clean walk (λ-search and path-emission are separated so the path is a
+ * single un-polluted settle at λ*). λ₀ is scale-aware - probed from the source
+ * well wall so it tracks the local force magnitude. Runs conformal-OFF.
+ */
+export function settleDirectedPath(
+  sourceId: number,
+  targetId: number,
+  boost: Set<number> | undefined,
+  activeAtoms: Set<number> | undefined,
+  system: Root.ManifoldView,
+  state: LocomotionState
+): Uint32Array {
+  buildGridIndex(system, state);
+  const phys = DOPAT_CONFIG.PHYSICS;
+  const F = phys.INFLUENCE_FALLOFF;
+  const sx = system.posX[sourceId],
+    sy = system.posY[sourceId],
+    sz = system.posZ[sourceId],
+    sw = system.posW[sourceId];
+  const dx = system.posX[targetId] - sx,
+    dy = system.posY[targetId] - sy,
+    dz = system.posZ[targetId] - sz,
+    dw = system.posW[targetId] - sw;
+  const D0 = Math.hypot(dx, dy, dz, dw) || 1e-9;
+  // λ₀ from the source well wall (where the Gaussian gradient peaks ~√(F/2)).
+  // Conformal OFF is requested per-call (no global flag mutation) so concurrent
+  // or interleaved conformal-ON traversals are unaffected.
+  const probe = Math.min(Math.sqrt(F / 2), D0 * 0.5) / D0;
+  const fm = getMetricForce(
+    sx + dx * probe,
+    sy + dy * probe,
+    sz + dz * probe,
+    sw + dw * probe,
+    EMPTY_PENALTIES,
+    boost,
+    activeAtoms,
+    system,
+    state,
+    false
+  );
+  const fMag = Math.hypot(fm[1], fm[2], fm[3], fm[4]);
+  let lambda =
+    (phys.SETTLE_TRAVERSE_LAMBDA0_FRACTION * Math.max(fMag, 1e-9)) / D0;
+  const maxEsc = phys.SETTLE_TRAVERSE_MAX_ESCALATIONS;
+  let last = _settleOnce(
+    sourceId,
+    targetId,
+    lambda,
+    boost,
+    activeAtoms,
+    system,
+    state
+  );
+  let esc = 0;
+  while (!last.arrived && esc < maxEsc) {
+    lambda *= 2;
+    esc++;
+    last = _settleOnce(
+      sourceId,
+      targetId,
+      lambda,
+      boost,
+      activeAtoms,
+      system,
+      state
+    );
+  }
+  metrics.gauge("settle.lambda", lambda);
+  metrics.gauge("settle.escalations", esc);
+  metrics.increment(last.arrived ? "settle.arrived" : "settle.gave_up");
+  return new Uint32Array(last.walk);
+}
+
+/**
+ * Settling-primary traversal: the directed-settling path IS the result (the
+ * validated nearest-atom walk, NOT routed through relaxPath's `_extractIds`).
+ * Reconstructs holonomy / inferential effort from the settled atom polyline so
+ * downstream traveler-state accumulation stays coherent, then reinforces the
+ * path exactly as relaxPath's `travel()` does. No trap/review loop (settling is
+ * Lyapunov-convergent), no void expansion (a manifold-growth concern the dream
+ * cycle owns independently); roll back via SETTLING_TRAVERSE_PRIMARY=false.
+ */
+function settleTravel(
+  sourceId: number,
+  targetId: number,
+  options: Mapping.RouteOptions,
+  system: Root.ManifoldView,
+  state: LocomotionState
+): Uint32Array {
+  const result = settleDirectedPath(
+    sourceId,
+    targetId,
+    options.boostScopes,
+    options.activeAtoms,
+    system,
+    state
+  );
+  const n = result.length;
+  if (n >= 2) {
+    ensurePathBuffers(state, n - 1);
+    const px = state._px,
+      py = state._py,
+      pe = state._pe,
+      pa = state._pa;
+    for (let i = 0; i < n; i++) {
+      const id = result[i];
+      px[i] = system.posX[id];
+      py[i] = system.posY[id];
+      pe[i] = system.posZ[id];
+      pa[i] = system.posW[id];
+    }
+    computeHolonomy(px, py, pe, pa, n - 1, state);
+  } else {
+    // Trivial path (src settles onto itself): identity holonomy, zero effort.
+    state.lastHolonomy.fill(0);
+    state.lastHolonomy[0] = 1;
+    state.lastHolonomy[5] = 1;
+    state.lastHolonomy[10] = 1;
+    state.lastHolonomy[15] = 1;
+    state.lastInferentialEffort = 0;
+  }
+  metrics.gauge("transport.inferential_effort", state.lastInferentialEffort);
+  reinforcePath(result, system);
+  return result;
 }
 
 // -- Main traversal ---------------------------------------------------------
@@ -929,15 +1215,20 @@ export async function travel(
   system: Root.ManifoldView,
   state: LocomotionState
 ): Promise<Uint32Array> {
+  if (DOPAT_CONFIG.PHYSICS.SETTLING_TRAVERSE_PRIMARY)
+    return settleTravel(sourceId, targetId, options, system, state);
   const steps = options.steps ?? 32,
     boostScopes = options.boostScopes,
     lr = options.learningRate ?? 0.05;
   const maxIter = options.maxIterations ?? 100,
     activeAtoms = options.activeAtoms;
-  const px = new Float64Array(steps + 1),
-    py = new Float64Array(steps + 1);
-  const pe = new Float64Array(steps + 1),
-    pa = new Float64Array(steps + 1);
+  // Reuse per-query path buffers across calls (grown on demand); every element
+  // 0..steps is overwritten below before any read, so stale tail data is moot.
+  ensurePathBuffers(state, steps);
+  const px = state._px,
+    py = state._py,
+    pe = state._pe,
+    pa = state._pa;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     px[i] =
@@ -1102,5 +1393,31 @@ export async function travel(
       state
     );
   reinforcePath(result, system);
+
+  // Shadow: compare directed settling against the relaxPath result without
+  // changing what we return. Logs path divergence (Jaccard over precept-id sets,
+  // length delta, whether settling reached the target) for offline analysis.
+  if (DOPAT_CONFIG.PHYSICS.SETTLING_TRAVERSE_SHADOW) {
+    const settled = settleDirectedPath(
+      sourceId,
+      targetId,
+      boostScopes,
+      activeAtoms,
+      system,
+      state
+    );
+    const a = new Set<number>(result);
+    let inter = 0;
+    for (const id of settled) if (a.has(id)) inter++;
+    const union = a.size + settled.length - inter;
+    metrics.gauge("traverse.shadow_jaccard", union > 0 ? inter / union : 1);
+    metrics.gauge("traverse.shadow_len_relax", result.length);
+    metrics.gauge("traverse.shadow_len_settle", settled.length);
+    metrics.increment(
+      settled.length > 0 && settled[settled.length - 1] === targetId
+        ? "traverse.shadow_settle_reached"
+        : "traverse.shadow_settle_missed"
+    );
+  }
   return result;
 }

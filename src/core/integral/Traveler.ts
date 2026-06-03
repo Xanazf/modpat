@@ -23,6 +23,7 @@ import {
   makeLocomotionState,
   regularizeChristoffels,
   reinforcePath,
+  settleDirectedPath,
   travel,
 } from "@skill_cogi/Locomotion";
 import {
@@ -368,6 +369,27 @@ class Traveler implements Mapping.Engine {
   }
 
   // Kept only for the dead-code path checker – entire body replaced above.
+
+  /**
+   * Directed-settling traversal: the self-calibrating damped-particle geodesic
+   * (Lyapunov-conditioned) being shadow-evaluated as the replacement for
+   * `traverse`'s boundary-value relaxation. Same src→tgt contract; returns the
+   * settled visited-atom precept-id walk. Used by the fidelity comparison.
+   */
+  public settleTraverse(
+    sourceId: number,
+    targetId: number,
+    options: Mapping.RouteOptions = {}
+  ): Uint32Array {
+    return settleDirectedPath(
+      sourceId,
+      targetId,
+      options.boostScopes,
+      options.activeAtoms,
+      this.system,
+      this._loco
+    );
+  }
 
   /** Backward-compat alias for `traverse`. */
   public route(

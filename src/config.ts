@@ -164,6 +164,38 @@ const DOPAT_CONFIG = {
      */
     SETTLE_CONVERGENCE_THRESHOLD: 1e-4,
     /**
+     * Directed-settling traversal (the validated replacement for relaxPath's
+     * ill-conditioned boundary-value relaxation). A damped particle released at
+     * the source falls through the un-muted attractor field toward a goal-biased
+     * target: a = −∇V_field − λ(p − tgt) − γv. E = ½|v|² + V_field + ½λ|p−tgt|²
+     * is a Lyapunov function, so settling is guaranteed for any λ. λ is NOT a
+     * constant: it self-calibrates by escalate-until-arrival (the smallest bias
+     * that reaches the target is the most faithful; more only beelines).
+     */
+    SETTLE_TRAVERSE_DT: 0.02,
+    SETTLE_TRAVERSE_DAMPING: 3.0,
+    SETTLE_TRAVERSE_MAX_STEPS: 2000,
+    /** Initial bias force as a fraction of the source well-wall force. */
+    SETTLE_TRAVERSE_LAMBDA0_FRACTION: 0.1,
+    /** Cap on λ doublings before giving up the arrival search. */
+    SETTLE_TRAVERSE_MAX_ESCALATIONS: 28,
+    /**
+     * Shadow mode: when true, `travel()` additionally runs directed settling
+     * after relaxPath and logs the divergence between the two emitted paths
+     * (`traverse.shadow_*` metrics). The returned path is UNCHANGED (relaxPath);
+     * this only measures. Off by default.
+     */
+    SETTLING_TRAVERSE_SHADOW: false,
+    /**
+     * Primary traversal mechanism. When true (default), `travel()` produces the
+     * geodesic by directed-settling (the Lyapunov-conditioned IVP) instead of
+     * relaxPath's boundary-value relaxation. Validated to dominate relaxPath on
+     * reach (always 1.0 vs 0.10–0.93) and onPath (8/9 corpora) - see
+     * scripts/dev/traverse_corpus_replication.ts. Set false to roll back to
+     * relaxPath (kept intact, including the GPU path and void expansion).
+     */
+    SETTLING_TRAVERSE_PRIMARY: true,
+    /**
      * TRAVELER session lifecycle - Exponential decay applied to the Traveler's
      * accumulated position vector per cognitive tick when no traversal is in
      * progress.  Implements the gravitational attraction back toward the pole
