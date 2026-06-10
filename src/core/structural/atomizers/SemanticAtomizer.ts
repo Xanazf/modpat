@@ -2,7 +2,7 @@ import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
 import type System from "@core_i/System";
 import { classifyOperatorToken, OperatorClass, SlotType } from "@core_i/System";
 import nlp from "compromise";
-import { BaseAtomizer } from "./BaseAtomizer";
+import { BaseAtomizer, COOCCURRENCE_STOPWORDS } from "./BaseAtomizer";
 
 /**
  * The SemanticAtomizer serves as the Natural Language Interface (NLI) for the logical manifold.
@@ -143,6 +143,21 @@ export default class SemanticAtomizer
     let currentLoom = 1.0;
     let prevId = 0; // NULL
 
+    // Scope multiset of the whole sequence - lets a cold-start token ground
+    // toward the referents of its co-occurring tokens (Phase 5). The co-occurrence
+    // basis keeps only CONTENT tokens (no operators, no stop-words), since
+    // syntactic glue co-occurs with everything and would collapse topics. Only
+    // built when the (default-off) cold-start channel is active.
+    const seqScopes = tokens.map(t => this.getSymbolScope(t.text));
+    const coocBasis = DOPAT_CONFIG.PHYSICS.COLD_START_COOCCURRENCE_ENABLED
+      ? seqScopes.filter(
+          (_s, i) =>
+            !tokens[i].isOp &&
+            classifyOperatorToken(tokens[i].text) === OperatorClass.None &&
+            !COOCCURRENCE_STOPWORDS.has(tokens[i].text.toLowerCase().trim())
+        )
+      : undefined;
+
     // 2. Physical Materialization
     for (let i = 0; i < tokens.length; i++) {
       const { text, isOp, isPlural, isVerb } = tokens[i];
@@ -160,7 +175,7 @@ export default class SemanticAtomizer
       let mass = isOp ? system.c ** 2 : system.c;
       if (isPlural) mass *= 1.5;
 
-      const scope = this.getSymbolScope(norm);
+      const scope = seqScopes[i];
 
       // We ALWAYS create a new location during sequence ingestion to preserve
       // the unique physical identity of each token in the functional chain.
@@ -279,16 +294,27 @@ export default class SemanticAtomizer
         system.posW[id] = numVal * 0.1;
         system.decayRate[id] = 0;
       } else {
+        // GloVe co-occurrence position - the cold-start hint.
         const words = canonicalLabel
           .split(/\s+/)
           .filter(w => !["the", "a", "an"].includes(w));
+        let coldStart: number;
         if (words.length > 0) {
           let avgPosX = 0;
           for (const word of words) avgPosX += this.loader.getScope(word);
-          system.posX[id] = avgPosX / words.length;
+          coldStart = avgPosX / words.length;
         } else {
-          system.posX[id] = this.loader.getScope(canonicalLabel);
+          coldStart = this.loader.getScope(canonicalLabel);
         }
+        // Phase 5: prefer the referent's grounded posX; on cold start ground
+        // toward co-occurring referents; GloVe only when neither exists.
+        system.posX[id] = this.groundedPosX(
+          system,
+          scope,
+          coldStart,
+          id,
+          coocBasis
+        );
       }
 
       system.update(id);

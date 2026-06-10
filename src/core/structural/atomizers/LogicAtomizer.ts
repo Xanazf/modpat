@@ -6,7 +6,7 @@ import {
   type SlotType,
 } from "@core_i/System";
 import { NUMBER_LINE_SCALE } from "@skill_cogi/Reduction";
-import { BaseAtomizer } from "./BaseAtomizer";
+import { BaseAtomizer, COOCCURRENCE_STOPWORDS } from "./BaseAtomizer";
 
 /** Parses an integer numeral; returns null for non-numeric tokens. */
 function numeralValue(token: string): number | null {
@@ -65,6 +65,20 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
     const sequenceIds = new Uint32Array(tokens.length);
     let prevId = 0; // NULL
 
+    // Scope multiset of the whole sequence - used so a cold-start token can
+    // ground toward the referents of its co-occurring tokens (Phase 5). The
+    // co-occurrence basis keeps only CONTENT tokens (no operators, no stop-words),
+    // since syntactic glue co-occurs with everything and would collapse topics.
+    // Only built when the (default-off) cold-start channel is active.
+    const seqScopes = tokens.map(t => this.getSymbolScope(t));
+    const coocBasis = DOPAT_CONFIG.PHYSICS.COLD_START_COOCCURRENCE_ENABLED
+      ? seqScopes.filter(
+          (_s, i) =>
+            classifyOperatorToken(tokens[i]) === OperatorClass.None &&
+            !COOCCURRENCE_STOPWORDS.has(tokens[i].toLowerCase().trim())
+        )
+      : undefined;
+
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
       const isOperator = classifyOperatorToken(token) != OperatorClass.None;
@@ -81,7 +95,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
       }
 
       // 2. Map the token to its unique Frequency Field (Scope).
-      const scope = this.getSymbolScope(token);
+      const scope = seqScopes[i];
 
       // 3. Materialize the token as a physical location in the System manifold.
       const id = system.createLocation(mass, scope);
@@ -103,8 +117,15 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
       system.time[id] = i * 0.01;
 
       // Coordinate Layer positioning:
-      // posX: Semantic relationship determined by UMAP 1D dimensionality reduction.
-      system.posX[id] = this.loader.getScope(token);
+      // posX: Phase 5 - the referent's grounded position when one exists;
+      // the GloVe/UMAP 1D reduction is demoted to a cold-start hint.
+      system.posX[id] = this.groundedPosX(
+        system,
+        scope,
+        this.loader.getScope(token),
+        id,
+        coocBasis
+      );
       // posY: Structural kind coordinate.
       system.posY[id] = i * 0.1;
       // posZ: Energy coordinate (matches Depth content).

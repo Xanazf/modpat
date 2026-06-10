@@ -139,6 +139,40 @@ const DOPAT_CONFIG = {
      */
     POLE_INGESTION_ENABLED: false,
     /**
+     * Phase 5 - coordinate-source migration. When true, a newly-ingested
+     * language token derives its posX from its *referent* (an existing grounded
+     * precept sharing the scope - a code symbol or a prior settled mention)
+     * rather than from the GloVe→UMAP co-occurrence embedding, which is demoted
+     * to a cold-start hint used only when no referent exists. This is the
+     * structural-grounding channel reaching language: position comes from a
+     * domain's own observable topology, not text statistics. Behaviour-preserving
+     * for novel words (no referent ⇒ GloVe fallback), so safe to default on.
+     */
+    REFERENT_GROUNDING_ENABLED: true,
+    /**
+     * Phase 5 - cold-start grounding. When a token has no direct referent (the
+     * first time a word is ever seen), derive its posX from the grounded
+     * positions of its *co-occurring* CONTENT tokens in the same sequence (mean
+     * referent posX, operators and stop-words excluded) rather than from GloVe.
+     * This extends the structural channel to first-seen words - a novel term
+     * lands in the neighbourhood of the grounded symbols it is uttered alongside.
+     * Requires REFERENT_GROUNDING_ENABLED; falls back to GloVe otherwise.
+     *
+     * SELECTIVE TRIGGER (why it is safe to default ON). The co-occurrence basis is
+     * restricted to STRUCTURALLY-grounded referents (`system.groundedPrecepts` -
+     * code/logic/math symbols), never prior language mentions. A first pass with
+     * the unrestricted trigger regressed the live semantic suites: bare sentence
+     * co-occurrence with an earlier unrelated mention relocated a new word into
+     * its region ("Tesla liked pie" after "Tesla invented electricity" pulled
+     * `pie` toward `electricity`, so the void query stopped abstaining; "the grass
+     * is" collapsed onto "the sky is"). Grounding only toward genuine grounded
+     * referents fixes this at the root: in a language-only context (no grounded
+     * precepts, as in those suites) cold-start is inert and falls back to GloVe,
+     * so they are preserved exactly; it fires only where a real grounded symbol is
+     * present (a function's callee, a code identifier), which is the intended case.
+     */
+    COLD_START_COOCCURRENCE_ENABLED: true,
+    /**
      * TRAVELER step 1 - Spatial jitter radius (XYZ axes) applied when placing a
      * newly ingested atom at the manifold pole (0, 0, 0, 0).  Small enough that
      * co-ingested atoms are distinguishable by D1 singularity detection, large

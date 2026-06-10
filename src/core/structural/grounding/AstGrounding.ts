@@ -13,12 +13,12 @@
  * (faithful) positions, so vault anchors are never stale.
  */
 
-import { type AstTriple } from "@utils/astExtract";
+import type { AstTriple } from "@utils/astExtract";
 import { buildGraphFromAstTriples, type GroundGraph } from "./GroundGraph";
 import {
   type GroundingOptions,
-  placeGraph,
   type Placement,
+  placeGraph,
 } from "./StructuralGrounding";
 
 export interface AstGroundingOptions extends GroundingOptions {
@@ -47,7 +47,28 @@ export function groundAstIntoSystem(
   atomizer: Atomic.Engine,
   opts: AstGroundingOptions = {}
 ): AstGroundingResult {
-  const graph = buildGraphFromAstTriples(triples);
+  return groundGraphIntoSystem(
+    buildGraphFromAstTriples(triples),
+    system,
+    atomizer,
+    opts
+  );
+}
+
+/**
+ * Lands an already-built GroundGraph into the System - the domain-agnostic core
+ * shared by code (`groundAstIntoSystem`) and logic/math (`buildGraphFromLogic`).
+ * One precept per unique node label; SMACOF coordinates from the graph's own
+ * topology; reference in-degree -> mass. Edge KIND is irrelevant here (placement
+ * and traversal read undirected hop distance), so any GroundGraph grounds the
+ * same way - which is precisely the unified-domain thesis made operational.
+ */
+export function groundGraphIntoSystem(
+  graph: GroundGraph,
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine,
+  opts: AstGroundingOptions = {}
+): AstGroundingResult {
   const n = graph.nodes.length;
   const nodeToPrecept = new Int32Array(n).fill(-1);
   const labelToPrecept = new Map<string, number>();
@@ -56,7 +77,7 @@ export function groundAstIntoSystem(
   // so a dotted/multi-word identifier stays one body.
   for (let i = 0; i < n; i++) {
     const label = graph.nodes[i].label;
-    // Code identifiers are operands, not operators (isOperator = false).
+    // Graph terms are operands, not operators (isOperator = false).
     const scope = atomizer.getSymbolScope(label, false);
     const id = system.createLocation(system.c, scope, "ast-ground");
     nodeToPrecept[i] = id;

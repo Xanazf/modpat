@@ -9,26 +9,31 @@
  */
 
 import * as assert from "node:assert";
+import LogicAtomizer from "@atomics/LogicAtomizer";
+import { DOPAT_CONFIG } from "@config";
+import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
+import {
+  groundAstIntoSystem,
+  groundGraphIntoSystem,
+} from "@core_s/grounding/AstGrounding";
 import {
   buildGraphFromAstTriples,
   EdgeKind,
   type GroundGraph,
   NodeKind,
 } from "@core_s/grounding/GroundGraph";
+import { buildGraphFromLogic } from "@core_s/grounding/LogicGraph";
 import { mapFidelity } from "@core_s/grounding/MapFidelity";
 import {
-  placeGraph,
   type Placement,
+  placeGraph,
   randomPlacement,
 } from "@core_s/grounding/StructuralGrounding";
-import { groundAstIntoSystem } from "@core_s/grounding/AstGrounding";
 import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
-import LogicAtomizer from "@atomics/LogicAtomizer";
-import System from "@core_i/System";
-import Traveler from "@core_i/Traveler";
 import { extractAstTriples } from "@utils/astExtract";
-import { random, seedRandom } from "@utils/seededRandom";
 import logger from "@utils/SpectralLogger";
+import { random, seedRandom } from "@utils/seededRandom";
 import { describe, it } from "./utils/harness";
 
 // A self-contained source with clear containment (has) and reference (calls,
@@ -342,6 +347,289 @@ export async function runStructuralGroundingTests(): Promise<void> {
       assert.ok(
         fStruct.monotonicity > 0.6,
         `structural monotonicity ${fStruct.monotonicity.toFixed(2)} should exceed 0.6`
+      );
+    });
+
+    await it("Phase 5: language inherits its referent's grounded posX, not GloVe", async () => {
+      // Ground the corpus, then ingest a word that NAMES a grounded symbol. With
+      // referent-grounding on, the language atom must land on the grounded precept
+      // (the faithful map), not at the GloVe co-occurrence coordinate.
+      const triples = extractAstTriples(SAMPLE_SOURCE, "sample.ts", {
+        includeCallSites: true,
+      });
+
+      const buildGrounded = async () => {
+        const system = new System();
+        const atomizer = new LogicAtomizer();
+        await atomizer.init();
+        const { graph, nodeToPrecept } = groundAstIntoSystem(
+          triples,
+          system,
+          atomizer,
+          { seed: 0 }
+        );
+        const bi = graph.nodes.findIndex(nd => nd.label === "bootstrap");
+        assert.ok(bi >= 0, "bootstrap node should exist");
+        const groundedX = system.posX[nodeToPrecept[bi]];
+        return { system, atomizer, groundedX };
+      };
+
+      const original = DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED;
+      try {
+        // Referent ON: "bootstrap" snaps to the grounded precept's posX.
+        DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED = true;
+        const on = await buildGrounded();
+        const onIds = on.atomizer.ingestSequence("bootstrap", on.system);
+        const onPosX = on.system.posX[onIds[onIds.length - 1]];
+        assert.ok(
+          Math.abs(onPosX - on.groundedX) < 1e-6,
+          `referent-on posX ${onPosX.toFixed(4)} should equal grounded ${on.groundedX.toFixed(4)}`
+        );
+
+        // Referent OFF: the same word cold-starts to a DISTINCT GloVe coordinate -
+        // proving the migration actually moves language off co-occurrence.
+        DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED = false;
+        const off = await buildGrounded();
+        const offIds = off.atomizer.ingestSequence("bootstrap", off.system);
+        const offPosX = off.system.posX[offIds[offIds.length - 1]];
+        assert.ok(
+          Math.abs(offPosX - off.groundedX) > 1e-3,
+          `GloVe posX ${offPosX.toFixed(4)} should differ from grounded ${off.groundedX.toFixed(4)}`
+        );
+
+        // Cold-start integrity: a word with NO referent falls back to GloVe
+        // identically whether the flag is on or off (referent-grounding is
+        // behaviour-preserving for novel terms).
+        const novel = "zqxwvk";
+        DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED = true;
+        const novelOnSys = await buildGrounded();
+        const nOn =
+          novelOnSys.system.posX[
+            novelOnSys.atomizer.ingestSequence(novel, novelOnSys.system)[0]
+          ];
+        DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED = false;
+        const novelOffSys = await buildGrounded();
+        const nOff =
+          novelOffSys.system.posX[
+            novelOffSys.atomizer.ingestSequence(novel, novelOffSys.system)[0]
+          ];
+        assert.ok(
+          Math.abs(nOn - nOff) < 1e-9,
+          `novel word should cold-start identically (${nOn} vs ${nOff})`
+        );
+
+        logger.log(
+          `  bootstrap: referent posX=${onPosX.toFixed(3)} == grounded; ` +
+            `GloVe posX=${offPosX.toFixed(3)} (gap ${Math.abs(offPosX - on.groundedX).toFixed(1)})`
+        );
+      } finally {
+        DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED = original;
+      }
+    });
+
+    await it("Phase 5: a cold-start word grounds toward its co-occurring referents", async () => {
+      // The referent channel only grounds a word that NAMES a grounded symbol.
+      // This covers the cold start: a never-seen word uttered ALONGSIDE grounded
+      // symbols must land in their neighbourhood (mean referent posX), not at its
+      // GloVe coordinate. Requires referent-grounding; gated separately so an
+      // isolated novel word still cold-starts to GloVe untouched.
+      const triples = extractAstTriples(SAMPLE_SOURCE, "sample.ts", {
+        includeCallSites: true,
+      });
+      const buildGrounded = async () => {
+        const system = new System();
+        const atomizer = new LogicAtomizer();
+        await atomizer.init();
+        const { graph, nodeToPrecept } = groundAstIntoSystem(
+          triples,
+          system,
+          atomizer,
+          { seed: 0 }
+        );
+        const bi = graph.nodes.findIndex(nd => nd.label === "bootstrap");
+        assert.ok(bi >= 0, "bootstrap node should exist");
+        return { system, atomizer, groundedX: system.posX[nodeToPrecept[bi]] };
+      };
+
+      const origRef = DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED;
+      const origCooc = DOPAT_CONFIG.PHYSICS.COLD_START_COOCCURRENCE_ENABLED;
+      const novel = "qzxvk0nope"; // never registered: no referent, no GloVe entry
+      try {
+        DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED = true;
+
+        // Co-occurrence ON: "<novel> bootstrap" lands the novel atom exactly on
+        // bootstrap's grounded posX (its only grounded co-occurrent).
+        DOPAT_CONFIG.PHYSICS.COLD_START_COOCCURRENCE_ENABLED = true;
+        const on = await buildGrounded();
+        const onIds = on.atomizer.ingestSequence(
+          `${novel} bootstrap`,
+          on.system
+        );
+        const onNovelX = on.system.posX[onIds[0]];
+        assert.ok(
+          Math.abs(onNovelX - on.groundedX) < 1e-6,
+          `cold-start novel posX ${onNovelX.toFixed(4)} should equal co-occurrent grounded ${on.groundedX.toFixed(4)}`
+        );
+
+        // Co-occurrence OFF: the same novel word cold-starts to its (distant)
+        // GloVe coordinate instead - proving the grounding is what moved it.
+        DOPAT_CONFIG.PHYSICS.COLD_START_COOCCURRENCE_ENABLED = false;
+        const off = await buildGrounded();
+        const offIds = off.atomizer.ingestSequence(
+          `${novel} bootstrap`,
+          off.system
+        );
+        const offNovelX = off.system.posX[offIds[0]];
+        assert.ok(
+          Math.abs(offNovelX - off.groundedX) > 1e-3,
+          `GloVe cold-start posX ${offNovelX.toFixed(4)} should differ from grounded ${off.groundedX.toFixed(4)}`
+        );
+
+        logger.log(
+          `  cold-start "${novel}": co-occur posX=${onNovelX.toFixed(3)} == grounded; ` +
+            `GloVe posX=${offNovelX.toFixed(3)} (gap ${Math.abs(offNovelX - on.groundedX).toFixed(1)})`
+        );
+      } finally {
+        DOPAT_CONFIG.PHYSICS.REFERENT_GROUNDING_ENABLED = origRef;
+        DOPAT_CONFIG.PHYSICS.COLD_START_COOCCURRENCE_ENABLED = origCooc;
+      }
+    });
+  });
+
+  // The unified-domain thesis: logic and math are the SAME typed graph as code,
+  // so the SAME grounding + traversal machinery must be faithful on them too.
+  await describe("LOGIC/MATH GROUNDING FIDELITY", async () => {
+    const TAXONOMY = [
+      "all dogs are mammals",
+      "all cats are mammals",
+      "all mammals are animals",
+      "all birds are animals",
+      "all animals are organisms",
+      "all organisms are entities",
+      "rex is a dog",
+      "felix is a cat",
+      "tweety is a bird",
+    ];
+    const ARITHMETIC = ["3 + 4 = 7", "1 + 2 = 3", "5 + 2 = 7", "6 - 2 = 4"];
+
+    await it("parses logic + math into the unified IR with all three edge kinds", async () => {
+      const logic = buildGraphFromLogic(TAXONOMY);
+      const math = buildGraphFromLogic(ARITHMETIC);
+      // Subsumption / membership are reference edges (the entailment backbone).
+      assert.ok(logic.nodes.length >= 8, "taxonomy should span many terms");
+      assert.ok(
+        logic.edges.some(e => e.kind === EdgeKind.Reference),
+        "taxonomy should yield reference edges"
+      );
+      // Arithmetic gives operator->operand containment and operator->result reduction.
+      assert.ok(
+        math.edges.some(e => e.kind === EdgeKind.Containment),
+        "arithmetic should yield containment edges (operator -> operands)"
+      );
+      assert.ok(
+        math.edges.some(e => e.kind === EdgeKind.Reduction),
+        "arithmetic should yield reduction edges (operator -> result)"
+      );
+      logger.log(
+        `  logic: ${logic.nodes.length} nodes / ${logic.edges.length} edges; ` +
+          `math: ${math.nodes.length} nodes / ${math.edges.length} edges`
+      );
+    });
+
+    await it("logic grounding is faithful (map + traversal), beating a shuffled null", async () => {
+      const graph = buildGraphFromLogic(TAXONOMY);
+
+      // Structure-grounded System.
+      seedRandom(0);
+      const sys = new System();
+      const atom = new LogicAtomizer();
+      await atom.init();
+      const { nodeToPrecept, placement } = groundGraphIntoSystem(
+        graph,
+        sys,
+        atom,
+        { seed: 0 }
+      );
+      assert.ok(
+        placement,
+        "taxonomy is under the node cap, so it must be placed"
+      );
+
+      const fStatic = mapFidelity(graph, placement, { seed: 1 });
+      const traveler = new Traveler(sys);
+      const fStruct = await traversalFidelity(
+        graph,
+        nodeToPrecept,
+        (s, t) => traveler.traverse(s, t),
+        { maxPairs: 48 }
+      );
+
+      // Shuffled-coordinate null: same precepts + graph, random positions.
+      seedRandom(0);
+      const nullSys = new System();
+      const nullAtom = new LogicAtomizer();
+      await nullAtom.init();
+      const { nodeToPrecept: n2p } = groundGraphIntoSystem(
+        graph,
+        nullSys,
+        nullAtom,
+        { seed: 0 }
+      );
+      const nullPlace: Placement = {
+        x: new Float64Array(graph.nodes.length),
+        y: new Float64Array(graph.nodes.length),
+        z: new Float64Array(graph.nodes.length),
+        w: new Float64Array(graph.nodes.length),
+        mass: new Float64Array(graph.nodes.length),
+      };
+      for (let i = 0; i < graph.nodes.length; i++) {
+        const id = n2p[i];
+        nullPlace.x[i] = (random() - 0.5) * 200;
+        nullPlace.y[i] = (random() - 0.5) * 200;
+        nullPlace.z[i] = (random() - 0.5) * 200;
+        nullPlace.w[i] = random() * 2;
+        if (id < 0) continue;
+        nullSys.posX[id] = nullPlace.x[i];
+        nullSys.posY[id] = nullPlace.y[i];
+        nullSys.posZ[id] = nullPlace.z[i];
+        nullSys.posW[id] = nullPlace.w[i];
+        nullSys.update(id);
+      }
+      const fNullStatic = mapFidelity(graph, nullPlace, { seed: 1 });
+      const nullTraveler = new Traveler(nullSys);
+      const fNull = await traversalFidelity(
+        graph,
+        n2p,
+        (s, t) => nullTraveler.traverse(s, t),
+        { maxPairs: 48 }
+      );
+
+      logger.log(
+        `  structural: pearson=${fStatic.pearson.toFixed(2)} sep=${fStatic.separation.toFixed(2)} ` +
+          `onPath=${fStruct.onPathRate.toFixed(2)} mono=${fStruct.monotonicity.toFixed(2)} ` +
+          `(${fStruct.pairs} pairs)`
+      );
+      logger.log(
+        `  shuffled:   pearson=${fNullStatic.pearson.toFixed(2)} onPath=${fNull.onPathRate.toFixed(2)}`
+      );
+
+      // Static map is faithful and clearly beats the null.
+      assert.ok(
+        fStatic.pearson > 0.6,
+        `logic static pearson ${fStatic.pearson.toFixed(2)} should exceed 0.6`
+      );
+      assert.ok(
+        fStatic.pearson > fNullStatic.pearson + 0.2,
+        `logic static pearson ${fStatic.pearson.toFixed(2)} should beat shuffled ${fNullStatic.pearson.toFixed(2)}`
+      );
+      // Traversal tracks the graph geodesic, far better than the shuffled null.
+      assert.ok(
+        fStruct.onPathRate > 0.4,
+        `logic traversal onPath ${fStruct.onPathRate.toFixed(2)} should exceed 0.4`
+      );
+      assert.ok(
+        fStruct.onPathRate > fNull.onPathRate * 2,
+        `logic traversal onPath ${fStruct.onPathRate.toFixed(2)} should clearly beat shuffled ${fNull.onPathRate.toFixed(2)}`
       );
     });
   });

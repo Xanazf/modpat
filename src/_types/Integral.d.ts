@@ -90,6 +90,13 @@ declare namespace Root {
     getScope(id: number): number;
     setScope(id: number, scope: number): void; // updates scope index
     getIdsByScope(scope: number): ReadonlySet<number>;
+    /**
+     * IDs created through the structural grounding channel (code/logic/math
+     * symbols), as opposed to language mentions. Cold-start co-occurrence
+     * grounding restricts itself to these so it grounds toward genuine grounded
+     * referents, not unrelated prior mentions that merely co-occurred.
+     */
+    groundedPrecepts: ReadonlySet<number>;
 
     // Sequence ring: enforced write path
     getSequenceStart(id: number): number;

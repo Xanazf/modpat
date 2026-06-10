@@ -473,6 +473,18 @@ class System implements Root.ManifoldView {
   private readonly scopeIndex = new Map<number, Set<number>>();
 
   /**
+   * Phase 5 - IDs created through the STRUCTURAL grounding channel (createLocation
+   * with `from === "ast-ground"`), i.e. code/logic/math symbols placed by
+   * StructuralGrounding rather than language mentions. Cold-start co-occurrence
+   * grounding consults this so a first-seen word grounds only toward a genuine
+   * grounded referent, never toward an unrelated prior language mention that
+   * merely co-occurred (which would relocate "pie" next to "electricity" just
+   * because "Tesla" was discussed with both). Not buffer-backed: it is derived
+   * state, repopulated by re-grounding, so it need not survive a snapshot.
+   */
+  public readonly groundedPrecepts = new Set<number>();
+
+  /**
    * Initializes the logical manifold and allocates the underlying ArrayBuffer.
    */
   constructor() {
@@ -700,6 +712,11 @@ class System implements Root.ManifoldView {
     this.scope[id] = initialScope;
     this.decayRate[id] = 0.01; // Default decay rate.
 
+    // Track structural-channel provenance (delete-then-maybe-add so a reused
+    // free-list slot never inherits a previous occupant's grounded status).
+    if (from === "ast-ground") this.groundedPrecepts.add(id);
+    else this.groundedPrecepts.delete(id);
+
     // Register in scope index.
     let scopeSet = this.scopeIndex.get(initialScope);
     if (!scopeSet) {
@@ -753,6 +770,7 @@ class System implements Root.ManifoldView {
     }
 
     this.allocated[id] = 0;
+    this.groundedPrecepts.delete(id);
 
     // Zero out all physical properties to prevent stale data.
     this.mass[id] = 0;

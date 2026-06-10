@@ -352,6 +352,9 @@ class System implements Root.ManifoldView {
   /** Scope → set of currently allocated IDs: enables O(1) lookup by scope value. */
   private readonly scopeIndex = new Map<number, Set<number>>();
 
+  /** Phase 5 - IDs created through the structural grounding channel (see System). */
+  public readonly groundedPrecepts = new Set<number>();
+
   /**
    * Initializes the logical manifold and allocates the underlying ArrayBuffer.
    */
@@ -570,6 +573,9 @@ class System implements Root.ManifoldView {
     this.scope[id] = initialScope;
     this.decayRate[id] = 0.01; // Default decay rate.
 
+    if (from === "ast-ground") this.groundedPrecepts.add(id);
+    else this.groundedPrecepts.delete(id);
+
     // Register in scope index.
     let scopeSet = this.scopeIndex.get(initialScope);
     if (!scopeSet) {
@@ -610,6 +616,7 @@ class System implements Root.ManifoldView {
     }
 
     this.allocated[id] = 0;
+    this.groundedPrecepts.delete(id);
 
     // Zero out all physical properties to prevent stale data.
     this.mass[id] = 0;
