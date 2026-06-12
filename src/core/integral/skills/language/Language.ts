@@ -20,11 +20,7 @@ import { isIdentityQueryAboutSelf, shiftPerspective } from "@props/Identity";
 import logger from "@utils/SpectralLogger";
 import { random } from "@utils/seededRandom";
 import nlp from "compromise";
-import {
-  buildExplanation,
-  type MemoryFrame,
-  WorkingMemory,
-} from "./WorkingMemory";
+import { buildExplanation, WorkingMemory } from "./WorkingMemory";
 
 // ---- Intent classification ------------------------------------------------
 
@@ -33,34 +29,6 @@ export type ParsedIntent = "question" | "assertion" | "code" | "feedback";
 
 /** Feedback polarity extracted from feedback-classified input. */
 export type FeedbackPolarity = "positive" | "negative" | null;
-
-/** Result of Language.ingest(). */
-export interface IngestResult {
-  /** Manifold IDs for the ingested query sequence. */
-  ids: Uint32Array;
-  /** Structural classification of the input. */
-  intent: ParsedIntent;
-  /** For feedback intent: whether the feedback is positive or negative. */
-  feedbackPolarity: FeedbackPolarity;
-  /** The correction text, if the input is a negative feedback with correction. */
-  correction: string | null;
-  /** The text after perspective shifting. */
-  shifted: string;
-  /** Whether this is an identity query about the system itself. */
-  isIdentityQuery: boolean;
-  /** The topological query form for manifold lookup. */
-  topologicalQuery: string;
-  /** The attraction centre (main noun/subject). */
-  attractionCenter: string;
-  /** Whether the query involves arithmetic. */
-  isArithmeticQuery: boolean;
-  /** Whether the query involves ordinal succession. */
-  isOrdinalQuery: boolean;
-  /** Heat nodes for keyword matching. */
-  heatNodes: string[];
-  /** Vault signature for the topological query. */
-  signature: string | null;
-}
 
 // ---- Code intent detection ------------------------------------------------
 
@@ -211,7 +179,7 @@ export class Language {
    * Tokenizes, atomizes, and classifies text. Returns the manifold IDs and
    * a structural intent classification. Does NOT reason about the content.
    */
-  public ingest(text: string): IngestResult {
+  public ingest(text: string): Discourse.IngestResult {
     // Feedback detection (structural pattern matching, not reasoning)
     const feedbackPolarity = this.detectFeedbackPolarity(text);
     let correction: string | null = null;

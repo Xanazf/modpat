@@ -1,5 +1,3 @@
-import type { IngestResult } from "@skill_lang/Language";
-
 export interface SubQuery {
   text: string;
   purpose: string;
@@ -74,7 +72,7 @@ export class QueryDecomposer {
    * topics - i.e. it has two or more resolvable prerequisite entities and is
    * phrased as a question.
    */
-  isCompound(ingestResult: IngestResult): boolean {
+  isCompound(ingestResult: Discourse.IngestResult): boolean {
     if (ingestResult.intent !== "question") return false;
     const predicate = this._predicate(
       ingestResult.topologicalQuery || ingestResult.shifted
@@ -88,7 +86,7 @@ export class QueryDecomposer {
    * `query`.  Returns entity lookups first (dependency order), then a
    * process lookup last.
    */
-  decompose(query: string, ingestResult: IngestResult): SubQuery[] {
+  decompose(query: string, ingestResult: Discourse.IngestResult): SubQuery[] {
     const predicate = this._predicate(query);
     const entities = this._entities(ingestResult.heatNodes, predicate);
     if (entities.length < 2) return [];

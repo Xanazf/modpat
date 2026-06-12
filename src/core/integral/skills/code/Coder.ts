@@ -10,17 +10,9 @@ import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
 import { generate, parse, walk } from "abstract-syntax-tree";
 import nlp from "compromise";
-import type { SkillHandler, SkillRegistration } from "../index";
+import type { SkillHandler } from "../index";
 
 // Synthesizer
-
-/** A retrieved code pattern ready for composition. */
-export interface CodePattern {
-  /** Abstract pattern string, e.g. "function VAR_0(VAR_1) { VAR_BODY }" */
-  template: string;
-  /** Packed slot-type bitmap from wave_forms.slot_flags */
-  slotFlags: bigint;
-}
 
 /**
  * The Synthesizer collapses a set of retrieved code patterns into a single
@@ -40,7 +32,7 @@ export class Synthesizer {
    * Composes patterns (outer → inner) into a single template by filling each
    * outer pattern's first Body/Condition VAR slot with the next pattern.
    */
-  public compose(patterns: CodePattern[]): string {
+  public compose(patterns: Code.CodePattern[]): string {
     if (patterns.length === 0) return "";
     if (patterns.length === 1) return patterns[0].template;
     let accumulated = patterns[0].template;
@@ -379,7 +371,7 @@ export function createCoderSkill(
   atomizer: Atomic.Engine,
   store: Store,
   preceptId: number
-): SkillRegistration {
+): Skills.SkillRegistration {
   const handler: SkillHandler = async ctx => {
     const answer = await processCode(
       ctx.query,

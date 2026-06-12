@@ -12,20 +12,11 @@
 
 import type { BridgeCandidate } from "@core_i/Traveler";
 
-export interface MemoryFrame {
-  query: string;
-  conclusion: string; // decoded result text
-  conclusionScope: number; // scope of the primary conclusion atom
-  conclusionId: number; // manifold ID of the primary conclusion
-  explanation: string | null; // terse inferential chain ("A → B → conclusion")
-  turn: number;
-}
-
 const REFERENCE_PRONOUNS =
   /\b(it|this|that|they|them|those|these|its|their)\b/gi;
 
 export class WorkingMemory {
-  private frames: MemoryFrame[] = [];
+  private frames: Discourse.MemoryFrame[] = [];
   private _turn = 0;
 
   constructor(private readonly maxFrames: number = 8) {}
@@ -37,13 +28,13 @@ export class WorkingMemory {
     return this.frames.length;
   }
 
-  push(frame: Omit<MemoryFrame, "turn">): void {
+  push(frame: Omit<Discourse.MemoryFrame, "turn">): void {
     this._turn++;
     this.frames.push({ ...frame, turn: this._turn });
     if (this.frames.length > this.maxFrames) this.frames.shift();
   }
 
-  recent(n = 3): MemoryFrame[] {
+  recent(n = 3): Discourse.MemoryFrame[] {
     return this.frames.slice(-n);
   }
 

@@ -26,18 +26,6 @@ const OC_QUANTIFIER = 4; // exists
 const OC_MODIFIER = 5; // all, every, some, for all
 const OC_INVERSION = 6; // not, !
 
-interface ParsedClause {
-  antecedentScopes: Set<number>;
-  antecedentIds: number[];
-  consequentIds: number[];
-  opId: number;
-  universal: boolean;
-  modifierId: number;
-  isQuantifier: boolean;
-  /** ID of the leading Inversion atom for negated facts ("not smoke"), or -1. */
-  negationId: number;
-}
-
 /**
  * Attempt to resolve a compound logical formula from `ids` using scope-based
  * inference rules. Returns the concluded atom ID sequence, or null when no
@@ -66,7 +54,7 @@ export function resolveLogicFormula(
     if (tail.length > 0) clauses.push(new Uint32Array(tail));
   }
 
-  const parsed: ParsedClause[] = [];
+  const parsed: Code.ParsedClause[] = [];
   for (const clause of clauses) {
     const modifierId =
       clause.length > 0 && system.operatorClass[clause[0]] === OC_MODIFIER

@@ -13,7 +13,7 @@ import { OperatorClass, SlotType } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { resolveActiveAtoms } from "@mutate/FrameworkIndex";
-import { type CodePattern, Synthesizer } from "@skill_code/Coder";
+import { Synthesizer } from "@skill_code/Coder";
 import { gateEmit } from "@skill_cogi/Coherence";
 import { reduceAdditive, reduceStatements } from "@skill_cogi/Reduction";
 import nlp from "compromise";
@@ -661,7 +661,7 @@ async function _resolveCodeSynthesis(
       attractors.push({ id: i, posZ: system.posZ[i] });
   }
   attractors.sort((a, b) => b.posZ - a.posZ);
-  const patterns: CodePattern[] = [];
+  const patterns: Code.CodePattern[] = [];
   for (const { id } of attractors.slice(0, 6)) {
     const r = await store.checkInterferencePattern(new Uint32Array([id]));
     if (r && r.ids.length > 0)

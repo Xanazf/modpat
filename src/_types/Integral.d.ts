@@ -624,3 +624,105 @@ declare namespace Cognition {
     readonly _relaxCF: Float64Array;
   }
 }
+
+/**
+ * Discourse - shapes for the text <-> manifold translation boundary.
+ * Named "Discourse" (not "Language") to avoid colliding with the `Language`
+ * class imported by name at most call sites.
+ */
+declare namespace Discourse {
+  /** Result of Language.ingest(). */
+  interface IngestResult {
+    /** Manifold IDs for the ingested query sequence. */
+    ids: Uint32Array;
+    /** Structural classification of the input. */
+    intent: import("@skill_lang/Language").ParsedIntent;
+    /** For feedback intent: whether the feedback is positive or negative. */
+    feedbackPolarity: import("@skill_lang/Language").FeedbackPolarity;
+    /** The correction text, if the input is a negative feedback with correction. */
+    correction: string | null;
+    /** The text after perspective shifting. */
+    shifted: string;
+    /** Whether this is an identity query about the system itself. */
+    isIdentityQuery: boolean;
+    /** The topological query form for manifold lookup. */
+    topologicalQuery: string;
+    /** The attraction centre (main noun/subject). */
+    attractionCenter: string;
+    /** Whether the query involves arithmetic. */
+    isArithmeticQuery: boolean;
+    /** Whether the query involves ordinal succession. */
+    isOrdinalQuery: boolean;
+    /** Heat nodes for keyword matching. */
+    heatNodes: string[];
+    /** Vault signature for the topological query. */
+    signature: string | null;
+  }
+
+  /** One turn of resolved conversational context (WorkingMemory). */
+  interface MemoryFrame {
+    query: string;
+    conclusion: string; // decoded result text
+    conclusionScope: number; // scope of the primary conclusion atom
+    conclusionId: number; // manifold ID of the primary conclusion
+    explanation: string | null; // terse inferential chain ("A → B → conclusion")
+    turn: number;
+  }
+}
+
+/** Code - shapes for the code-synthesis skill. */
+declare namespace Code {
+  /** A retrieved code pattern ready for composition. */
+  interface CodePattern {
+    /** Abstract pattern string, e.g. "function VAR_0(VAR_1) { VAR_BODY }" */
+    template: string;
+    /** Packed slot-type bitmap from wave_forms.slot_flags */
+    slotFlags: bigint;
+  }
+
+  /** A parsed clause from a compound logical formula (E1Formula). */
+  interface ParsedClause {
+    antecedentScopes: Set<number>;
+    antecedentIds: number[];
+    consequentIds: number[];
+    opId: number;
+    universal: boolean;
+    modifierId: number;
+    isQuantifier: boolean;
+    /** ID of the leading Inversion atom for negated facts ("not smoke"), or -1. */
+    negationId: number;
+  }
+}
+
+/** Skills - the open-ended skill registry for the Traveler. */
+declare namespace Skills {
+  interface SkillContext {
+    /** The raw query text (already perspective-shifted by Language). */
+    query: string;
+    /** Manifold IDs for the ingested query sequence. */
+    queryIds: Uint32Array;
+    /** Reference to the live manifold the skill may inspect or extend. */
+    system: Root.ManifoldView;
+    /** Persistent vault for crystallising new proofs. */
+    store: import("@core_s/Memory").default;
+    /** Atomizer for encoding/decoding sequences. */
+    atomizer: Atomic.Engine;
+    /** The language boundary for translation and memory. */
+    language: import("@skill_lang/Language").Language;
+    /** Full result from Language.ingest() - includes isArithmeticQuery, attractionCenter, etc. */
+    ingestResult?: Discourse.IngestResult;
+  }
+
+  interface SkillResult {
+    /** Human-readable answer. */
+    answer: string;
+    /** Confidence in [0, 1]; used to weight vault crystallisation energy. */
+    confidence: number;
+  }
+
+  interface SkillRegistration {
+    /** Manifold ID of the capability precept this skill answers to. */
+    preceptId: number;
+    handler: import("@i_skills/index").SkillHandler;
+  }
+}
