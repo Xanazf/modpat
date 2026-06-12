@@ -21,32 +21,6 @@ import { NUMBER_LINE_SCALE, numberFromW } from "@skill_cogi/Reduction";
 
 // -- Prediction vs evaluation -------------------------------------------------
 
-export interface ArithCase {
-  /** Surface expression, e.g. "3 + 4". */
-  expr: string;
-  /** Operand precept ids - the ADDRESSES the error report points at. */
-  aId: number;
-  bId: number;
-  /** Parsed operand values and operator (the territory's reading). */
-  aVal: number;
-  bVal: number;
-  op: "+" | "-";
-  /** Geometry's prediction: compose the operands' W positions. */
-  predicted: number;
-  /** Territory: evaluate the expression. */
-  actual: number;
-  match: boolean;
-}
-
-export interface BehaviouralReport {
-  total: number;
-  matched: number;
-  /** Fraction of geometric predictions that match actual evaluation. */
-  fidelity: number;
-  cases: ArithCase[];
-  divergences: ArithCase[];
-}
-
 /**
  * Looks up the precept grounding a numeral by scope. Returns -1 if the
  * numeral is not in the terrain.
@@ -73,8 +47,8 @@ export function behaviouralFidelity(
   exprs: string[],
   system: Root.ManifoldView,
   atomizer: Atomic.Engine
-): BehaviouralReport {
-  const cases: ArithCase[] = [];
+): Grounding.BehaviouralReport {
+  const cases: Grounding.ArithCase[] = [];
   for (const expr of exprs) {
     const m = expr.trim().match(/^(-?\d+)\s*([+-])\s*(-?\d+)$/);
     if (!m) continue;
@@ -113,26 +87,6 @@ export function behaviouralFidelity(
 
 // -- Localization: errors have addresses --------------------------------------
 
-export interface Suspect {
-  /** The precept the divergences implicate. */
-  id: number;
-  /** Numeral the precept grounds (for reporting). */
-  label: string;
-  /** Where the corrupted survey put it. */
-  currentW: number;
-  /**
-   * Where the territory says it belongs: the median of the W coordinate each
-   * failing case independently implies for it (under a single-fault reading).
-   */
-  suggestedW: number;
-  /** Failing cases this precept participates in. */
-  failCount: number;
-  /** Passing cases this precept participates in (counter-evidence). */
-  passCount: number;
-  /** Spread (max-min) of the implied W values; small = consistent story. */
-  spread: number;
-}
-
 /**
  * Localizes divergences to the terrain region that forced the wrong path.
  * For each precept appearing in a failing case, every failing case implies a
@@ -141,10 +95,10 @@ export interface Suspect {
  * coordinates agree across failing cases and the precept avoids passing ones.
  */
 export function localizeDivergences(
-  report: BehaviouralReport,
+  report: Grounding.BehaviouralReport,
   system: Root.ManifoldView,
   atomizer: Atomic.Engine
-): Suspect[] {
+): Grounding.Suspect[] {
   const implied = new Map<number, number[]>();
   const failCount = new Map<number, number>();
   const passCount = new Map<number, number>();
@@ -182,7 +136,7 @@ export function localizeDivergences(
     implied.get(c.bId)!.push(impliedB);
   }
 
-  const suspects: Suspect[] = [];
+  const suspects: Grounding.Suspect[] = [];
   for (const [id, ws] of implied) {
     ws.sort((a, b) => a - b);
     const suggestedW = ws[Math.floor(ws.length / 2)];
@@ -226,17 +180,6 @@ export function repairPrecept(
 
 // -- The loop: prediction → evaluation → localization → repair → re-validate --
 
-export interface SurveyLoopResult {
-  /** Fidelity before any repair. */
-  before: BehaviouralReport;
-  /** Fidelity after the loop finished. */
-  after: BehaviouralReport;
-  /** Each repair performed: which precept moved, from where, to where. */
-  repairs: Suspect[];
-  /** True if the loop ended with every prediction matching the territory. */
-  converged: boolean;
-}
-
 /**
  * Runs the survey loop to convergence (or maxRepairs). Each round: measure,
  * localize the strongest CONSISTENT suspect, re-place it, re-measure. Stops
@@ -248,11 +191,11 @@ export function surveyLoop(
   system: Root.ManifoldView,
   atomizer: Atomic.Engine,
   options: { maxRepairs?: number } = {}
-): SurveyLoopResult {
+): Grounding.SurveyLoopResult {
   const maxRepairs = options.maxRepairs ?? 4;
   const before = behaviouralFidelity(exprs, system, atomizer);
   let current = before;
-  const repairs: Suspect[] = [];
+  const repairs: Grounding.Suspect[] = [];
 
   while (current.fidelity < 1 && repairs.length < maxRepairs) {
     const suspects = localizeDivergences(current, system, atomizer);

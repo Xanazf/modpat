@@ -83,42 +83,6 @@ export function yToKind(y: number): NodeKind {
   return best;
 }
 
-export interface GroundNode {
-  id: number;
-  label: string;
-  kind: NodeKind;
-  /** Parsed value when the label is a numeric literal, else null. */
-  numeric: number | null;
-}
-
-export interface GroundEdge {
-  from: number;
-  to: number;
-  kind: EdgeKind;
-  /** Relative pull strength (astExtract energy, or 1.0 by default). */
-  weight: number;
-}
-
-/**
- * A signed stance/antonym relation: the two nodes are mutually exclusive
- * ("modular" vs "monolithic", "cat" vs-not "fish"). NOT a fourth edge kind -
- * adjacency means attraction, and a contrast is the opposite claim: the placer
- * pushes the pair to opposite halves of the stance axis so their attractor
- * pulls genuinely oppose (a traveler between them stalls on a saddle instead
- * of being muted by crowding).
- */
-export interface ContrastPair {
-  a: number;
-  b: number;
-}
-
-export interface GroundGraph {
-  nodes: GroundNode[];
-  edges: GroundEdge[];
-  /** Signed stance relations; empty/absent for graphs with no negation source. */
-  contrasts?: ContrastPair[];
-}
-
 /** Parses a bare numeric literal label; returns null for non-numeric labels. */
 export function parseNumericLabel(label: string): number | null {
   return /^-?\d+(?:\.\d+)?$/.test(label.trim()) ? parseFloat(label) : null;
@@ -164,9 +128,11 @@ function objectKindFor(pred: string): NodeKind {
  * the subject's kindY hint is authoritative for its kind, objects are inferred
  * from the predicate unless they appear as a subject elsewhere.
  */
-export function buildGraphFromAstTriples(triples: AstTriple[]): GroundGraph {
+export function buildGraphFromAstTriples(
+  triples: AstTriple[]
+): Grounding.GroundGraph {
   const idByLabel = new Map<string, number>();
-  const nodes: GroundNode[] = [];
+  const nodes: Grounding.GroundNode[] = [];
 
   const ensure = (label: string, kindGuess: NodeKind): number => {
     let id = idByLabel.get(label);
@@ -183,7 +149,7 @@ export function buildGraphFromAstTriples(triples: AstTriple[]): GroundGraph {
     return id;
   };
 
-  const edges: GroundEdge[] = [];
+  const edges: Grounding.GroundEdge[] = [];
   for (const t of triples) {
     const subjectKind = yToKind(t.kindY);
     const sId = ensure(t.subject, subjectKind);
@@ -204,15 +170,11 @@ export function buildGraphFromAstTriples(triples: AstTriple[]): GroundGraph {
 
 // -- Graph utilities ---------------------------------------------------------
 
-export interface AdjacencyEntry {
-  node: number;
-  weight: number;
-  kind: EdgeKind;
-}
-
 /** Undirected adjacency list keyed by node id (both edge directions present). */
-export function undirectedAdjacency(g: GroundGraph): AdjacencyEntry[][] {
-  const adj: AdjacencyEntry[][] = g.nodes.map(() => []);
+export function undirectedAdjacency(
+  g: Grounding.GroundGraph
+): Grounding.AdjacencyEntry[][] {
+  const adj: Grounding.AdjacencyEntry[][] = g.nodes.map(() => []);
   for (const e of g.edges) {
     adj[e.from].push({ node: e.to, weight: e.weight, kind: e.kind });
     adj[e.to].push({ node: e.from, weight: e.weight, kind: e.kind });
@@ -226,7 +188,7 @@ export function undirectedAdjacency(g: GroundGraph): AdjacencyEntry[][] {
  */
 export function bfsHopDistances(
   source: number,
-  adj: AdjacencyEntry[][]
+  adj: Grounding.AdjacencyEntry[][]
 ): Float64Array {
   const dist = new Float64Array(adj.length).fill(Number.POSITIVE_INFINITY);
   dist[source] = 0;

@@ -20,13 +20,11 @@ import {
 import {
   buildGraphFromAstTriples,
   EdgeKind,
-  type GroundGraph,
   NodeKind,
 } from "@core_s/grounding/GroundGraph";
 import { buildGraphFromLogic } from "@core_s/grounding/LogicGraph";
 import { mapFidelity } from "@core_s/grounding/MapFidelity";
 import {
-  type Placement,
   placeGraph,
   placeGraphIncremental,
   randomPlacement,
@@ -159,7 +157,7 @@ export async function runStructuralGroundingTests(): Promise<void> {
         if (j !== i && j < nNodes)
           edges.push({ from: i, to: j, kind: EdgeKind.Reference, weight: 1 });
       }
-      const big: GroundGraph = { nodes, edges };
+      const big: Grounding.GroundGraph = { nodes, edges };
 
       const t0 = performance.now();
       const placement = placeGraphIncremental(big, { seed: 0 });
@@ -203,7 +201,7 @@ export async function runStructuralGroundingTests(): Promise<void> {
 
     await it("unifies math: number line on W, reduction-linked terms near", async () => {
       // "1 + 2 = 3" and "5 + 2 = 7" as the same IR code/logic uses.
-      const g: GroundGraph = {
+      const g: Grounding.GroundGraph = {
         nodes: [
           { id: 0, label: "expr_1_2", kind: NodeKind.Operator, numeric: null },
           { id: 1, label: "1", kind: NodeKind.Literal, numeric: 1 },
@@ -274,7 +272,7 @@ export async function runStructuralGroundingTests(): Promise<void> {
 
       // Read coordinates back out of the LIVE System and measure fidelity there.
       const n = graph.nodes.length;
-      const live: Placement = {
+      const live: Grounding.Placement = {
         x: new Float64Array(n),
         y: new Float64Array(n),
         z: new Float64Array(n),
@@ -637,7 +635,7 @@ export async function runStructuralGroundingTests(): Promise<void> {
         nullAtom,
         { seed: 0 }
       );
-      const nullPlace: Placement = {
+      const nullPlace: Grounding.Placement = {
         x: new Float64Array(graph.nodes.length),
         y: new Float64Array(graph.nodes.length),
         z: new Float64Array(graph.nodes.length),

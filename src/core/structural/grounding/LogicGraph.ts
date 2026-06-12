@@ -33,15 +33,7 @@
  */
 
 import { lemma } from "@skill_cogi/Reduction";
-import {
-  type ContrastPair,
-  EdgeKind,
-  type GroundEdge,
-  type GroundGraph,
-  type GroundNode,
-  NodeKind,
-  parseNumericLabel,
-} from "./GroundGraph";
+import { EdgeKind, NodeKind, parseNumericLabel } from "./GroundGraph";
 
 const ARITH_SYMBOL: Record<string, string> = {
   "+": "+",
@@ -57,9 +49,9 @@ function arithOp(tok: string): string | null {
 
 class GraphBuilder {
   private idByLabel = new Map<string, number>();
-  readonly nodes: GroundNode[] = [];
-  readonly edges: GroundEdge[] = [];
-  readonly contrasts: ContrastPair[] = [];
+  readonly nodes: Grounding.GroundNode[] = [];
+  readonly edges: Grounding.GroundEdge[] = [];
+  readonly contrasts: Grounding.ContrastPair[] = [];
 
   /** Interns a node by label; the first kind seen for a *content* node wins
    *  unless a later, more specific kind is supplied. Numerics are always Literal. */
@@ -165,7 +157,9 @@ function relationOrContrast(
  * reduction edge from the conclusion's subject to its object - the derived fact
  * sitting downstream of what entailed it.
  */
-export function buildGraphFromLogic(statements: string[]): GroundGraph {
+export function buildGraphFromLogic(
+  statements: string[]
+): Grounding.GroundGraph {
   const b = new GraphBuilder();
   for (const raw of statements) {
     const line = raw.trim();

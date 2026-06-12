@@ -19,10 +19,7 @@ import { DOPAT_CONFIG } from "@config";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import { groundAstIntoSystem } from "@core_s/grounding/AstGrounding";
-import {
-  type TraversalFidelityReport,
-  traversalFidelity,
-} from "@core_s/grounding/TraversalFidelity";
+import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
 import { extractAstTriples } from "@utils/astExtract";
 import { seedRandom } from "@utils/seededRandom";
 
@@ -93,8 +90,8 @@ const REAL_FILES = [
 interface Row {
   name: string;
   pairs: number;
-  relax: TraversalFidelityReport;
-  settle: TraversalFidelityReport;
+  relax: Grounding.TraversalFidelityReport;
+  settle: Grounding.TraversalFidelityReport;
 }
 
 async function scoreCorpus(

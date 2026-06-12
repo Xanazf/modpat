@@ -16,25 +16,7 @@
  * measures the geometry as it actually is.
  */
 
-import {
-  bfsHopDistances,
-  type GroundGraph,
-  undirectedAdjacency,
-} from "./GroundGraph";
-import type { Placement } from "./StructuralGrounding";
-
-export interface FidelityReport {
-  /** Pearson r between graph hop-distance and manifold distance. */
-  pearson: number;
-  /** Mean manifold distance over graph edges (adjacent pairs). */
-  adjacentMeanDist: number;
-  /** Mean manifold distance over random non-adjacent pairs. */
-  nonAdjacentMeanDist: number;
-  /** nonAdjacentMeanDist / adjacentMeanDist; > 1 means structure is encoded. */
-  separation: number;
-  /** Number of (gdist, mdist) pairs the correlation was computed over. */
-  samplePairs: number;
-}
+import { bfsHopDistances, undirectedAdjacency } from "./GroundGraph";
 
 function makeRng(seed: number): () => number {
   let s = seed >>> 0;
@@ -46,7 +28,7 @@ function makeRng(seed: number): () => number {
   };
 }
 
-function distance(p: Placement, i: number, j: number): number {
+function distance(p: Grounding.Placement, i: number, j: number): number {
   const dx = p.x[i] - p.x[j];
   const dy = p.y[i] - p.y[j];
   const dz = p.z[i] - p.z[j];
@@ -79,26 +61,18 @@ function pearson(a: number[], b: number[]): number {
   return den > 1e-12 ? num / den : 0;
 }
 
-export interface FidelityOptions {
-  seed?: number;
-  /** Cap on (gdist, mdist) pairs collected for the correlation. */
-  maxPairs?: number;
-  /** Random non-adjacent pairs sampled for the separation measure. */
-  separationSamples?: number;
-}
-
 export function mapFidelity(
-  g: GroundGraph,
-  p: Placement,
-  options: FidelityOptions = {}
-): FidelityReport {
+  g: Grounding.GroundGraph,
+  p: Grounding.Placement,
+  options: Grounding.FidelityOptions = {}
+): Grounding.FidelityReport {
   const n = g.nodes.length;
   const opts = {
     seed: options.seed ?? 0,
     maxPairs: options.maxPairs ?? 4000,
     separationSamples: options.separationSamples ?? 2000,
   };
-  const empty: FidelityReport = {
+  const empty: Grounding.FidelityReport = {
     pearson: 0,
     adjacentMeanDist: 0,
     nonAdjacentMeanDist: 0,

@@ -11,12 +11,9 @@ import LogicAtomizer from "@atomics/LogicAtomizer";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import { groundAstIntoSystem } from "@core_s/grounding/AstGrounding";
-import {
-  traversalFidelity,
-  type TraversalFidelityReport,
-} from "@core_s/grounding/TraversalFidelity";
-import { metrics } from "@core_s/Metrics";
+import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
 import Store from "@core_s/Memory";
+import { metrics } from "@core_s/Metrics";
 import { extractAstTriples } from "@utils/astExtract";
 import { random, seedRandom } from "@utils/seededRandom";
 
@@ -48,7 +45,7 @@ function shutdown(engine: Engine): void {
 }
 `;
 
-function show(label: string, r: TraversalFidelityReport): void {
+function show(label: string, r: Grounding.TraversalFidelityReport): void {
   console.log(
     `  ${label.padEnd(12)} pairs=${r.pairs}  reach=${r.reachRate.toFixed(2)}  ` +
       `monotonic=${r.monotonicity.toFixed(2)}  onPath=${r.onPathRate.toFixed(2)}  ` +

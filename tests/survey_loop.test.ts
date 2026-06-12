@@ -20,20 +20,15 @@ import {
   localizeDivergences,
   surveyLoop,
 } from "@core_s/grounding/BehaviouralFidelity";
-import {
-  EdgeKind,
-  type GroundGraph,
-  NodeKind,
-} from "@core_s/grounding/GroundGraph";
+import { EdgeKind, NodeKind } from "@core_s/grounding/GroundGraph";
 import { mapFidelity } from "@core_s/grounding/MapFidelity";
-import type { Placement } from "@core_s/grounding/StructuralGrounding";
 import { NUMBER_LINE_SCALE } from "@skill_cogi/Reduction";
 import logger from "@utils/SpectralLogger";
 import { describe, it } from "./utils/harness";
 
 const N = 11; // numerals 0..10
 
-function surveyGraph(recorded: number[]): GroundGraph {
+function surveyGraph(recorded: number[]): Grounding.GroundGraph {
   const nodes = recorded.map((v, i) => ({
     id: i,
     label: String(i),
@@ -53,7 +48,7 @@ function surveyGraph(recorded: number[]): GroundGraph {
   return { nodes, edges };
 }
 
-function placeSurvey(recorded: number[]): Placement {
+function placeSurvey(recorded: number[]): Grounding.Placement {
   return {
     x: new Float64Array(N),
     y: new Float64Array(N),

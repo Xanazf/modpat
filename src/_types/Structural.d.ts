@@ -69,6 +69,227 @@ declare namespace Topology {
   }
 }
 
+/** Grounding - shapes for structural/grounding (GroundGraph, placement, fidelity). */
+declare namespace Grounding {
+  interface GroundNode {
+    id: number;
+    label: string;
+    kind: import("@core_s/grounding/GroundGraph").NodeKind;
+    /** Parsed value when the label is a numeric literal, else null. */
+    numeric: number | null;
+  }
+
+  interface GroundEdge {
+    from: number;
+    to: number;
+    kind: import("@core_s/grounding/GroundGraph").EdgeKind;
+    /** Relative pull strength (astExtract energy, or 1.0 by default). */
+    weight: number;
+  }
+
+  /**
+   * A signed stance/antonym relation: the two nodes are mutually exclusive
+   * ("modular" vs "monolithic", "cat" vs-not "fish"). NOT a fourth edge kind -
+   * adjacency means attraction, and a contrast is the opposite claim: the placer
+   * pushes the pair to opposite halves of the stance axis so their attractor
+   * pulls genuinely oppose (a traveler between them stalls on a saddle instead
+   * of being muted by crowding).
+   */
+  interface ContrastPair {
+    a: number;
+    b: number;
+  }
+
+  interface GroundGraph {
+    nodes: GroundNode[];
+    edges: GroundEdge[];
+    /** Signed stance relations; empty/absent for graphs with no negation source. */
+    contrasts?: ContrastPair[];
+  }
+
+  interface AdjacencyEntry {
+    node: number;
+    weight: number;
+    kind: import("@core_s/grounding/GroundGraph").EdgeKind;
+  }
+
+  /** Result of mapFidelity(). */
+  interface FidelityReport {
+    /** Pearson r between graph hop-distance and manifold distance. */
+    pearson: number;
+    /** Mean manifold distance over graph edges (adjacent pairs). */
+    adjacentMeanDist: number;
+    /** Mean manifold distance over random non-adjacent pairs. */
+    nonAdjacentMeanDist: number;
+    /** nonAdjacentMeanDist / adjacentMeanDist; > 1 means structure is encoded. */
+    separation: number;
+    /** Number of (gdist, mdist) pairs the correlation was computed over. */
+    samplePairs: number;
+  }
+
+  interface FidelityOptions {
+    seed?: number;
+    /** Cap on (gdist, mdist) pairs collected for the correlation. */
+    maxPairs?: number;
+    /** Random non-adjacent pairs sampled for the separation measure. */
+    separationSamples?: number;
+  }
+
+  /** Result of traversalFidelity(). */
+  interface TraversalFidelityReport {
+    /** Number of (source, target) pairs evaluated. */
+    pairs: number;
+    /** Fraction of pairs whose emitted path contained the target node. */
+    reachRate: number;
+    /**
+     * Mean over path-producing pairs of the fraction of consecutive recovered
+     * graph-node hops that strictly reduced graph-distance-to-target. A faithful
+     * geodesic approaches the target monotonically (-> 1.0); a random walk -> ~0.5.
+     */
+    monotonicity: number;
+    /**
+     * Fraction of interior recovered nodes that lie on *a* graph shortest path
+     * from source to target (distFromSrc[v] + distToTgt[v] === graphDist).
+     */
+    onPathRate: number;
+    /** Mean count of grounded graph-nodes recovered from the emitted paths. */
+    meanGraphNodes: number;
+    /** Fraction of pairs whose path recovered >= 2 grounded graph-nodes. */
+    pathRate: number;
+  }
+
+  interface TraversalFidelityOptions {
+    /** Cap on the number of pairs evaluated (each runs one traversal). */
+    maxPairs?: number;
+    /** Only sample pairs at least this many graph hops apart. */
+    minGraphDist?: number;
+  }
+
+  /** A grounded 4D placement: parallel typed arrays, one entry per graph node. */
+  interface Placement {
+    x: Float64Array;
+    y: Float64Array;
+    z: Float64Array;
+    w: Float64Array;
+    mass: Float64Array;
+  }
+
+  interface GroundingOptions {
+    /** Deterministic seed for the initial layout. */
+    seed?: number;
+    /** Stress-majorization iterations. */
+    iterations?: number;
+    /** posW scale for numeric literals (the number line uses 0.1). */
+    numberLineScale?: number;
+    /**
+     * Z-offset applied per unit of stance: contrast-pair poles land
+     * ±stanceScale apart on Z (adjacent terms sit ~1 apart in layout units, so
+     * the default puts opposing camps well outside each other's wells).
+     */
+    stanceScale?: number;
+  }
+
+  interface IncrementalOptions extends GroundingOptions {
+    /**
+     * Nodes given the full global SMACOF treatment. Picked by centrality
+     * (degree), so the heavy hubs - the operators - form the fixed skeleton the
+     * rest of the graph hangs from.
+     */
+    anchorCount?: number;
+    /** BFS depth when collecting placed constraints for one new node. */
+    hopHorizon?: number;
+    /** Local Guttman iterations per placed node. */
+    localIterations?: number;
+    /**
+     * Full sweeps over the non-anchor nodes after accretion, re-relaxing each
+     * against its (by then fully placed) neighbourhood. Still near-linear; lets
+     * early-placed nodes benefit from constraints that did not exist yet when
+     * they were placed.
+     */
+    polishPasses?: number;
+  }
+
+  interface AstGroundingOptions extends GroundingOptions {
+    /**
+     * Global SMACOF placement is O(nodes^2 x iterations). Above this node count
+     * placement switches to the incremental, operator-anchored path
+     * (`placeGraphIncremental`): full SMACOF for a centrality-selected anchor
+     * skeleton, near-linear local accretion for everything else - whole-repo
+     * scale without the global solve.
+     */
+    maxPlacementNodes?: number;
+  }
+
+  interface AstGroundingResult {
+    graph: GroundGraph;
+    /** graph node index -> System precept id (-1 if unallocated). */
+    nodeToPrecept: Int32Array;
+    /** node label -> System precept id, for crystallizing edge proofs. */
+    labelToPrecept: Map<string, number>;
+    /** Placement applied to the System, or null if the node cap was exceeded. */
+    placement: Placement | null;
+  }
+
+  /** One arithmetic prediction-vs-evaluation case (Phase 4.5 survey loop). */
+  interface ArithCase {
+    /** Surface expression, e.g. "3 + 4". */
+    expr: string;
+    /** Operand precept ids - the ADDRESSES the error report points at. */
+    aId: number;
+    bId: number;
+    /** Parsed operand values and operator (the territory's reading). */
+    aVal: number;
+    bVal: number;
+    op: "+" | "-";
+    /** Geometry's prediction: compose the operands' W positions. */
+    predicted: number;
+    /** Territory: evaluate the expression. */
+    actual: number;
+    match: boolean;
+  }
+
+  interface BehaviouralReport {
+    total: number;
+    matched: number;
+    /** Fraction of geometric predictions that match actual evaluation. */
+    fidelity: number;
+    cases: ArithCase[];
+    divergences: ArithCase[];
+  }
+
+  /** A precept implicated by divergences, with its terrain-suggested coordinate. */
+  interface Suspect {
+    /** The precept the divergences implicate. */
+    id: number;
+    /** Numeral the precept grounds (for reporting). */
+    label: string;
+    /** Where the corrupted survey put it. */
+    currentW: number;
+    /**
+     * Where the territory says it belongs: the median of the W coordinate each
+     * failing case independently implies for it (under a single-fault reading).
+     */
+    suggestedW: number;
+    /** Failing cases this precept participates in. */
+    failCount: number;
+    /** Passing cases this precept participates in (counter-evidence). */
+    passCount: number;
+    /** Spread (max-min) of the implied W values; small = consistent story. */
+    spread: number;
+  }
+
+  interface SurveyLoopResult {
+    /** Fidelity before any repair. */
+    before: BehaviouralReport;
+    /** Fidelity after the loop finished. */
+    after: BehaviouralReport;
+    /** Each repair performed: which precept moved, from where, to where. */
+    repairs: Suspect[];
+    /** True if the loop ended with every prediction matching the territory. */
+    converged: boolean;
+  }
+}
+
 declare namespace Memory {
   type InquiryStatus =
     | "pending"

@@ -19,36 +19,9 @@
  * mechanism can be measured in isolation before the live pipeline is rewired.
  */
 
-import {
-  bfsHopDistances,
-  type GroundGraph,
-  undirectedAdjacency,
-} from "./GroundGraph";
+import { bfsHopDistances, undirectedAdjacency } from "./GroundGraph";
 
-export interface Placement {
-  x: Float64Array;
-  y: Float64Array;
-  z: Float64Array;
-  w: Float64Array;
-  mass: Float64Array;
-}
-
-export interface GroundingOptions {
-  /** Deterministic seed for the initial layout. */
-  seed?: number;
-  /** Stress-majorization iterations. */
-  iterations?: number;
-  /** posW scale for numeric literals (the number line uses 0.1). */
-  numberLineScale?: number;
-  /**
-   * Z-offset applied per unit of stance: contrast-pair poles land
-   * ±stanceScale apart on Z (adjacent terms sit ~1 apart in layout units, so
-   * the default puts opposing camps well outside each other's wells).
-   */
-  stanceScale?: number;
-}
-
-const DEFAULTS: Required<GroundingOptions> = {
+const DEFAULTS: Required<Grounding.GroundingOptions> = {
   seed: 0,
   iterations: 200,
   numberLineScale: 0.1,
@@ -67,7 +40,7 @@ function makeRng(seed: number): () => number {
 }
 
 /** Reference in-degree as a centrality proxy for mass. */
-function centralityMass(g: GroundGraph): Float64Array {
+function centralityMass(g: Grounding.GroundGraph): Float64Array {
   const mass = new Float64Array(g.nodes.length).fill(1);
   for (const e of g.edges) mass[e.to] += 1;
   return mass;
@@ -79,8 +52,8 @@ function centralityMass(g: GroundGraph): Float64Array {
  * constraint. In-place (Gauss-Seidel) updates for faster convergence.
  */
 function smacof3d(
-  g: GroundGraph,
-  opts: Required<GroundingOptions>
+  g: Grounding.GroundGraph,
+  opts: Required<Grounding.GroundingOptions>
 ): [Float64Array, Float64Array, Float64Array] {
   const n = g.nodes.length;
   const x = new Float64Array(n);
@@ -147,7 +120,7 @@ function smacof3d(
  * with distance. A node adjacent to BOTH camps settles near 0 - the saddle.
  */
 export function solveStanceField(
-  g: GroundGraph,
+  g: Grounding.GroundGraph,
   iterations = 40
 ): Float64Array {
   const n = g.nodes.length;
@@ -189,9 +162,9 @@ export function solveStanceField(
 
 /** Adds the stance offset to Z when the graph carries contrast relations. */
 function applyStance(
-  g: GroundGraph,
+  g: Grounding.GroundGraph,
   z: Float64Array,
-  opts: Required<GroundingOptions>
+  opts: Required<Grounding.GroundingOptions>
 ): void {
   if (!g.contrasts || g.contrasts.length === 0) return;
   const s = solveStanceField(g);
@@ -200,9 +173,9 @@ function applyStance(
 
 /** Places a GroundGraph into 4D manifold coordinates from its own topology. */
 export function placeGraph(
-  g: GroundGraph,
-  options: GroundingOptions = {}
-): Placement {
+  g: Grounding.GroundGraph,
+  options: Grounding.GroundingOptions = {}
+): Grounding.Placement {
   const opts = { ...DEFAULTS, ...options };
   const n = g.nodes.length;
 
@@ -220,27 +193,7 @@ export function placeGraph(
 
 // -- Incremental, operator-anchored placement (the O(N²) boundary, closed) ---
 
-export interface IncrementalOptions extends GroundingOptions {
-  /**
-   * Nodes given the full global SMACOF treatment. Picked by centrality
-   * (degree), so the heavy hubs - the operators - form the fixed skeleton the
-   * rest of the graph hangs from.
-   */
-  anchorCount?: number;
-  /** BFS depth when collecting placed constraints for one new node. */
-  hopHorizon?: number;
-  /** Local Guttman iterations per placed node. */
-  localIterations?: number;
-  /**
-   * Full sweeps over the non-anchor nodes after accretion, re-relaxing each
-   * against its (by then fully placed) neighbourhood. Still near-linear; lets
-   * early-placed nodes benefit from constraints that did not exist yet when
-   * they were placed.
-   */
-  polishPasses?: number;
-}
-
-const INCREMENTAL_DEFAULTS: Required<IncrementalOptions> = {
+const INCREMENTAL_DEFAULTS: Required<Grounding.IncrementalOptions> = {
   ...DEFAULTS,
   anchorCount: 384,
   hopHorizon: 3,
@@ -267,9 +220,9 @@ const INCREMENTAL_DEFAULTS: Required<IncrementalOptions> = {
  * seeded scatter global SMACOF uses for its initialization.
  */
 export function placeGraphIncremental(
-  g: GroundGraph,
-  options: IncrementalOptions = {}
-): Placement {
+  g: Grounding.GroundGraph,
+  options: Grounding.IncrementalOptions = {}
+): Grounding.Placement {
   const opts = { ...INCREMENTAL_DEFAULTS, ...options };
   const n = g.nodes.length;
   const x = new Float64Array(n);
@@ -545,11 +498,14 @@ export function placeGraphIncremental(
  * Null baseline: every coordinate randomized over the structural placement's
  * own range, so a fidelity comparison isolates the contribution of grounding.
  */
-export function randomPlacement(g: GroundGraph, seed = 12345): Placement {
+export function randomPlacement(
+  g: Grounding.GroundGraph,
+  seed = 12345
+): Grounding.Placement {
   const n = g.nodes.length;
   const structural = placeGraph(g, { seed });
   const rng = makeRng(seed ^ 0x9e3779b9);
-  const out: Placement = {
+  const out: Grounding.Placement = {
     x: new Float64Array(n),
     y: new Float64Array(n),
     z: new Float64Array(n),

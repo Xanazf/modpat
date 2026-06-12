@@ -17,47 +17,14 @@
  * callback returns against the graph's own BFS geodesics.
  */
 
-import {
-  bfsHopDistances,
-  type GroundGraph,
-  undirectedAdjacency,
-} from "./GroundGraph";
-
-export interface TraversalFidelityReport {
-  /** Number of (source, target) pairs evaluated. */
-  pairs: number;
-  /** Fraction of pairs whose emitted path contained the target node. */
-  reachRate: number;
-  /**
-   * Mean over path-producing pairs of the fraction of consecutive recovered
-   * graph-node hops that strictly reduced graph-distance-to-target. A faithful
-   * geodesic approaches the target monotonically (-> 1.0); a random walk -> ~0.5.
-   */
-  monotonicity: number;
-  /**
-   * Fraction of interior recovered nodes that lie on *a* graph shortest path
-   * from source to target (distFromSrc[v] + distToTgt[v] === graphDist).
-   */
-  onPathRate: number;
-  /** Mean count of grounded graph-nodes recovered from the emitted paths. */
-  meanGraphNodes: number;
-  /** Fraction of pairs whose path recovered >= 2 grounded graph-nodes. */
-  pathRate: number;
-}
+import { bfsHopDistances, undirectedAdjacency } from "./GroundGraph";
 
 export type TraverseFn = (
   srcPrecept: number,
   tgtPrecept: number
 ) => Promise<Uint32Array> | Uint32Array;
 
-export interface TraversalFidelityOptions {
-  /** Cap on the number of pairs evaluated (each runs one traversal). */
-  maxPairs?: number;
-  /** Only sample pairs at least this many graph hops apart. */
-  minGraphDist?: number;
-}
-
-const EMPTY: TraversalFidelityReport = {
+const EMPTY: Grounding.TraversalFidelityReport = {
   pairs: 0,
   reachRate: 0,
   monotonicity: 0,
@@ -81,11 +48,11 @@ function recoverNodeSequence(
 }
 
 export async function traversalFidelity(
-  g: GroundGraph,
+  g: Grounding.GroundGraph,
   nodeToPrecept: Int32Array,
   traverse: TraverseFn,
-  options: TraversalFidelityOptions = {}
-): Promise<TraversalFidelityReport> {
+  options: Grounding.TraversalFidelityOptions = {}
+): Promise<Grounding.TraversalFidelityReport> {
   const n = g.nodes.length;
   if (n < 2) return EMPTY;
   const maxPairs = options.maxPairs ?? 64;

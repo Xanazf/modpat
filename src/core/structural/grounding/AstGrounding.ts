@@ -14,41 +14,15 @@
  */
 
 import type { AstTriple } from "@utils/astExtract";
-import { buildGraphFromAstTriples, type GroundGraph } from "./GroundGraph";
-import {
-  type GroundingOptions,
-  type Placement,
-  placeGraph,
-  placeGraphIncremental,
-} from "./StructuralGrounding";
-
-export interface AstGroundingOptions extends GroundingOptions {
-  /**
-   * Global SMACOF placement is O(nodes^2 x iterations). Above this node count
-   * placement switches to the incremental, operator-anchored path
-   * (`placeGraphIncremental`): full SMACOF for a centrality-selected anchor
-   * skeleton, near-linear local accretion for everything else - whole-repo
-   * scale without the global solve.
-   */
-  maxPlacementNodes?: number;
-}
-
-export interface AstGroundingResult {
-  graph: GroundGraph;
-  /** graph node index -> System precept id (-1 if unallocated). */
-  nodeToPrecept: Int32Array;
-  /** node label -> System precept id, for crystallizing edge proofs. */
-  labelToPrecept: Map<string, number>;
-  /** Placement applied to the System, or null if the node cap was exceeded. */
-  placement: Placement | null;
-}
+import { buildGraphFromAstTriples } from "./GroundGraph";
+import { placeGraph, placeGraphIncremental } from "./StructuralGrounding";
 
 export function groundAstIntoSystem(
   triples: AstTriple[],
   system: Root.ManifoldView,
   atomizer: Atomic.Engine,
-  opts: AstGroundingOptions = {}
-): AstGroundingResult {
+  opts: Grounding.AstGroundingOptions = {}
+): Grounding.AstGroundingResult {
   return groundGraphIntoSystem(
     buildGraphFromAstTriples(triples),
     system,
@@ -66,11 +40,11 @@ export function groundAstIntoSystem(
  * same way - which is precisely the unified-domain thesis made operational.
  */
 export function groundGraphIntoSystem(
-  graph: GroundGraph,
+  graph: Grounding.GroundGraph,
   system: Root.ManifoldView,
   atomizer: Atomic.Engine,
-  opts: AstGroundingOptions = {}
-): AstGroundingResult {
+  opts: Grounding.AstGroundingOptions = {}
+): Grounding.AstGroundingResult {
   const n = graph.nodes.length;
   const nodeToPrecept = new Int32Array(n).fill(-1);
   const labelToPrecept = new Map<string, number>();
