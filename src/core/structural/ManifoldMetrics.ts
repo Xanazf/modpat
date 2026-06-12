@@ -15,9 +15,9 @@
  *   • "I have other atoms in my orbit" → satellites(id).length > 0
  */
 
+import { distance4DPoints } from "@_lib/math/TensorMath";
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-import { GridIndex4D } from "@mutate/GridIndex4D";
-import { distance4DPoints } from "@core_s/Math";
 
 // Core geometry
 

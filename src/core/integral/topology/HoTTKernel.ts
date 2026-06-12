@@ -11,12 +11,12 @@
  * Depends on D2 (lastHolonomy) and D3 (detectHomotopy).
  */
 
-import type { PersistenceBar } from "@core_s/PersistentHomology";
 import {
+  identity4x4,
   multiplyMatrices4x4,
   transposeMatrix4x4,
-  identity4x4,
-} from "@core_s/Math";
+} from "@_lib/math/TensorMath";
+import type { PersistenceBar } from "@core_s/PersistentHomology";
 
 // --- ProofPath ----------------------------------------------------------------
 

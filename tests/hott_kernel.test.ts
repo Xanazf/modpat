@@ -1,3 +1,4 @@
+import { multiplyMatrices4x4, transposeMatrix4x4 } from "@_lib/math/TensorMath";
 import assert from "node:assert/strict";
 import System from "@core_i/System";
 import type { PersistenceBar } from "@core_s/PersistentHomology";
@@ -8,7 +9,6 @@ import {
   symm,
   trans,
 } from "@i_topology/HoTTKernel";
-import { multiplyMatrices4x4, transposeMatrix4x4 } from "@core_s/Math";
 import { describe, it } from "./utils/harness";
 
 // helpers

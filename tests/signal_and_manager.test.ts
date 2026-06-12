@@ -1,9 +1,10 @@
+import { TMRFreeList } from "@_lib/checksum/TMRFreeList";
+import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
 import assert from "node:assert";
 import type SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { OperatorClass } from "@core_i/System";
-import { DatabaseContext } from "@core_s/DatabaseContext";
-import { ManifoldLifecycle, TMRFreeList } from "@core_s/ManifoldLifecycle";
+import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { SystemPersistence } from "@core_s/Persistence";
 import { DeltaQueue } from "@mutate/DeltaQueue";
 import logger from "@utils/SpectralLogger";

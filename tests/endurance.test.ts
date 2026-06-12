@@ -16,10 +16,10 @@
  *   7. Metrics snapshot             - key counters show real activity
  */
 
+import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
 import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { metrics } from "@core_s/Metrics";
 import { SystemPersistence } from "@core_s/Persistence";

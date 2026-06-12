@@ -8,13 +8,13 @@
  * the same "prove the mechanism in isolation first" discipline as Phase 1.
  */
 
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import assert from "node:assert";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import Store from "@core_s/Memory";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import { gateEmit, pathCoherence } from "@skill_cogi/Coherence";
 import logger from "@utils/SpectralLogger";
 import { describe, it } from "./utils/harness";

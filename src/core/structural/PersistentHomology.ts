@@ -1,7 +1,7 @@
+import { distance4DPoints } from "@_lib/math/TensorMath";
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import { computeCurvature } from "@props/Curvature";
-import { distance4DPoints } from "@core_s/Math";
 
 export interface PersistenceBar {
   birth: number;

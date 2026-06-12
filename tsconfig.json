@@ -45,6 +45,7 @@
       "@props/*": ["./src/core/structural/properties/*"],
       "@workers/*": ["./src/core/structural/workers/*"],
 
+      "@_lib/*": ["./src/_lib/*"],
       "@utils/*": ["./src/utils/*"],
       "@config": ["./src/config.ts"]
     }

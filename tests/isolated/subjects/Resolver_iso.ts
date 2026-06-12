@@ -1,5 +1,5 @@
+import { gpu_math } from "@_lib/math/TensorMath";
 import { DOPAT_CONFIG } from "@config";
-import { gpu_math } from "@core_s/Math";
 import type Store from "@core_s/Memory";
 import type Unfolder from "@mutate/Unfolder";
 import nlp from "compromise";

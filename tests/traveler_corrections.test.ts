@@ -1,9 +1,9 @@
+import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
 import assert from "node:assert/strict";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
-import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { SystemPersistence } from "@core_s/Persistence";
 import { buildNerveGraph } from "@core_s/TopologyMapper";

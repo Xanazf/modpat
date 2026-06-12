@@ -11,13 +11,13 @@
  *   await rt.mapper.process("the sky is blue");
  */
 
+import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import System, { OperatorClass, type SystemRef } from "@core_i/System";
 import Traveler from "@core_i/Traveler";
-import { DatabaseContext } from "@core_s/DatabaseContext";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import {
   buildManifoldIndex,

@@ -5,8 +5,6 @@
  * explicitly. No class instantiation required.
  */
 
-import { DOPAT_CONFIG } from "@config";
-import { SlotType } from "@core_i/System";
 import {
   computeChristoffelForce,
   computeHolonomy as computeHolonomyMath,
@@ -15,9 +13,11 @@ import {
   regularizeChristoffels as regularizeChristoffelsMath,
   updateChristoffels,
   windingNumber2D,
-} from "@core_s/Math";
+} from "@_lib/math/TensorMath";
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
+import { DOPAT_CONFIG } from "@config";
+import { SlotType } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import type Unfolder from "@mutate/Unfolder";
 import { CURVATURE_WGSL } from "@props/Curvature";
 import nlp from "compromise";

@@ -1,10 +1,10 @@
+import type { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { DOPAT_CONFIG } from "@config";
 import { SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
-import type { GridIndex4D } from "@mutate/GridIndex4D";
 import { computeCurvature } from "@props/Curvature";
 import { random } from "@utils/seededRandom";
 import { extractTriples } from "@utils/tripleExtract";

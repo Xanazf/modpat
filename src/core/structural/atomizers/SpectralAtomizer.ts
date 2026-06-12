@@ -1,6 +1,6 @@
+import { ComplexArray } from "@_lib/geometry/Waves";
 import type System from "@core_i/System";
 import { OperatorClass, type SlotType } from "@core_i/System";
-import { ComplexArray } from "@props/Waves";
 import { BaseAtomizer } from "./BaseAtomizer";
 
 /**

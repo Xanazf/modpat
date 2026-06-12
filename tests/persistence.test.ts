@@ -1,5 +1,5 @@
+import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
 import { DOPAT_CONFIG } from "@config";
-import { DatabaseContext } from "@core_s/DatabaseContext";
 import { SCHEMA_VERSION, SystemPersistence } from "@core_s/Persistence";
 import logger from "@utils/SpectralLogger";
 import * as assert from "assert";

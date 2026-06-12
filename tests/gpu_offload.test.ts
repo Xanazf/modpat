@@ -1,6 +1,6 @@
+import { gpu_math } from "@_lib/math/TensorMath";
 import assert from "node:assert/strict";
 import { DOPAT_CONFIG } from "@config";
-import { gpu_math } from "@core_s/Math";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 

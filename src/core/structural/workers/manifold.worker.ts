@@ -6,6 +6,7 @@
  * All computation is read-only; results are posted back as plain JSON-able objects.
  */
 
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { parentPort, workerData } from "node:worker_threads";
 import type { ManifoldLayout } from "@core_i/System";
 import type { Constellation } from "@core_s/ManifoldMetrics";
@@ -17,7 +18,6 @@ import {
   satellites,
 } from "@core_s/ManifoldMetrics";
 import { ManifoldReader } from "@core_s/ManifoldReader";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 
 // Raw gap record: no labels (atomizer not available in worker; main thread enriches).
 export interface RawGap {

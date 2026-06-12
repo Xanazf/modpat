@@ -13,14 +13,14 @@
  * inferential-effort signal reflects that query's traversal only.
  */
 
+import { gpu_math } from "@_lib/math/TensorMath";
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
-import { gpu_math } from "@core_s/Math";
 import Store from "@core_s/Memory";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import { gateEmit, pathCoherence } from "@skill_cogi/Coherence";
 
 // CPU-only harness; the GPU device otherwise keeps the process alive past the run.

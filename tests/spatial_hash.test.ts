@@ -1,6 +1,6 @@
+import { BarnesHut4D, type BHAtom } from "@_lib/soa/BarnesHut4D";
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import assert from "node:assert/strict";
-import { BarnesHut4D, type BHAtom } from "@mutate/BarnesHut4D";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import { describe, it } from "./utils/harness";
 
 function createMockView(size: number): Root.ManifoldView {

@@ -21,8 +21,8 @@
  * DOPAT_CONFIG.
  */
 
+import type { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-import type { GridIndex4D } from "@mutate/GridIndex4D";
 import { computeCurvature } from "@props/Curvature";
 
 export interface CoherenceOptions {

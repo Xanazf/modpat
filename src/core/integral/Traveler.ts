@@ -1,7 +1,7 @@
+import { gpu_math, multiplyMatrices4x4 } from "@_lib/math/TensorMath";
 import { createHash } from "node:crypto";
 import { DOPAT_CONFIG } from "@config";
 import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
-import { gpu_math, multiplyMatrices4x4 } from "@core_s/Math";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import type {

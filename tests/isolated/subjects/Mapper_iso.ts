@@ -1,5 +1,5 @@
+import { gpu_math } from "@_lib/math/TensorMath";
 import { DOPAT_CONFIG } from "@config";
-import { gpu_math } from "@core_s/Math";
 import type Unfolder from "@mutate/Unfolder";
 import logger from "@utils/SpectralLogger";
 // @ts-expect-error

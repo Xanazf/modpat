@@ -6,6 +6,7 @@
  * the Traveler creates once and passes on every call.
  */
 
+import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { resolveLogicFormula } from "@core_i/formula/E1Formula";
 import { OperatorClass, SlotType } from "@core_i/System";
@@ -13,7 +14,6 @@ import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { type FrameworkId, resolveActiveAtoms } from "@mutate/FrameworkIndex";
-import { GridIndex4D } from "@mutate/GridIndex4D";
 import { type CodePattern, Synthesizer } from "@skill_code/Coder";
 import { gateEmit } from "@skill_cogi/Coherence";
 import { reduceAdditive, reduceStatements } from "@skill_cogi/Reduction";

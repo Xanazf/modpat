@@ -1,9 +1,9 @@
+import { distance4DPoints } from "@_lib/math/TensorMath";
 import {
   type Hexadectree,
   type HexadectreeNode,
   hexadectree,
 } from "d3-hexadectree";
-import { distance4DPoints } from "@core_s/Math";
 
 export interface BHAtom {
   id: number;
