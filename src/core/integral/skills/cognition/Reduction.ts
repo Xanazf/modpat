@@ -102,8 +102,15 @@ export interface IsRelation {
   object: string;
   /** True for universal rules ("all X are Y"); false for instances ("Z is X"). */
   universal: boolean;
-  /** True for "is/are not" - never contributes an IS edge. */
+  /** True for "is/are not" - never a positive IS edge; a negative edge instead. */
   negated: boolean;
+  /**
+   * True when this relation was produced by a rule firing (a discharged
+   * implication or an eliminated disjunction), not stated as a premise.
+   * Crossing a derived edge makes a conclusion a genuine derivation even at
+   * hop 1 - the rule application IS the reduction step.
+   */
+  derived?: boolean;
 }
 
 export interface EntailmentResult {
@@ -111,8 +118,17 @@ export interface EntailmentResult {
   conclusions: string[];
   /** Inference steps (hops) to each conclusion - the reduction distance. */
   hops: Map<string, number>;
-  /** Conclusions that required a rule (hop >= 2): the genuinely derived facts. */
+  /**
+   * Conclusions where a rule genuinely fired: hop >= 2, or the path crossed a
+   * rule-derived edge (a discharged implication / eliminated disjunction).
+   */
   derived: string[];
+  /** Predicates negatively concluded ("not X") via a negated universal edge. */
+  negative: string[];
+  /** Hops to each negative conclusion (positive path + the negated edge). */
+  negHops: Map<string, number>;
+  /** Negative conclusions where a rule fired (hop >= 2 or a derived edge). */
+  derivedNegative: string[];
 }
 
 /** Lowercases, strips a leading article / "not", and singularizes the noun. */
@@ -169,36 +185,294 @@ export function parseIsFacts(text: string): IsRelation[] {
  * Universal instantiation as traversal: follow IS edges from `subject` through
  * its types and the rules they trigger to the predicates they entail. "tweety
  * is a bird" + "all birds are animals" => tweety reaches "animal" at two hops -
- * a distinct, downstream conclusion, never an echo of the premises. Negated
- * relations contribute no edge, so "cats are not fish" blocks "fish".
+ * a distinct, downstream conclusion, never an echo of the premises.
+ *
+ * Negation is a first-class edge, not just a blocker: a negated relation never
+ * contributes a positive edge ("cats are not fish" still blocks "fish"), but a
+ * positive path to its subject licenses the NEGATIVE conclusion - felix --is-->
+ * cat --is-not--> fish derives "not fish" at hop 2, the negative instantiation
+ * of the negative universal.
  */
 export function reduceEntailment(
   subject: string,
   relations: IsRelation[]
 ): EntailmentResult {
-  const adj = new Map<string, string[]>();
+  interface Edge {
+    to: string;
+    derived: boolean;
+  }
+  const adj = new Map<string, Edge[]>();
+  const negAdj = new Map<string, Edge[]>();
   for (const r of relations) {
-    if (r.negated) continue;
-    if (!adj.has(r.subject)) adj.set(r.subject, []);
-    adj.get(r.subject)!.push(r.object);
+    const m = r.negated ? negAdj : adj;
+    if (!m.has(r.subject)) m.set(r.subject, []);
+    m.get(r.subject)!.push({ to: r.object, derived: r.derived === true });
   }
 
   const start = lemma(subject);
   const hops = new Map<string, number>([[start, 0]]);
+  /** Whether the (first-found) path to a node crossed a rule-derived edge. */
+  const viaRule = new Map<string, boolean>([[start, false]]);
   const queue = [start];
   while (queue.length > 0) {
     const u = queue.shift()!;
     const du = hops.get(u)!;
-    for (const v of adj.get(u) ?? []) {
-      if (!hops.has(v)) {
-        hops.set(v, du + 1);
-        queue.push(v);
+    const ruled = viaRule.get(u) === true;
+    for (const e of adj.get(u) ?? []) {
+      if (!hops.has(e.to)) {
+        hops.set(e.to, du + 1);
+        viaRule.set(e.to, ruled || e.derived);
+        queue.push(e.to);
       }
     }
   }
+
+  // Negative conclusions: a positive path to u plus one negated edge u -x-> v.
+  const negHops = new Map<string, number>();
+  const negViaRule = new Map<string, boolean>();
+  for (const [u, du] of hops) {
+    for (const e of negAdj.get(u) ?? []) {
+      const h = du + 1;
+      if (!negHops.has(e.to) || h < negHops.get(e.to)!) {
+        negHops.set(e.to, h);
+        negViaRule.set(e.to, viaRule.get(u) === true || e.derived);
+      }
+    }
+  }
+
   hops.delete(start);
+  viaRule.delete(start);
 
   const conclusions = [...hops.keys()];
-  const derived = conclusions.filter(c => (hops.get(c) ?? 0) >= 2);
-  return { conclusions, hops, derived };
+  const derived = conclusions.filter(
+    c => (hops.get(c) ?? 0) >= 2 || viaRule.get(c) === true
+  );
+  const negative = [...negHops.keys()];
+  const derivedNegative = negative.filter(
+    c => (negHops.get(c) ?? 0) >= 2 || negViaRule.get(c) === true
+  );
+  return { conclusions, hops, derived, negative, negHops, derivedNegative };
+}
+
+// -- Implications & disjunctions: rules that fire and lay derived edges ------
+
+/**
+ * A clause is the unit conditionals and alternations quantify over: either an
+ * IS-fact ("the ground is wet") or an atomic proposition ("it rains", "p").
+ */
+export type Clause =
+  | { kind: "is"; subject: string; object: string; negated: boolean }
+  | { kind: "atom"; key: string; negated: boolean };
+
+export interface Implication {
+  antecedent: Clause;
+  consequent: Clause;
+  /** Set once the antecedent held and the consequent was asserted. */
+  discharged?: boolean;
+}
+
+export interface Disjunction {
+  left: Clause;
+  right: Clause;
+  /** Set once one disjunct was refuted and the other asserted. */
+  resolved?: boolean;
+}
+
+export interface LogicFacts {
+  relations: IsRelation[];
+  implications: Implication[];
+  disjunctions: Disjunction[];
+  /** Atomic propositions asserted as standalone sentences ("it rains"). */
+  atoms: Set<string>;
+  /** Atomic propositions asserted negated ("it does not rain"). */
+  negAtoms: Set<string>;
+}
+
+/** Normalizes an atomic clause to a comparable key ("it rains" -> "rain"). */
+function clauseKey(raw: string): string {
+  const s = raw
+    .toLowerCase()
+    .replace(/\|-.*$/, "")
+    .trim()
+    .replace(/^(?:it|there)\s+/, "")
+    .replace(/\b(?:does|do)\s+not\s+|\bnot\s+/g, "")
+    .trim();
+  return lemma(s);
+}
+
+/** Parses one clause: an IS-fact if it has a copula, else an atomic key. */
+export function parseClause(raw: string): Clause | null {
+  const s = raw
+    .toLowerCase()
+    .replace(/\|-.*$/, "")
+    .trim();
+  if (!s) return null;
+  const m = s.match(/^(?:all\s+|every\s+)?(.+?)\s+(?:is|are)\s+(.+)$/);
+  if (m) {
+    return {
+      kind: "is",
+      subject: lemma(m[1]),
+      object: lemma(m[2]),
+      negated: /\bnot\b/.test(m[2]),
+    };
+  }
+  const key = clauseKey(s);
+  if (!key) return null;
+  return { kind: "atom", key, negated: /\bnot\b/.test(s) };
+}
+
+/**
+ * Parses a full premise text into relations, implications ("if A then C"),
+ * disjunctions ("either A or B" / "A or B"), and atomic assertions. The query
+ * segment (the one carrying the Sink "|-") is never a premise and is skipped.
+ */
+export function parseStatements(text: string): LogicFacts {
+  const facts: LogicFacts = {
+    relations: [],
+    implications: [],
+    disjunctions: [],
+    atoms: new Set(),
+    negAtoms: new Set(),
+  };
+  for (const raw of text.split(/[.;]|&&/)) {
+    const s = raw.toLowerCase().trim();
+    if (!s || s.includes("|-")) continue;
+    let m: RegExpMatchArray | null;
+    if ((m = s.match(/^if\s+(.+?)\s*,?\s*then\s+(.+)$/))) {
+      const a = parseClause(m[1]);
+      const c = parseClause(m[2]);
+      if (a && c) facts.implications.push({ antecedent: a, consequent: c });
+      continue;
+    }
+    if ((m = s.match(/^either\s+(.+?)\s+or\s+(.+)$/))) {
+      const l = parseClause(m[1]);
+      const r = parseClause(m[2]);
+      if (l && r) facts.disjunctions.push({ left: l, right: r });
+      continue;
+    }
+    if ((m = s.match(/^(?:all|every)\s+(.+?)\s+(?:are|is)\s+(.+)$/))) {
+      facts.relations.push(relation(m[1], m[2], true));
+    } else if ((m = s.match(/^(.+?)\s+are\s+(.+)$/))) {
+      facts.relations.push(relation(m[1], m[2], true));
+    } else if ((m = s.match(/^(.+?)\s+is\s+(.+)$/))) {
+      facts.relations.push(relation(m[1], m[2], false));
+    } else {
+      const key = clauseKey(s);
+      if (key) {
+        if (/\bnot\b/.test(s)) facts.negAtoms.add(key);
+        else facts.atoms.add(key);
+      }
+    }
+  }
+  return facts;
+}
+
+/** Does the clause hold in the asserted facts? */
+function clauseHolds(c: Clause, facts: LogicFacts): boolean {
+  if (c.kind === "atom") {
+    if (c.negated) return facts.negAtoms.has(c.key);
+    return (
+      facts.atoms.has(c.key) ||
+      facts.relations.some(
+        r => !r.negated && r.subject === c.key && r.object === "true"
+      )
+    );
+  }
+  return facts.relations.some(
+    r =>
+      r.negated === c.negated &&
+      r.subject === c.subject &&
+      r.object === c.object
+  );
+}
+
+/** Is the clause explicitly refuted (its negation asserted)? */
+function clauseRefuted(c: Clause, facts: LogicFacts): boolean {
+  if (c.kind === "atom") {
+    if (c.negated) return facts.atoms.has(c.key);
+    return facts.negAtoms.has(c.key);
+  }
+  return facts.relations.some(
+    r =>
+      r.negated !== c.negated &&
+      r.subject === c.subject &&
+      r.object === c.object
+  );
+}
+
+/** Asserts a clause as a rule-derived fact (lays a derived edge). */
+function assertClause(c: Clause, facts: LogicFacts): void {
+  if (c.kind === "is") {
+    facts.relations.push({
+      subject: c.subject,
+      object: c.object,
+      universal: false,
+      negated: c.negated,
+      derived: true,
+    });
+    return;
+  }
+  if (c.negated) {
+    facts.negAtoms.add(c.key);
+    return;
+  }
+  facts.atoms.add(c.key);
+  // An asserted atom is queryable: "q |-" should reach "true" via this edge.
+  facts.relations.push({
+    subject: c.key,
+    object: "true",
+    universal: false,
+    negated: false,
+    derived: true,
+  });
+}
+
+/**
+ * Fires rules to fixpoint:
+ *   - modus ponens: an implication whose antecedent holds asserts its
+ *     consequent (as a DERIVED edge - the rule application is the reduction);
+ *   - disjunctive syllogism: a disjunction with one disjunct refuted asserts
+ *     the other. A disjunction with neither refuted asserts NOTHING - "either
+ *     A or B" alone licenses no pick, which is exactly the abstain case.
+ * Chained discharges (hypothetical syllogism) fall out of the fixpoint.
+ */
+export function dischargeRules(facts: LogicFacts): void {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const imp of facts.implications) {
+      if (imp.discharged) continue;
+      if (clauseHolds(imp.antecedent, facts)) {
+        imp.discharged = true;
+        assertClause(imp.consequent, facts);
+        changed = true;
+      }
+    }
+    for (const d of facts.disjunctions) {
+      if (d.resolved) continue;
+      if (clauseRefuted(d.left, facts)) {
+        d.resolved = true;
+        assertClause(d.right, facts);
+        changed = true;
+      } else if (clauseRefuted(d.right, facts)) {
+        d.resolved = true;
+        assertClause(d.left, facts);
+        changed = true;
+      }
+    }
+  }
+}
+
+/**
+ * Full statement-level reduction: parse premises, fire implications and
+ * disjunctions to fixpoint, then walk the (positive + negative) IS-graph from
+ * the subject. The one entry point Perception's Phase 0c needs.
+ */
+export function reduceStatements(
+  subject: string,
+  text: string
+): EntailmentResult {
+  const facts = parseStatements(text);
+  dischargeRules(facts);
+  return reduceEntailment(subject, facts.relations);
 }

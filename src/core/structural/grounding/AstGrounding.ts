@@ -19,14 +19,16 @@ import {
   type GroundingOptions,
   type Placement,
   placeGraph,
+  placeGraphIncremental,
 } from "./StructuralGrounding";
 
 export interface AstGroundingOptions extends GroundingOptions {
   /**
    * Global SMACOF placement is O(nodes^2 x iterations). Above this node count
-   * the coordinates are skipped (mass + precepts are still created, edges still
-   * crystallizable) until Phase 4 brings incremental, anchored placement that
-   * scales to a whole repository.
+   * placement switches to the incremental, operator-anchored path
+   * (`placeGraphIncremental`): full SMACOF for a centrality-selected anchor
+   * skeleton, near-linear local accretion for everything else - whole-repo
+   * scale without the global solve.
    */
   maxPlacementNodes?: number;
 }
@@ -89,8 +91,15 @@ export function groundGraphIntoSystem(
   const inDegree = new Float64Array(n).fill(1);
   for (const e of graph.edges) inDegree[e.to] += 1;
 
+  // Small graphs get the exact global solve; past the cap, the incremental
+  // operator-anchored placer takes over (anchor skeleton + local accretion).
   const cap = opts.maxPlacementNodes ?? 3000;
-  const placement = n > 0 && n <= cap ? placeGraph(graph, opts) : null;
+  const placement =
+    n === 0
+      ? null
+      : n <= cap
+        ? placeGraph(graph, opts)
+        : placeGraphIncremental(graph, opts);
 
   for (let i = 0; i < n; i++) {
     const id = nodeToPrecept[i];

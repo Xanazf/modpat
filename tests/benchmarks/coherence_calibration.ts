@@ -13,8 +13,8 @@
  * inferential-effort signal reflects that query's traversal only.
  */
 
-import { DOPAT_CONFIG } from "@config";
 import LogicAtomizer from "@atomics/LogicAtomizer";
+import { DOPAT_CONFIG } from "@config";
 import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
@@ -91,8 +91,17 @@ const CASES: Case[] = [
     kind: "syllogism",
   },
   {
+    // A bare alternation licenses no pick - the correct behaviour is abstain.
     id: "disj1",
     source: "either the cat is inside or the cat is outside. the cat |-",
+    expected: "",
+    kind: "connective",
+  },
+  {
+    // Disjunctive syllogism: refuting one disjunct derives the other.
+    id: "disj2",
+    source:
+      "either the cat is inside or the cat is outside. the cat is not outside. the cat |-",
     expected: "inside",
     kind: "connective",
   },
@@ -105,14 +114,34 @@ const CASES: Case[] = [
   { id: "arith1", source: "3 + 4 |-", expected: "7", kind: "arithmetic" },
   { id: "arith2", source: "9 - 2 |-", expected: "7", kind: "arithmetic" },
   {
-    id: "broken1",
+    // Two unrelated facts: no transitive chain exists, but conjunction
+    // elimination (A ∧ B ⊢ A, the rule that fixed R4/R5) validly yields the
+    // first conjunct's predicate. Relabelled 2026-06-12: the original
+    // expected="" predates the conjunction-elimination rule and contradicted
+    // the propositional suite's R4 (identical query shape, expected "black").
+    id: "conj1",
     source: "a is b && x is y |-",
+    expected: "b",
+    kind: "connective",
+  },
+  {
+    id: "conj2",
+    source: "m is n && o is p && q is r |-",
+    expected: "n",
+    kind: "connective",
+  },
+  {
+    // Genuinely broken: no copula, no operator, no rule can touch it. The
+    // cluster fallback's fluent echo is the failure mode the gate must catch.
+    id: "broken1",
+    source: "blorf glik vex |-",
     expected: "",
     kind: "broken",
   },
   {
+    // Query subject unrelated to every premise: nothing supports any answer.
     id: "broken2",
-    source: "m is n && o is p && q is r |-",
+    source: "a is b. x is y. zock |-",
     expected: "",
     kind: "broken",
   },
@@ -175,7 +204,8 @@ async function run(): Promise<void> {
       resultIds,
       system,
       grid,
-      traveler.lastInferentialEffort
+      traveler.lastInferentialEffort,
+      { ruleDerived: traveler.lastProvenance !== "cluster" }
     );
 
     rows.push({

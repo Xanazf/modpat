@@ -16,11 +16,7 @@ import { type FrameworkId, resolveActiveAtoms } from "@mutate/FrameworkIndex";
 import { GridIndex4D } from "@mutate/GridIndex4D";
 import { type CodePattern, Synthesizer } from "@skill_code/Coder";
 import { gateEmit } from "@skill_cogi/Coherence";
-import {
-  parseIsFacts,
-  reduceAdditive,
-  reduceEntailment,
-} from "@skill_cogi/Reduction";
+import { reduceAdditive, reduceStatements } from "@skill_cogi/Reduction";
 import type { Language } from "@skill_lang/Language";
 import nlp from "compromise";
 
@@ -90,21 +86,22 @@ export async function perceive(
   deps: PerceptionDeps,
   cache: PerceptionCache,
   maxLen: number
-): Promise<{ ids: Uint32Array; sinkStrength: number }> {
+): Promise<PerceiveResult> {
   if (ids.length > maxLen) {
     throw new Error(
       `Sequence length ${ids.length} exceeds max DOD buffer capacity ${maxLen}`
     );
   }
   const result = await observeSettlingGradient(ids, opts, deps, cache);
-  if (!opts.gated || result.ids.length === 0) return result;
+  if (!opts.gated) return { ...result, confidence: "definitive" };
+  if (result.ids.length === 0) return { ...result, confidence: "silent" };
 
   // Phase 2 emission gate. "unknown" is already an abstain, pass it through.
   const decoded = deps.atomizer
     .decodeSequence(result.ids, deps.system)
     .trim()
     .toLowerCase();
-  if (decoded === "unknown") return result;
+  if (decoded === "unknown") return { ...result, confidence: "silent" };
 
   deps.buildGridIndex();
   const verdict = gateEmit(
@@ -112,12 +109,21 @@ export async function perceive(
     result.ids,
     deps.system,
     deps.gridIndex,
-    deps.lastInferentialEffort
+    deps.lastInferentialEffort,
+    { ruleDerived: result.provenance !== "cluster" }
   );
-  if (verdict.emit) return result;
+  if (verdict.emit) return { ...result, confidence: "definitive" };
+
+  // Graded abstention: the candidate failed the gate, so it must not be
+  // emitted as an answer - but it is not nothing. Return the abstain ids
+  // ("unknown") with the candidate attached, so the user-facing layer can say
+  // "it's possible that X, but I can't give a definitive answer".
   return {
     ids: deps.atomizer.ingestSequence("unknown", deps.system),
     sinkStrength: 0,
+    provenance: result.provenance,
+    confidence: "hedged",
+    candidate: result.ids,
   };
 }
 
@@ -168,13 +174,45 @@ export async function perceiveCoherent(
 
 // -- Observe → Follow → Read ------------------------------------------------
 
+/**
+ * Which mechanism produced a perceive result. Rule-bearing provenances
+ * (vault / reduction / partlayer / formula / geodesic) moved along the
+ * reduction axis - their short outputs are trustworthy conclusions. "cluster"
+ * is the mass-ranked neighbourhood fallback: fluent but rule-free, so the
+ * emission gate must hold it to the full anti-echo test at ANY length.
+ */
+export type Provenance = Mapping.Provenance;
+
+export interface PerceiveResult {
+  ids: Uint32Array;
+  sinkStrength: number;
+  provenance: Provenance;
+  /**
+   * Graded abstention tier (Phase 2). "definitive" - emitted through the gate
+   * (or the gate was off). "hedged" - the gate abstained but a non-void
+   * candidate exists; `candidate` carries it so the caller can surface it with
+   * an explicit hedge instead of pure silence. "silent" - nothing to offer.
+   */
+  confidence: "definitive" | "hedged" | "silent";
+  /** The gated-out candidate backing a "hedged" abstention. */
+  candidate?: Uint32Array;
+}
+
+/** What the Observe → Follow → Read pipeline returns (pre-gate). */
+export interface ObserveResult {
+  ids: Uint32Array;
+  sinkStrength: number;
+  provenance: Provenance;
+}
+
 export async function observeSettlingGradient(
   ids: Uint32Array,
   opts: PerceptionOptions,
   deps: PerceptionDeps,
   cache: PerceptionCache
-): Promise<{ ids: Uint32Array; sinkStrength: number }> {
-  if (ids.length === 0) return { ids: new Uint32Array(0), sinkStrength: 0 };
+): Promise<ObserveResult> {
+  if (ids.length === 0)
+    return { ids: new Uint32Array(0), sinkStrength: 0, provenance: "void" };
   const {
     system,
     atomizer,
@@ -197,7 +235,7 @@ export async function observeSettlingGradient(
         boostAtomMasses(ids);
         boostAtomMasses(derivation);
       }
-      return { ids: derivation, sinkStrength: 1.0 };
+      return { ids: derivation, sinkStrength: 1.0, provenance: "vault" };
     }
   }
 
@@ -214,7 +252,7 @@ export async function observeSettlingGradient(
         boostAtomMasses(ids);
         boostAtomMasses(reduct);
       }
-      return { ids: reduct, sinkStrength: 1.0 };
+      return { ids: reduct, sinkStrength: 1.0, provenance: "reduction" };
     }
   }
 
@@ -246,7 +284,7 @@ export async function observeSettlingGradient(
         boostAtomMasses(ids);
         boostAtomMasses(topoResult);
       }
-      return { ids: topoResult, sinkStrength: 1.0 };
+      return { ids: topoResult, sinkStrength: 1.0, provenance: "partlayer" };
     }
   }
 
@@ -259,7 +297,7 @@ export async function observeSettlingGradient(
         boostAtomMasses(ids);
         boostAtomMasses(e1Result);
       }
-      return { ids: e1Result, sinkStrength: 1.0 };
+      return { ids: e1Result, sinkStrength: 1.0, provenance: "formula" };
     }
   }
 
@@ -278,7 +316,7 @@ export async function observeSettlingGradient(
     );
     const decoded = atomizer.decodeSequence(synth, system).trim();
     if (decoded && decoded !== "unknown")
-      return { ids: synth, sinkStrength: 0 };
+      return { ids: synth, sinkStrength: 0, provenance: "synth" };
   }
 
   // E0: active frameworks + E1 framework boost
@@ -322,7 +360,11 @@ export async function observeSettlingGradient(
     deps
   );
   if (!settled)
-    return { ids: atomizer.ingestSequence("unknown", system), sinkStrength: 0 };
+    return {
+      ids: atomizer.ingestSequence("unknown", system),
+      sinkStrength: 0,
+      provenance: "void",
+    };
 
   const { x: sx, y: sy, z: sz, w: sw } = settled;
   const nearRadius = Math.sqrt(DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS);
@@ -338,7 +380,11 @@ export async function observeSettlingGradient(
     activeAtoms
   );
   if (sinkId === -1)
-    return { ids: atomizer.ingestSequence("unknown", system), sinkStrength: 0 };
+    return {
+      ids: atomizer.ingestSequence("unknown", system),
+      sinkStrength: 0,
+      provenance: "void",
+    };
 
   const travelerDisp =
     position[0] ** 2 + position[1] ** 2 + position[2] ** 2 + position[3] ** 2;
@@ -380,6 +426,7 @@ export async function observeSettlingGradient(
         filtered.sort((a, b) => system.mass[b] - system.mass[a]).slice(0, 16)
       ),
       sinkStrength: 0,
+      provenance: "cluster",
     };
   }
 
@@ -389,7 +436,7 @@ export async function observeSettlingGradient(
     boostScopes: effectiveBoost,
     activeAtoms,
   });
-  return { ids: result, sinkStrength: 0 };
+  return { ids: result, sinkStrength: 0, provenance: "geodesic" };
 }
 
 // -- Settling helpers --------------------------------------------------------
@@ -564,10 +611,13 @@ function _heaviestInputExcluding(
  * Tries the two reduction fast-paths:
  *   1) additive arithmetic - Arithmetic operator flanked by numeric operands;
  *      reduceAdditive composes them on the W number line.
- *   2) universal instantiation - Sink-terminated query whose premises form an
- *      IS-graph; reduceEntailment walks it from the subject. Fires only when
- *      a rule was applied (hop >= 2), so it cannot regress transitivity
- *      cases (where the subject is a chain end with no outgoing edges).
+ *   2) statement reduction - Sink-terminated query whose premises form an
+ *      IS-graph plus implications ("if A then C") and disjunctions ("either A
+ *      or B"); reduceStatements fires those rules to fixpoint and walks the
+ *      graph from the subject. Fires only when a rule was applied (hop >= 2 or
+ *      a derived edge was crossed), so it cannot regress transitivity cases
+ *      (where the subject is a chain end with no outgoing edges). Negative
+ *      universals license negative conclusions ("felix |-" => "not fish").
  */
 function _resolveReduction(
   ids: Uint32Array,
@@ -611,24 +661,32 @@ function _resolveReduction(
   if (!subject) return null;
 
   const text = atomizer.decodeSequence(ids, system);
-  const facts = parseIsFacts(text);
-  if (facts.length === 0) return null;
-
-  const r = reduceEntailment(subject, facts);
-  if (r.derived.length === 0) return null;
+  const r = reduceStatements(subject, text);
 
   // Deepest-hop derivation wins - it represents the longest applied chain of
-  // rules and is the genuinely downstream conclusion.
-  let best = r.derived[0];
-  let bestHop = r.hops.get(best) ?? 0;
-  for (const c of r.derived) {
-    const h = r.hops.get(c) ?? 0;
-    if (h > bestHop) {
-      best = c;
-      bestHop = h;
+  // rules and is the genuinely downstream conclusion. Positive conclusions
+  // outrank negative ones; a negative derivation ("felix is not a fish") is
+  // emitted with its negation made explicit.
+  const deepest = (set: string[], hops: Map<string, number>): string => {
+    let best = set[0];
+    let bestHop = hops.get(best) ?? 0;
+    for (const c of set) {
+      const h = hops.get(c) ?? 0;
+      if (h > bestHop) {
+        best = c;
+        bestHop = h;
+      }
     }
+    return best;
+  };
+  if (r.derived.length > 0) {
+    return atomizer.ingestSequence(deepest(r.derived, r.hops), system);
   }
-  return atomizer.ingestSequence(best, system);
+  if (r.derivedNegative.length > 0) {
+    const best = deepest(r.derivedNegative, r.negHops);
+    return atomizer.ingestSequence(`not ${best}`, system);
+  }
+  return null;
 }
 
 // -- Code synthesis ----------------------------------------------------------

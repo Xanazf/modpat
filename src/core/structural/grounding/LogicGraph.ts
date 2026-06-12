@@ -25,14 +25,16 @@
  *   - membership:   "<x> is [a|an|the] <y>"           -> REFERENCE x->y
  *   - conclusion:   "... |- <s> (is|implies) <o>"     -> REDUCTION s->o (the derived
  *                     fact is co-located with what it reduces from)
- * A `not` anywhere in the predicate blocks the edge (negation is not an edge),
- * mirroring `Reduction.reduceEntailment`.
+ * A `not` anywhere in the predicate contributes no adjacency edge (mirroring
+ * `Reduction.reduceEntailment`) - instead it records a signed CONTRAST pair,
+ * the stance relation the placer turns into opposition on the Z axis.
  *
  * Pure module: plain data + a builder, no System or DB dependency.
  */
 
 import { lemma } from "@skill_cogi/Reduction";
 import {
+  type ContrastPair,
   EdgeKind,
   type GroundEdge,
   type GroundGraph,
@@ -57,6 +59,7 @@ class GraphBuilder {
   private idByLabel = new Map<string, number>();
   readonly nodes: GroundNode[] = [];
   readonly edges: GroundEdge[] = [];
+  readonly contrasts: ContrastPair[] = [];
 
   /** Interns a node by label; the first kind seen for a *content* node wins
    *  unless a later, more specific kind is supplied. Numerics are always Literal. */
@@ -81,6 +84,12 @@ class GraphBuilder {
   edge(from: number, to: number, kind: EdgeKind, weight = 1): void {
     if (from < 0 || to < 0 || from === to) return;
     this.edges.push({ from, to, kind, weight });
+  }
+
+  /** Records a signed stance relation (negation as opposition, not absence). */
+  contrast(a: number, b: number): void {
+    if (a < 0 || b < 0 || a === b) return;
+    this.contrasts.push({ a, b });
   }
 }
 
@@ -112,41 +121,42 @@ function parseRelation(
   // Implication: "<p> implies <q>"
   let m = s.match(/^(.+?)\s+implies\s+(.+)$/);
   if (m) {
-    if (/\bnot\b/.test(m[2])) return true; // negation blocks the edge
-    b.edge(
-      b.ensure(m[1], NodeKind.Term),
-      b.ensure(m[2], NodeKind.Term),
-      edgeKind
-    );
-    return true;
+    return relationOrContrast(b, m[1], m[2], edgeKind);
   }
 
   // Universal: "all/every <a> are/is <b>"  or bare "<a> are <b>"
   m = s.match(/^(?:all|every)\s+(.+?)\s+(?:are|is)\s+(.+)$/);
   if (!m) m = s.match(/^(.+?)\s+are\s+(.+)$/);
   if (m) {
-    if (/\bnot\b/.test(m[2])) return true;
-    b.edge(
-      b.ensure(m[1], NodeKind.Term),
-      b.ensure(m[2], NodeKind.Term),
-      edgeKind
-    );
-    return true;
+    return relationOrContrast(b, m[1], m[2], edgeKind);
   }
 
   // Membership: "<x> is [a|an|the] <y>"
   m = s.match(/^(.+?)\s+is\s+(.+)$/);
   if (m) {
-    if (/\bnot\b/.test(m[2])) return true;
-    b.edge(
-      b.ensure(m[1], NodeKind.Term),
-      b.ensure(m[2], NodeKind.Term),
-      edgeKind
-    );
-    return true;
+    return relationOrContrast(b, m[1], m[2], edgeKind);
   }
 
   return false;
+}
+
+/**
+ * Positive predicate -> adjacency edge. Negated predicate -> a CONTRAST pair:
+ * "cats are not fish" is not the absence of a relation but an opposing one,
+ * and the placer puts the pair on opposite halves of the stance axis (lemma()
+ * strips the "not", so the contrast lands on the bare predicate term).
+ */
+function relationOrContrast(
+  b: GraphBuilder,
+  subject: string,
+  predicate: string,
+  edgeKind: EdgeKind
+): boolean {
+  const from = b.ensure(subject, NodeKind.Term);
+  const to = b.ensure(predicate, NodeKind.Term);
+  if (/\bnot\b/.test(predicate)) b.contrast(from, to);
+  else b.edge(from, to, edgeKind);
+  return true;
 }
 
 /**
@@ -171,5 +181,5 @@ export function buildGraphFromLogic(statements: string[]): GroundGraph {
       parseRelation(b, conclusionSide, EdgeKind.Reduction);
     }
   }
-  return { nodes: b.nodes, edges: b.edges };
+  return { nodes: b.nodes, edges: b.edges, contrasts: b.contrasts };
 }

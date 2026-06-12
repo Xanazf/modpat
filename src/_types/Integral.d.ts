@@ -196,6 +196,22 @@ declare namespace Mapping {
   /** Backward-compat alias for PerceptionOptions. */
   type ResolveOptions = PerceptionOptions;
 
+  /**
+   * Which mechanism produced a perceive result. Rule-bearing provenances
+   * (vault / reduction / partlayer / formula / geodesic) moved along the
+   * reduction axis; "cluster" is the mass-ranked neighbourhood fallback, which
+   * the emission gate holds to the anti-echo test at any output length.
+   */
+  type Provenance =
+    | "vault"
+    | "reduction"
+    | "partlayer"
+    | "formula"
+    | "synth"
+    | "geodesic"
+    | "cluster"
+    | "void";
+
   /** Result returned by perceiveCoherent. */
   interface CoherentResult {
     ids: Uint32Array;

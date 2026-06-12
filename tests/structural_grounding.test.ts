@@ -28,6 +28,7 @@ import { mapFidelity } from "@core_s/grounding/MapFidelity";
 import {
   type Placement,
   placeGraph,
+  placeGraphIncremental,
   randomPlacement,
 } from "@core_s/grounding/StructuralGrounding";
 import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
@@ -124,6 +125,67 @@ export async function runStructuralGroundingTests(): Promise<void> {
       assert.ok(
         fStruct.pearson > fRand.pearson + 0.2,
         `structural pearson ${fStruct.pearson.toFixed(3)} should clearly beat random ${fRand.pearson.toFixed(3)}`
+      );
+    });
+
+    await it("incremental anchored placement scales past the global cap, staying faithful", async () => {
+      // A code-shaped graph (module chain, local refs) past any reasonable
+      // global-SMACOF budget: the incremental placer (anchor skeleton + local
+      // accretion + polish) must stay faithful and near-linear.
+      seedRandom(7);
+      const nNodes = 4000;
+      const perModule = 40;
+      const modules = Math.floor(nNodes / perModule);
+      const nodes = [];
+      const edges = [];
+      for (let i = 0; i < nNodes; i++) {
+        nodes.push({
+          id: i,
+          label: `sym_${i}`,
+          kind: i < modules ? NodeKind.Module : NodeKind.Function,
+          numeric: null,
+        });
+      }
+      for (let m = 1; m < modules; m++) {
+        edges.push({ from: m, to: m - 1, kind: EdgeKind.Reference, weight: 1 });
+      }
+      for (let i = modules; i < nNodes; i++) {
+        const mod = (i - modules) % modules;
+        edges.push({ from: mod, to: i, kind: EdgeKind.Containment, weight: 1 });
+        const j =
+          modules +
+          mod +
+          modules * Math.floor(random() * ((nNodes - modules) / modules - 1));
+        if (j !== i && j < nNodes)
+          edges.push({ from: i, to: j, kind: EdgeKind.Reference, weight: 1 });
+      }
+      const big: GroundGraph = { nodes, edges };
+
+      const t0 = performance.now();
+      const placement = placeGraphIncremental(big, { seed: 0 });
+      const elapsed = performance.now() - t0;
+      const f = mapFidelity(big, placement);
+      const fNull = mapFidelity(big, randomPlacement(big));
+      logger.log(
+        `  n=${nNodes}: placed in ${(elapsed / 1000).toFixed(2)}s ` +
+          `pearson=${f.pearson.toFixed(3)} separation=${f.separation.toFixed(2)} ` +
+          `(null ${fNull.pearson.toFixed(3)} / ${fNull.separation.toFixed(2)})`
+      );
+      assert.ok(
+        f.pearson > 0.7,
+        `incremental placement must stay faithful at scale (pearson ${f.pearson.toFixed(3)})`
+      );
+      assert.ok(
+        f.separation > 3,
+        `adjacent terms must stay metric-near (separation ${f.separation.toFixed(2)})`
+      );
+      assert.ok(
+        f.pearson > fNull.pearson + 0.5,
+        "incremental placement must crush the shuffled null"
+      );
+      assert.ok(
+        elapsed < 20_000,
+        `placement must be near-linear, not O(N²) (took ${(elapsed / 1000).toFixed(1)}s)`
       );
     });
 
@@ -630,6 +692,66 @@ export async function runStructuralGroundingTests(): Promise<void> {
       assert.ok(
         fStruct.onPathRate > fNull.onPathRate * 2,
         `logic traversal onPath ${fStruct.onPathRate.toFixed(2)} should clearly beat shuffled ${fNull.onPathRate.toFixed(2)}`
+      );
+    });
+
+    await it("stance: opposing precepts place on opposite halves of the Z axis", async () => {
+      const STANCE_CORPUS = [
+        "all cats are animals",
+        "all fish are animals",
+        "cats are not fish",
+        "felix is a cat",
+        "goldie is a fish",
+      ];
+      const graph = buildGraphFromLogic(STANCE_CORPUS);
+      assert.ok(
+        graph.contrasts && graph.contrasts.length >= 1,
+        "the negated universal must yield a signed contrast pair"
+      );
+
+      const idOf = (label: string) =>
+        graph.nodes.findIndex(nd => nd.label === label);
+      const cat = idOf("cat");
+      const fish = idOf("fish");
+      const felix = idOf("felix");
+      const goldie = idOf("goldie");
+      const animal = idOf("animal");
+      assert.ok(cat >= 0 && fish >= 0 && felix >= 0 && goldie >= 0);
+
+      const withStance = placeGraph(graph, { seed: 0 });
+      const without = placeGraph(
+        { nodes: graph.nodes, edges: graph.edges },
+        { seed: 0 }
+      );
+
+      const dzStance = withStance.z[cat] - withStance.z[fish];
+      const dzPlain = without.z[cat] - without.z[fish];
+      logger.log(
+        `  Δz(cat,fish): with-stance=${dzStance.toFixed(2)} plain=${dzPlain.toFixed(2)}; ` +
+          `felix follows cat (Δz=${(withStance.z[felix] - withStance.z[cat]).toFixed(2)}), ` +
+          `animal sits near the saddle (z=${withStance.z[animal].toFixed(2)})`
+      );
+
+      // The opposing pair is pushed apart by the stance scale, far beyond the
+      // plain layout (where "not" merely contributed no edge).
+      assert.ok(
+        Math.abs(dzStance) > Math.abs(dzPlain) + 4,
+        `contrast pair must separate on Z (got ${Math.abs(dzStance).toFixed(2)} vs plain ${Math.abs(dzPlain).toFixed(2)})`
+      );
+      // Allies follow their camp: felix sides with cat, goldie with fish.
+      const camp = Math.sign(withStance.z[cat] - withStance.z[fish]);
+      assert.ok(
+        Math.sign(withStance.z[felix] - withStance.z[goldie]) === camp,
+        "instances must inherit their type's stance side"
+      );
+      // A node adjacent to BOTH camps stays between the poles - the saddle a
+      // traveler must resolve with more evidence, rather than crowding noise.
+      assert.ok(
+        Math.abs(
+          withStance.z[animal] - (withStance.z[cat] + withStance.z[fish]) / 2
+        ) <
+          Math.abs(dzStance) / 2,
+        "the shared hypernym must sit between the opposing camps"
       );
     });
   });

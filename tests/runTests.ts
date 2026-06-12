@@ -5,6 +5,7 @@ import { executeArithmeticSuite } from "./arithmetic.test";
 import { runAstSeederTests } from "./ast_seeder.test";
 import { executeAtomizerRoundTripSuite } from "./atomizer_roundtrip.test";
 import { executeCodeSynthesisSuite } from "./code_synthesis.test";
+import { runCoherenceGateTests } from "./coherence_gate.test";
 import { executeLogicSuite } from "./dod_resolution_matrix.test";
 import { executeSuite as executeSystemSuite } from "./dod_system.test";
 import { executeEnduranceSuite } from "./endurance.test";
@@ -22,6 +23,7 @@ import { runPhaseDTests } from "./phase_d.test";
 import { runPhiSafetyTests } from "./phi_safety.test";
 import { runPhiSessionTest } from "./phi_session.test";
 import { runProactivePathTests } from "./proactive_paths.test";
+import { runReductionTests } from "./reduction.test";
 import { runRigorousTests as executeRigorousLogicSuite } from "./rigorous_logic.test";
 import { executeSemanticSuite } from "./semantic_atomizer.test";
 import { executeComplexSemanticSuite } from "./semantic_reasoning_perf.test";
@@ -29,10 +31,9 @@ import { runSessionSheafTests } from "./session_sheaf.test";
 import { executeSignalManagerSuite } from "./signal_and_manager.test";
 import { runSignatureConsistencyTests } from "./signature_consistency.test";
 import { runSpatialHashTests } from "./spatial_hash.test";
-import { runCoherenceGateTests } from "./coherence_gate.test";
-import { runReductionTests } from "./reduction.test";
-import { runStructuralGroundingTests } from "./structural_grounding.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
+import { runStructuralGroundingTests } from "./structural_grounding.test";
+import { runSurveyLoopTests } from "./survey_loop.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
 import { runTravelerCorrectionsTests } from "./traveler_corrections.test";
 import { executeUMAPSuite } from "./umap_loader.test";
@@ -129,6 +130,7 @@ async function run() {
     await runWithTimeout("structural_grounding", runStructuralGroundingTests);
     await runWithTimeout("coherence_gate", runCoherenceGateTests);
     await runWithTimeout("reduction", runReductionTests);
+    await runWithTimeout("survey_loop", runSurveyLoopTests);
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

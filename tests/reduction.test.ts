@@ -14,8 +14,10 @@ import System from "@core_i/System";
 import {
   NUMBER_LINE_SCALE,
   parseIsFacts,
+  parseStatements,
   reduceAdditive,
   reduceEntailment,
+  reduceStatements,
 } from "@skill_cogi/Reduction";
 import logger from "@utils/SpectralLogger";
 import { describe, it } from "./utils/harness";
@@ -159,6 +161,117 @@ export async function runReductionTests(): Promise<void> {
         r.derived.length,
         0,
         "no rule applied, so nothing is derived"
+      );
+    });
+
+    // -- Implications: modus ponens as a discharged rule edge ----------------
+
+    await it("modus ponens: if it rains then the ground is wet + it rains => wet", async () => {
+      const r = reduceStatements(
+        "ground",
+        "if it rains then the ground is wet. it rains."
+      );
+      logger.log(
+        `  ground -> derived [${r.derived.join(", ")}] (wet @ hop ${r.hops.get("wet")})`
+      );
+      assert.ok(
+        r.derived.includes("wet"),
+        "the discharged implication lays a DERIVED edge - wet is a derivation"
+      );
+    });
+
+    await it("modus ponens on propositions: if p then q + p is true => q is true", async () => {
+      const r = reduceStatements("q", "if p then q. p is true.");
+      assert.ok(
+        r.derived.includes("true"),
+        "q should derive to true once p discharges the implication"
+      );
+    });
+
+    await it("hypothetical syllogism: chained implications discharge to fixpoint", async () => {
+      const r = reduceStatements(
+        "ground",
+        "if it rains then the street is soaked. if the street is soaked then the ground is wet. it rains."
+      );
+      assert.ok(
+        r.derived.includes("wet"),
+        "two chained discharges should still reach wet"
+      );
+    });
+
+    await it("undischarged implication derives nothing (abstain-worthy)", async () => {
+      const r = reduceStatements(
+        "ground",
+        "if it rains then the ground is wet."
+      );
+      assert.strictEqual(
+        r.derived.length,
+        0,
+        "no assertion of the antecedent => the rule must not fire"
+      );
+    });
+
+    // -- Negation as a first-class edge: negative conclusions ----------------
+
+    await it("negative instantiation: felix is a cat + cats are not fish => NOT fish", async () => {
+      const r = reduceStatements("felix", "cats are not fish. felix is a cat.");
+      logger.log(
+        `  felix -> negative [${r.negative.join(", ")}] (fish @ hop ${r.negHops.get("fish")})`
+      );
+      assert.ok(
+        !r.conclusions.includes("fish"),
+        "fish must never be a positive conclusion"
+      );
+      assert.ok(
+        r.derivedNegative.includes("fish"),
+        "the negative universal licenses the derived conclusion NOT-fish"
+      );
+      assert.strictEqual(
+        r.negHops.get("fish"),
+        2,
+        "not-fish is reached by rule application (2 hops), not restatement"
+      );
+    });
+
+    await it("a directly negated premise is a restatement, not a derivation", async () => {
+      const r = reduceStatements("cat", "the cat is not outside.");
+      assert.ok(r.negative.includes("outside"), "the negative fact is visible");
+      assert.strictEqual(
+        r.derivedNegative.length,
+        0,
+        "hop-1 negation with no rule fired must not count as derived"
+      );
+    });
+
+    // -- Disjunction: elimination derives, a bare alternation abstains -------
+
+    await it("disjunctive syllogism: either inside or outside + not outside => inside", async () => {
+      const r = reduceStatements(
+        "cat",
+        "either the cat is inside or the cat is outside. the cat is not outside."
+      );
+      logger.log(`  cat -> derived [${r.derived.join(", ")}]`);
+      assert.ok(
+        r.derived.includes("inside"),
+        "refuting one disjunct asserts the other as a derived edge"
+      );
+    });
+
+    await it("a bare disjunction licenses no pick (abstain-worthy)", async () => {
+      const r = reduceStatements(
+        "cat",
+        "either the cat is inside or the cat is outside."
+      );
+      assert.strictEqual(r.derived.length, 0, "no positive derivation");
+      assert.strictEqual(r.derivedNegative.length, 0, "no negative derivation");
+      const facts = parseStatements(
+        "either the cat is inside or the cat is outside."
+      );
+      assert.strictEqual(facts.disjunctions.length, 1);
+      assert.strictEqual(
+        facts.relations.length,
+        0,
+        "the disjunction sentence must not leak IS edges for its disjuncts"
       );
     });
   });

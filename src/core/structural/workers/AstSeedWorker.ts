@@ -250,11 +250,10 @@ export class AstSeedWorker {
       atomizer,
       { seed: 0, maxPlacementNodes }
     );
-    if (!placement) {
+    if (!placement && labelToPrecept.size > 0) {
       console.warn(
-        `[AstSeed] ${labelToPrecept.size} nodes exceeds placement cap ` +
-          `${maxPlacementNodes}; coordinates left unplaced ` +
-          `(Phase 4: incremental anchored placement).`
+        `[AstSeed] ${labelToPrecept.size} nodes produced no placement - ` +
+          `expected only for an empty graph.`
       );
     }
 

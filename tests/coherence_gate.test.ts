@@ -9,9 +9,13 @@
  */
 
 import assert from "node:assert";
+import LogicAtomizer from "@atomics/LogicAtomizer";
+import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
+import Store from "@core_s/Memory";
 import { GridIndex4D } from "@mutate/GridIndex4D";
-import { pathCoherence } from "@skill_cogi/Coherence";
+import { gateEmit, pathCoherence } from "@skill_cogi/Coherence";
 import logger from "@utils/SpectralLogger";
 import { describe, it } from "./utils/harness";
 
@@ -106,5 +110,103 @@ export async function runCoherenceGateTests(): Promise<void> {
         "a heavily-wound path should be gated even over clean terrain"
       );
     });
+
+    await it("provenance: a rule-free short echo is gated; a rule-derived one is trusted", async () => {
+      // Output = a strict subset of the input scopes (a 1-token restatement).
+      const inputIds = cleanIds;
+      const outputIds = new Uint32Array([cleanIds[1]]);
+
+      const ruled = gateEmit(inputIds, outputIds, system, grid, 0.1, {
+        ruleDerived: true,
+      });
+      const clustered = gateEmit(inputIds, outputIds, system, grid, 0.1, {
+        ruleDerived: false,
+      });
+
+      logger.log(`  ruleDerived=true  -> emit=${ruled.emit} (${ruled.reason})`);
+      logger.log(
+        `  ruleDerived=false -> emit=${clustered.emit} (${clustered.reason})`
+      );
+
+      assert.ok(
+        ruled.emit,
+        "a rule-derived short conclusion built from input scopes must emit"
+      );
+      assert.ok(
+        !clustered.emit && clustered.reason === "echo",
+        "the same tokens from the rule-free cluster fallback are an echo"
+      );
+    });
+  });
+
+  await describe("PHASE 2 - GRADED ABSTENTION (definitive → hedged → silent)", async () => {
+    const system = new System();
+    const atomizer = new LogicAtomizer();
+    await atomizer.init();
+    const store = new Store(system, atomizer, ":memory:");
+    await store.waitForInit();
+
+    const freshTraveler = () => {
+      system.reset();
+      const t = createTestTraveler(
+        system,
+        atomizer,
+        new Traveler(system, atomizer, store),
+        store
+      );
+      t.setGPUEnabled(false);
+      return t;
+    };
+
+    await it("a derived conclusion is definitive", async () => {
+      const t = freshTraveler();
+      const ids = atomizer.ingestSequence(
+        "all birds are animals. tweety is a bird. tweety |-",
+        system
+      );
+      const out = await t.perceive(ids, { gated: true });
+      const ans = atomizer.decodeSequence(out, system).trim();
+      logger.log(`  ans="${ans}" confidence=${t.lastGateConfidence}`);
+      assert.strictEqual(ans, "animal");
+      assert.strictEqual(t.lastGateConfidence, "definitive");
+    });
+
+    await it("a gated-out salad abstains HEDGED with the candidate preserved", async () => {
+      const t = freshTraveler();
+      const ids = atomizer.ingestSequence(
+        "either the cat is inside or the cat is outside. the cat |-",
+        system
+      );
+      const out = await t.perceive(ids, { gated: true });
+      const ans = atomizer.decodeSequence(out, system).trim();
+      const candidate = t.lastGateCandidate
+        ? atomizer.decodeSequence(t.lastGateCandidate, system).trim()
+        : "";
+      logger.log(
+        `  ans="${ans}" confidence=${t.lastGateConfidence} candidate="${candidate.slice(0, 32)}"`
+      );
+      assert.strictEqual(ans, "unknown", "the gate must not emit the salad");
+      assert.strictEqual(t.lastGateConfidence, "hedged");
+      assert.ok(
+        candidate.length > 0,
+        "the hedged tier must preserve the gated-out candidate"
+      );
+    });
+
+    await it("a void result abstains SILENT (nothing to hedge)", async () => {
+      const t = freshTraveler();
+      const ids = atomizer.ingestSequence("blorf glik vex |-", system);
+      const out = await t.perceive(ids, { gated: true });
+      const ans = atomizer.decodeSequence(out, system).trim();
+      logger.log(`  ans="${ans}" confidence=${t.lastGateConfidence}`);
+      assert.strictEqual(ans, "unknown");
+      assert.notStrictEqual(
+        t.lastGateConfidence,
+        "definitive",
+        "a void result must be an abstention tier"
+      );
+    });
+
+    await store.close();
   });
 }

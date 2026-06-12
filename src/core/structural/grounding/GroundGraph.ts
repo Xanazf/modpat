@@ -99,9 +99,24 @@ export interface GroundEdge {
   weight: number;
 }
 
+/**
+ * A signed stance/antonym relation: the two nodes are mutually exclusive
+ * ("modular" vs "monolithic", "cat" vs-not "fish"). NOT a fourth edge kind -
+ * adjacency means attraction, and a contrast is the opposite claim: the placer
+ * pushes the pair to opposite halves of the stance axis so their attractor
+ * pulls genuinely oppose (a traveler between them stalls on a saddle instead
+ * of being muted by crowding).
+ */
+export interface ContrastPair {
+  a: number;
+  b: number;
+}
+
 export interface GroundGraph {
   nodes: GroundNode[];
   edges: GroundEdge[];
+  /** Signed stance relations; empty/absent for graphs with no negation source. */
+  contrasts?: ContrastPair[];
 }
 
 /** Parses a bare numeric literal label; returns null for non-numeric labels. */

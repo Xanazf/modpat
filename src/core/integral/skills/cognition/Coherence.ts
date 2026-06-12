@@ -92,6 +92,16 @@ export interface GateOptions extends CoherenceOptions {
   longLength?: number;
   /** Echo fraction above which a long output is treated as a restatement. */
   echoLimit?: number;
+  /**
+   * Whether the candidate was produced by a rule-bearing mechanism (vault
+   * recall, reduction, formula resolution, a real geodesic) rather than the
+   * mass-ranked cluster fallback. Rule-derived short outputs are conclusions
+   * and keep the short-output trust; a rule-free candidate is held to the
+   * anti-echo test at ANY length - a one-token restatement of a premise is
+   * still an echo, no matter how fluent. Defaults to true (the historical
+   * behaviour) so callers without provenance are unchanged.
+   */
+  ruleDerived?: boolean;
 }
 
 export interface GateVerdict {
@@ -112,6 +122,7 @@ function gateDefaults(): Required<GateOptions> {
     longLength: 3,
     /** Beyond that, a derivation must add genuinely new tokens. */
     echoLimit: 0.7,
+    ruleDerived: true,
   };
 }
 
@@ -168,7 +179,8 @@ export function gateEmit(
   if (valid === 0) return empty;
 
   const echoFrac = echo / valid;
-  const isLikelyEcho = valid > o.longLength && echoFrac > o.echoLimit;
+  const isLikelyEcho =
+    (valid > o.longLength || !o.ruleDerived) && echoFrac > o.echoLimit;
 
   if (isLikelyEcho) return { emit: false, reason: "echo", base, echoFrac };
   if (!base.coherent)

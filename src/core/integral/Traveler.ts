@@ -114,6 +114,12 @@ class Traveler implements Mapping.Engine {
 
   /** Sink strength from the most recent inference call. */
   public lastSinkStrength = 0;
+  /** Which mechanism produced the last perceive() result (gate provenance). */
+  public lastProvenance: Mapping.Provenance = "void";
+  /** Graded-abstention tier of the last gated perceive() (Phase 2). */
+  public lastGateConfidence: "definitive" | "hedged" | "silent" = "definitive";
+  /** The gated-out candidate backing a "hedged" abstention, if any. */
+  public lastGateCandidate: Uint32Array | null = null;
   /** Always null in the gradient pipeline; kept for API compat. */
   public lastDiagnostics: PerceptionDiagnostics | null = null;
   /** P2 clamp counter (proxied from _loco). */
@@ -685,6 +691,9 @@ class Traveler implements Mapping.Engine {
       Traveler.MAX_SEQUENCE_LENGTH
     );
     this.lastSinkStrength = r.sinkStrength;
+    this.lastProvenance = r.provenance;
+    this.lastGateConfidence = r.confidence;
+    this.lastGateCandidate = r.candidate ?? null;
     return r.ids;
   }
   public async perceiveCapturing(
@@ -1511,6 +1520,21 @@ class Traveler implements Mapping.Engine {
       const decoded = this.atomizer
         .decodeSequence(percResult, this.system)
         .trim();
+      // Graded abstention: a gated-out candidate is surfaced with an explicit
+      // hedge (definitive → hedged → silent) instead of pure silence.
+      if (
+        (decoded === "unknown" || decoded === "") &&
+        this.lastGateConfidence === "hedged" &&
+        this.lastGateCandidate &&
+        this.lastGateCandidate.length > 0
+      ) {
+        const hint = this.atomizer
+          .decodeSequence(this.lastGateCandidate, this.system)
+          .trim();
+        if (hint && hint !== "unknown") {
+          return `it's possible that ${hint}, but I can't give a definitive answer`;
+        }
+      }
       return decoded || "unknown";
     }
 
