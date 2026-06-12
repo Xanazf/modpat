@@ -5,10 +5,7 @@ import type { TargetBuffer } from "@core_i/System";
 import System, { OperatorClass, SystemRef } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
 import { DeltaQueue } from "@mutate/DeltaQueue";
-import {
-  buildFrameworkIndex,
-  type FrameworkIndex,
-} from "@mutate/FrameworkIndex";
+import { buildFrameworkIndex } from "@mutate/FrameworkIndex";
 import type Unfolder from "@mutate/Unfolder";
 import { computeCurvature } from "@props/Curvature";
 import { detectSingularities } from "@props/Singularity";
@@ -100,7 +97,7 @@ export class ManifoldLifecycle {
   /** InquiryQueue for routing component_birth curiosity events. */
   private _inquiryQueue: InquiryQueue | null = null;
   /** E0 – Three-tier framework index, rebuilt on each topology tick. */
-  private _frameworkIndex: FrameworkIndex | null = null;
+  private _frameworkIndex: Mutation.FrameworkIndex | null = null;
 
   // -- C3: Ricci flow tick ----------------------------------------------------
   private _ricciTick = 0;
@@ -328,7 +325,7 @@ export class ManifoldLifecycle {
   }
 
   /** E0 – Three-tier framework index, or null before the first topology tick. */
-  public getFrameworkIndex(): FrameworkIndex | null {
+  public getFrameworkIndex(): Mutation.FrameworkIndex | null {
     return this._frameworkIndex;
   }
 

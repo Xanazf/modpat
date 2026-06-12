@@ -15,7 +15,6 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import type { Constellation } from "@core_s/ManifoldMetrics";
 import type { RawGap } from "@core_s/workers/manifold.worker";
-import type { DictionaryExpansion } from "@mutate/Unfolder";
 import type { AstExtractOptions, AstTriple } from "@utils/astExtract";
 
 export interface AstWorkerOpts {
@@ -52,7 +51,10 @@ export class WorkerPool {
 
   private manifoldPending = new Map<number, Resolver<any>>();
   private wikiPending = new Map<number, Resolver<string | null>>();
-  private seedPending = new Map<number, Resolver<DictionaryExpansion>>();
+  private seedPending = new Map<
+    number,
+    Resolver<Mutation.DictionaryExpansion>
+  >();
   private astPending = new Map<number, Resolver<AstResult>>();
   private seedReady = false;
   private seedQueue: Array<() => void> = [];
@@ -189,7 +191,7 @@ export class WorkerPool {
 
   // Seed task (WordNet lookup only; main thread handles DuckDB writes)
 
-  lookupWord(word: string): Promise<DictionaryExpansion> {
+  lookupWord(word: string): Promise<Mutation.DictionaryExpansion> {
     const id = this._id();
     return new Promise((resolve, reject) => {
       this.seedPending.set(id, { resolve, reject });

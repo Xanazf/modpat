@@ -290,6 +290,123 @@ declare namespace Grounding {
   }
 }
 
+/** Mutation - shapes for structural/mutations (framework index tiers, query decomposition, Unfolder). */
+declare namespace Mutation {
+  interface TravelerState {
+    /** Current 4D position in the manifold. Drifts with each process() call. */
+    position: [number, number, number, number];
+    /** Accumulated session holonomy (4×4 row-major). Product of all per-call lastHolonomy matrices. */
+    holonomyFrame: import("@mutate/FrameworkIndex").Matrix4x4;
+    /** Frameworks the Traveler has recently passed through (populated in step 5). */
+    activeFrameworks: Set<import("@mutate/FrameworkIndex").FrameworkId>;
+    /** Sum of lastInferentialEffort across all traversals this session. */
+    sessionEffort: number;
+  }
+
+  interface SuperclusterTier {
+    id: import("@mutate/FrameworkIndex").SuperclusterId;
+    seedAtomIds: number[];
+    memberAtomIds: Set<number>;
+    childClusterIds: Set<import("@mutate/FrameworkIndex").ClusterId>;
+  }
+
+  interface ClusterTier {
+    id: import("@mutate/FrameworkIndex").ClusterId;
+    parentSuperclusterId: import("@mutate/FrameworkIndex").SuperclusterId;
+    seedAtomIds: number[];
+    memberAtomIds: Set<number>;
+    childSubclusterIds: Set<import("@mutate/FrameworkIndex").SubclusterId>;
+  }
+
+  interface SubclusterTier {
+    id: import("@mutate/FrameworkIndex").SubclusterId;
+    parentClusterId: import("@mutate/FrameworkIndex").ClusterId;
+    memberAtomIds: Set<number>;
+  }
+
+  interface FrameworkIndex {
+    superclusters: SuperclusterTier[];
+    clusters: ClusterTier[];
+    subclusters: SubclusterTier[];
+    interstitial: Set<number>;
+    /** topoInterest nerve edges that cross supercluster boundaries. */
+    crossFrameEdges: { from: number; to: number; persistence: number }[];
+  }
+
+  interface FrameworkBuildOpts {
+    /** Union-find radius for subcluster (fine) tier. Default BASE_RADIUS × 0.25. */
+    rSub?: number;
+    /** Union-find radius for cluster (medium) tier. Default BASE_RADIUS × 0.75. */
+    rCluster?: number;
+    /** Union-find radius for supercluster (coarse) tier. Default BASE_RADIUS × 1.5. */
+    rSuper?: number;
+    /** Highest-mass atoms to designate as seeds per supercluster/cluster. Default 2. */
+    seedsPerCluster?: number;
+  }
+
+  interface SubQuery {
+    text: string;
+    purpose: string;
+  }
+
+  interface DictionaryExpansion {
+    found: boolean;
+    word: string;
+    definitions: string[];
+    synonyms: string[];
+  }
+
+  interface SearchResult {
+    title?: string;
+    link?: string;
+    url?: string;
+    snippet?: string;
+    source?: string;
+    text?: string;
+  }
+
+  interface CTX7_SearchResult {
+    id: string;
+    title: string;
+    description: string;
+    branch: string;
+    lastUpdateDate: string;
+    state: string;
+    totalTokens: number;
+    totalSnippets: number;
+    stars: number;
+    trustScore: number;
+    benchmarkScore: number;
+    versions: string[];
+  }
+
+  interface CTX7_SearchResponse {
+    results: CTX7_SearchResult[];
+  }
+
+  interface CTX7_CodeSnippet {
+    codeTitle: string;
+    codeDescription: string;
+    codeLanguage: string;
+    codeTokens: number;
+    codeId: string;
+    pageTitle: string;
+    codeList: [{ language: string; code: string }];
+  }
+
+  interface CTX7_InfoSnippet {
+    pageId: string;
+    breadcrumb: string;
+    content: string;
+    contentTokens: number;
+  }
+
+  interface CTX7_ContextResponse {
+    codeSnippets: CTX7_CodeSnippet[];
+    infoSnippets: CTX7_InfoSnippet[];
+  }
+}
+
 declare namespace Memory {
   type InquiryStatus =
     | "pending"

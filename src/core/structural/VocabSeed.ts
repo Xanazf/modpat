@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import type Store from "@core_s/Memory";
 import type { WorkerPool } from "@core_s/WorkerPool";
-import type { DictionaryExpander, DictionaryExpansion } from "@mutate/Unfolder";
+import type { DictionaryExpander } from "@mutate/Unfolder";
 
 export interface SeedProgress {
   processed: number;
@@ -149,7 +149,7 @@ export class VocabSeedWorker {
 
       // When a seed worker is available, offload the heavy WordNet Map
       // allocations to the worker heap; the main thread only does DB writes.
-      let result: DictionaryExpansion;
+      let result: Mutation.DictionaryExpansion;
       if (pool) {
         result = await pool.lookupWord(word);
         // Replicate the manifold ingestion that DictionaryExpander.expand() does.

@@ -1,8 +1,3 @@
-export interface SubQuery {
-  text: string;
-  purpose: string;
-}
-
 // True function words excluded from BOTH entity and predicate extraction
 const FUNCTION_WORDS = new Set([
   "the",
@@ -86,12 +81,15 @@ export class QueryDecomposer {
    * `query`.  Returns entity lookups first (dependency order), then a
    * process lookup last.
    */
-  decompose(query: string, ingestResult: Discourse.IngestResult): SubQuery[] {
+  decompose(
+    query: string,
+    ingestResult: Discourse.IngestResult
+  ): Mutation.SubQuery[] {
     const predicate = this._predicate(query);
     const entities = this._entities(ingestResult.heatNodes, predicate);
     if (entities.length < 2) return [];
 
-    const subQueries: SubQuery[] = [];
+    const subQueries: Mutation.SubQuery[] = [];
     const queryNorm = this._norm(query);
 
     // Entity prerequisites: "what is X?" for each noun

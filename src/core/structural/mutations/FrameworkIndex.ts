@@ -13,58 +13,6 @@ export type Matrix4x4 = Float64Array & {
   readonly __brand: typeof __matrix4x4Brand;
 };
 
-export interface TravelerState {
-  /** Current 4D position in the manifold. Drifts with each process() call. */
-  position: [number, number, number, number];
-  /** Accumulated session holonomy (4×4 row-major). Product of all per-call lastHolonomy matrices. */
-  holonomyFrame: Matrix4x4;
-  /** Frameworks the Traveler has recently passed through (populated in step 5). */
-  activeFrameworks: Set<FrameworkId>;
-  /** Sum of lastInferentialEffort across all traversals this session. */
-  sessionEffort: number;
-}
-
-export interface SuperclusterTier {
-  id: SuperclusterId;
-  seedAtomIds: number[];
-  memberAtomIds: Set<number>;
-  childClusterIds: Set<ClusterId>;
-}
-
-export interface ClusterTier {
-  id: ClusterId;
-  parentSuperclusterId: SuperclusterId;
-  seedAtomIds: number[];
-  memberAtomIds: Set<number>;
-  childSubclusterIds: Set<SubclusterId>;
-}
-
-export interface SubclusterTier {
-  id: SubclusterId;
-  parentClusterId: ClusterId;
-  memberAtomIds: Set<number>;
-}
-
-export interface FrameworkIndex {
-  superclusters: SuperclusterTier[];
-  clusters: ClusterTier[];
-  subclusters: SubclusterTier[];
-  interstitial: Set<number>;
-  /** topoInterest nerve edges that cross supercluster boundaries. */
-  crossFrameEdges: { from: number; to: number; persistence: number }[];
-}
-
-export interface FrameworkBuildOpts {
-  /** Union-find radius for subcluster (fine) tier. Default BASE_RADIUS × 0.25. */
-  rSub?: number;
-  /** Union-find radius for cluster (medium) tier. Default BASE_RADIUS × 0.75. */
-  rCluster?: number;
-  /** Union-find radius for supercluster (coarse) tier. Default BASE_RADIUS × 1.5. */
-  rSuper?: number;
-  /** Highest-mass atoms to designate as seeds per supercluster/cluster. Default 2. */
-  seedsPerCluster?: number;
-}
-
 // --- ManifoldRegion and fuzzy connectives (E1) --------------------------------
 
 /** A weighted region of the manifold: atom ID → local φ (density) value. */
@@ -160,8 +108,8 @@ export function entailment(node: FormulaNode & { type: "implies" }): number {
 export function buildFrameworkIndex(
   system: Root.ManifoldView,
   nerveGraph: NerveGraph,
-  opts?: FrameworkBuildOpts
-): FrameworkIndex {
+  opts?: Mutation.FrameworkBuildOpts
+): Mutation.FrameworkIndex {
   const base = DOPAT_CONFIG.orbital.BASE_RADIUS;
   const rSub = opts?.rSub ?? base * 0.25;
   const rCluster = opts?.rCluster ?? base * 0.75;
@@ -194,9 +142,9 @@ export function buildFrameworkIndex(
   let clusterSeq = 2 * maxP;
   let subSeq = 3 * maxP;
 
-  const superByRep = new Map<number, SuperclusterTier>();
-  const clusterByRep = new Map<number, ClusterTier>();
-  const subByRep = new Map<number, SubclusterTier>();
+  const superByRep = new Map<number, Mutation.SuperclusterTier>();
+  const clusterByRep = new Map<number, Mutation.ClusterTier>();
+  const subByRep = new Map<number, Mutation.SubclusterTier>();
 
   for (const [rep, atoms] of superComponents) {
     superByRep.set(rep, {
@@ -210,7 +158,7 @@ export function buildFrameworkIndex(
   for (const [rep, atoms] of clusterComponents) {
     const superRep = atomToSuperRep.get(atoms[0])!;
     const superTier = superByRep.get(superRep)!;
-    const tier: ClusterTier = {
+    const tier: Mutation.ClusterTier = {
       id: clusterSeq++ as ClusterId,
       parentSuperclusterId: superTier.id,
       seedAtomIds: topByMass(atoms, system, nSeeds),
@@ -225,7 +173,7 @@ export function buildFrameworkIndex(
   for (const [rep, atoms] of subComponents) {
     const clusterRep = atomToClusterRep.get(atoms[0])!;
     const clusterTier = clusterByRep.get(clusterRep)!;
-    const tier: SubclusterTier = {
+    const tier: Mutation.SubclusterTier = {
       id: subSeq++ as SubclusterId,
       parentClusterId: clusterTier.id,
       memberAtomIds: new Set(atoms),
@@ -285,7 +233,7 @@ export function buildFrameworkIndex(
  * Interstitial atoms are always included.
  */
 export function resolveActiveAtoms(
-  index: FrameworkIndex,
+  index: Mutation.FrameworkIndex,
   activeFrameworks: Set<number>
 ): Set<number> {
   const allowed = new Set<number>(index.interstitial);
@@ -325,7 +273,7 @@ export function resolveActiveAtoms(
 export function scopesInSameSupercluster(
   scopeA: number,
   scopeB: number,
-  index: FrameworkIndex,
+  index: Mutation.FrameworkIndex,
   system: Root.ManifoldView
 ): boolean {
   if (scopeA === scopeB) return true;

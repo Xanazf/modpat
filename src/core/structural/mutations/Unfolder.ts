@@ -15,43 +15,6 @@ import wiki from "wikipedia";
 axios.defaults.headers.common["User-Agent"] =
   "MpatLogicEngine/1.0 (https://github.com/dopecodez/Wikipedia/)";
 
-interface CTX7_SearchResult {
-  id: string;
-  title: string;
-  description: string;
-  branch: string;
-  lastUpdateDate: string;
-  state: string;
-  totalTokens: number;
-  totalSnippets: number;
-  stars: number;
-  trustScore: number;
-  benchmarkScore: number;
-  versions: string[];
-}
-interface CTX7_SearchResponse {
-  results: CTX7_SearchResult[];
-}
-interface CTX7_CodeSnippet {
-  codeTitle: string;
-  codeDescription: string;
-  codeLanguage: string;
-  codeTokens: number;
-  codeId: string;
-  pageTitle: string;
-  codeList: [{ language: string; code: string }];
-}
-interface CTX7_InfoSnippet {
-  pageId: string;
-  breadcrumb: string;
-  content: string;
-  contentTokens: number;
-}
-interface CTX7_ContextResponse {
-  codeSnippets: CTX7_CodeSnippet[];
-  infoSnippets: CTX7_InfoSnippet[];
-}
-
 // DictionaryExpander
 // WordNet-based local expansion: fast, offline, no network.  Tried first inside
 // Unfolder.expand(); Wikipedia / Context7 is the fallback when the word is not
@@ -61,13 +24,6 @@ function resolveWordNetPath(): string {
   const req = createRequire(import.meta.url);
   const wnPkg = req.resolve("en-wordnet/package.json");
   return path.join(path.dirname(wnPkg), "database", "3.1");
-}
-
-export interface DictionaryExpansion {
-  found: boolean;
-  word: string;
-  definitions: string[];
-  synonyms: string[];
 }
 
 /**
@@ -106,8 +62,8 @@ export class DictionaryExpander {
     system: Root.ManifoldView,
     atomizer: Atomic.Engine,
     store?: Store
-  ): Promise<DictionaryExpansion> {
-    const result: DictionaryExpansion = {
+  ): Promise<Mutation.DictionaryExpansion> {
+    const result: Mutation.DictionaryExpansion = {
       found: false,
       word,
       definitions: [],
@@ -187,15 +143,6 @@ export class DictionaryExpander {
 }
 
 // Unfolder sources
-
-export interface SearchResult {
-  title?: string;
-  link?: string;
-  url?: string;
-  snippet?: string;
-  source?: string;
-  text?: string;
-}
 
 /** Thrown when an external fetch exceeds UNFOLDER_FETCH_TIMEOUT_MS. */
 export class UnfolderTimeoutError extends Error {
@@ -513,7 +460,7 @@ export default class Unfolder {
   private async queryContext7(
     query: string,
     libname?: string
-  ): Promise<SearchResult | null> {
+  ): Promise<Mutation.SearchResult | null> {
     const apiKey = process.env.CONTEXT7_API_KEY || "YOUR_CONTEXT7_API_KEY_HERE";
     const ms = DOPAT_CONFIG.structural.UNFOLDER_FETCH_TIMEOUT_MS;
 
@@ -538,7 +485,8 @@ export default class Unfolder {
         if (libs.ok) {
           const lib_data = await libs.json();
           lib_id =
-            (lib_data as CTX7_SearchResponse).results?.[0]?.id ?? "typescript";
+            (lib_data as Mutation.CTX7_SearchResponse).results?.[0]?.id ??
+            "typescript";
         } else {
           console.warn(`Context7 API returned status: ${libs.status}`);
         }
@@ -563,7 +511,7 @@ export default class Unfolder {
         }
 
         const data = await context.json();
-        const response = data as CTX7_ContextResponse;
+        const response = data as Mutation.CTX7_ContextResponse;
         if (response.codeSnippets?.length > 0) {
           return {
             title:

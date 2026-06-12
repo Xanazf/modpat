@@ -4,13 +4,8 @@ import { DOPAT_CONFIG } from "@config";
 import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
-import type {
-  FrameworkId,
-  Matrix4x4,
-  TravelerState,
-} from "@mutate/FrameworkIndex";
+import type { FrameworkId, Matrix4x4 } from "@mutate/FrameworkIndex";
 import type QueryDecomposer from "@mutate/QueryDecomposer";
-import type { SubQuery } from "@mutate/QueryDecomposer";
 import type Unfolder from "@mutate/Unfolder";
 import { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import {
@@ -340,7 +335,7 @@ class Traveler implements Mapping.Engine {
   }
 
   public async dispose(): Promise<void> {
-    if (this.gpu) {
+    if (this.gpu && this.gpu.dispose) {
       await this.gpu.dispose();
       this.gpu = null;
     }
@@ -525,7 +520,7 @@ class Traveler implements Mapping.Engine {
   }
 
   /** Applies a previously loaded or serialized TravelerState to this instance. */
-  public applyState(state: TravelerState): void {
+  public applyState(state: Mutation.TravelerState): void {
     this.position[0] = state.position[0];
     this.position[1] = state.position[1];
     this.position[2] = state.position[2];
@@ -1342,7 +1337,7 @@ class Traveler implements Mapping.Engine {
    * the Unfolder to fetch and ingest the missing knowledge.  The return value
    * is discarded; the side-effect on the manifold is the only goal.
    */
-  private async _resolveSubQuery(subQuery: SubQuery): Promise<void> {
+  private async _resolveSubQuery(subQuery: Mutation.SubQuery): Promise<void> {
     if (!this.language || !this.unfolder) return;
 
     const ingestResult = this.language.ingest(subQuery.text);

@@ -14,11 +14,7 @@ import {
   DuckDBInstance,
   listValue,
 } from "@duckdb/node-api";
-import {
-  type FrameworkIndex,
-  scopesInSameSupercluster,
-  type TravelerState,
-} from "@mutate/FrameworkIndex";
+import { scopesInSameSupercluster } from "@mutate/FrameworkIndex";
 
 /**
  * Represents the stable, collapsed state of a logical derivation.
@@ -70,7 +66,7 @@ export default class Store implements Memory.Vault {
    * Used by checkInterferencePattern to verify that factual abstract matches
    * belong to the same conceptual domain as the current query.
    */
-  private _frameworkIndex: FrameworkIndex | null = null;
+  private _frameworkIndex: Mutation.FrameworkIndex | null = null;
 
   /**
    * Initializes a new persistent vault.
@@ -221,7 +217,7 @@ export default class Store implements Memory.Vault {
    * validated against the current domain topology.  Call after each
    * ManifoldLifecycle.consolidateAround() to keep the index fresh.
    */
-  public setFrameworkIndex(index: FrameworkIndex | null): void {
+  public setFrameworkIndex(index: Mutation.FrameworkIndex | null): void {
     this._frameworkIndex = index;
   }
 
@@ -1177,7 +1173,7 @@ export default class Store implements Memory.Vault {
    */
   public async saveTravelerState(
     sessionId: string,
-    state: TravelerState
+    state: Mutation.TravelerState
   ): Promise<void> {
     const holonomyJson = JSON.stringify(Array.from(state.holonomyFrame));
     const frameworksJson = JSON.stringify(Array.from(state.activeFrameworks));
@@ -1217,7 +1213,7 @@ export default class Store implements Memory.Vault {
    */
   public async loadTravelerState(
     sessionId: string
-  ): Promise<TravelerState | null> {
+  ): Promise<Mutation.TravelerState | null> {
     const stmt = await this._connection.prepare(
       `SELECT pos_x, pos_y, pos_z, pos_w, holonomy_json, active_frameworks_json, session_effort
          FROM traveler_sessions WHERE session_id = ?`
