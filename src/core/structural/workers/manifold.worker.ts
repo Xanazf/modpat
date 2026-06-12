@@ -7,8 +7,8 @@
  */
 
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
+import type { ManifoldLayout } from "@_lib/soa/ManifoldSOA";
 import { parentPort, workerData } from "node:worker_threads";
-import type { ManifoldLayout } from "@core_i/System";
 import type { Constellation } from "@core_s/ManifoldMetrics";
 import {
   constellations,

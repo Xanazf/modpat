@@ -10,9 +10,9 @@
  * tasks are correctly correlated without serializing callers.
  */
 
+import type { ManifoldLayout } from "@_lib/soa/ManifoldSOA";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import type { ManifoldLayout } from "@core_i/System";
 import type { Constellation } from "@core_s/ManifoldMetrics";
 import type { RawGap } from "@core_s/workers/manifold.worker";
 import type { DictionaryExpansion } from "@mutate/Unfolder";

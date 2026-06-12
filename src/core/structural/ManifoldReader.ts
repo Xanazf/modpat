@@ -10,7 +10,7 @@
  * or throw - workers are read-only consumers.
  */
 
-import type { ManifoldLayout } from "@core_i/System";
+import type { ManifoldLayout } from "@_lib/soa/ManifoldSOA";
 
 export class ManifoldReader {
   readonly mass: Float64Array;

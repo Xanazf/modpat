@@ -1,3 +1,8 @@
+import {
+  computeManifoldLayout,
+  type ManifoldLayout,
+  ManifoldSOA,
+} from "@_lib/soa/ManifoldSOA";
 import { DOPAT_CONFIG, SYNTAX_ATTRACTORS, validateConfig } from "@config";
 import { RingBuffer } from "ring-buffer-ts";
 
@@ -275,82 +280,6 @@ const LogicOperations = {
 const _EMPTY_SET: ReadonlySet<number> = Object.freeze(new Set<number>());
 
 /**
- * Byte-offset map describing how every typed-array view is laid out inside the
- * System's SharedArrayBuffer.  Workers reconstruct zero-copy views from this
- * record without importing the System class.
- */
-export interface ManifoldLayout {
-  maxPrecepts: number;
-  byteLength: number;
-  c: number;
-  epsilon: number;
-  maxilon: number;
-  offsets: {
-    mass: number;
-    scope: number;
-    depth: number;
-    time: number;
-    posX: number;
-    posY: number;
-    posZ: number;
-    posW: number;
-    density: number;
-    entropyRate: number;
-    potency: number;
-    intensity: number;
-    decayRate: number;
-    checksum: number;
-    PartLayer: number;
-    ComplexLayer: number;
-    operatorClass: number;
-    allocated: number;
-    slotType: number;
-  };
-}
-
-/** Compute buffer offsets for any maxPrecepts value (mirrors the System constructor). */
-export function computeManifoldLayout(
-  maxPrecepts: number,
-  c: number,
-  epsilon: number,
-  maxilon: number
-): ManifoldLayout {
-  const bF64 = maxPrecepts * 8;
-  const bU32 = maxPrecepts * 4;
-  const bU8 = maxPrecepts * 1;
-  const base14 = bF64 * 14;
-  const base2U32 = base14 + bU32 * 2;
-  return {
-    maxPrecepts,
-    byteLength: base14 + bU32 * 2 + bU8 * 3,
-    c,
-    epsilon,
-    maxilon,
-    offsets: {
-      mass: 0,
-      scope: bF64,
-      depth: 2 * bF64,
-      time: 3 * bF64,
-      posX: 4 * bF64,
-      posY: 5 * bF64,
-      posZ: 6 * bF64,
-      posW: 7 * bF64,
-      density: 8 * bF64,
-      entropyRate: 9 * bF64,
-      potency: 10 * bF64,
-      intensity: 11 * bF64,
-      decayRate: 12 * bF64,
-      checksum: 13 * bF64,
-      PartLayer: base14,
-      ComplexLayer: base14 + bU32,
-      operatorClass: base2U32,
-      allocated: base2U32 + bU8,
-      slotType: base2U32 + 2 * bU8,
-    },
-  };
-}
-
-/**
  * The System represents the core logical manifold: a contiguous block of memory
  * where logical "precepts" (prepositions, the "x" in "if x, then y")
  * are stored as physical entities within a dual-layer manifold of matter and coordinates.
@@ -359,8 +288,13 @@ export function computeManifoldLayout(
  * topological calculations, allowing for efficient geodesic pathfinding.
  */
 class System implements Root.ManifoldView {
+  /** Struct-of-arrays primitive backing all physical-property buffers. */
+  private readonly soa: ManifoldSOA;
+
   /** The contiguous block of memory (Logical Manifold) hosting all physical states. */
-  public readonly buffer: SharedArrayBuffer;
+  public get buffer(): SharedArrayBuffer {
+    return this.soa.buffer;
+  }
 
   public updateRing = new RingBuffer<string>(10);
 
@@ -407,61 +341,99 @@ class System implements Root.ManifoldView {
   private viewCache: (Root.Signal | undefined)[] = [];
 
   /** Matter: represents logical importance or content of posX. (F64) */
-  public readonly mass: Float64Array;
+  public get mass(): Float64Array {
+    return this.soa.mass;
+  }
 
   /** Kind: represents structural reach or content of posY. (F64) */
-  public readonly scope: Float64Array;
+  public get scope(): Float64Array {
+    return this.soa.scope;
+  }
 
   /** Energy: represents logical potential or content of posZ. (F64) */
-  public readonly depth: Float64Array;
+  public get depth(): Float64Array {
+    return this.soa.depth;
+  }
 
   /** Age: represents the temporal state or content of posW. (F64) */
-  public readonly time: Float64Array;
+  public get time(): Float64Array {
+    return this.soa.time;
+  }
 
   /** Buffer view for 'posX': matter coordinate. (F64) */
-  public readonly posX: Float64Array;
+  public get posX(): Float64Array {
+    return this.soa.posX;
+  }
 
   /** Buffer view for 'posY': kind coordinate. (F64) */
-  public readonly posY: Float64Array;
+  public get posY(): Float64Array {
+    return this.soa.posY;
+  }
 
   /** Buffer view for 'posZ': energy coordinate. (F64) */
-  public readonly posZ: Float64Array;
+  public get posZ(): Float64Array {
+    return this.soa.posZ;
+  }
 
   /** Buffer view for 'posW': age coordinate. (F64) */
-  public readonly posW: Float64Array;
+  public get posW(): Float64Array {
+    return this.soa.posW;
+  }
 
   /** Buffer view for 'density': mass / scope. (F64) */
-  public readonly density: Float64Array;
+  public get density(): Float64Array {
+    return this.soa.density;
+  }
 
   /** Buffer view for 'entropyRate': time / scope. (F64) */
-  public readonly entropyRate: Float64Array;
+  public get entropyRate(): Float64Array {
+    return this.soa.entropyRate;
+  }
 
   /** Buffer view for 'potency': depth / mass. (F64) */
-  public readonly potency: Float64Array;
+  public get potency(): Float64Array {
+    return this.soa.potency;
+  }
 
   /** Buffer view for 'intensity': depth / scope. (F64) */
-  public readonly intensity: Float64Array;
+  public get intensity(): Float64Array {
+    return this.soa.intensity;
+  }
 
   /** Buffer view for 'decayRate': custom rate of logical decay per precept. (F64) */
-  public readonly decayRate: Float64Array;
+  public get decayRate(): Float64Array {
+    return this.soa.decayRate;
+  }
 
   /** Buffer view for 'checksum': physical hash of the precept's state for integrity. (F64) */
-  public readonly checksum: Float64Array;
+  public get checksum(): Float64Array {
+    return this.soa.checksum;
+  }
 
   /** Buffer view for 'allocated': tracks if a location is currently active. (U8) */
-  public readonly allocated: Uint8Array;
+  public get allocated(): Uint8Array {
+    return this.soa.allocated;
+  }
 
   /** View for the Part Layer: stores pointers to atomic logical components (words). (U32) */
-  public readonly PartLayer: Uint32Array;
+  public get PartLayer(): Uint32Array {
+    return this.soa.PartLayer;
+  }
 
   /** View for the Complex Layer: stores pointers to syllogisms or complex rules. (U32) */
-  public readonly ComplexLayer: Uint32Array;
+  public get ComplexLayer(): Uint32Array {
+    return this.soa.ComplexLayer;
+  }
 
   /** View for logical classifications: identifies the OperatorClass of a precept. (U8) */
-  public readonly operatorClass: Uint8Array;
+  public get operatorClass(): Uint8Array {
+    return this.soa.operatorClass;
+  }
 
   /** Slot-type flags for code-pattern VAR precepts, read by the Mapper's potential field. (U8) */
-  public readonly slotType: Uint8Array;
+  public get slotType(): Uint8Array {
+    return this.soa.slotType;
+  }
 
   /** Free-list allocator, defaults to a plain array, swappable to a TMRFreeList via setAllocator(). */
   private freeList: Root.FreeList = [];
@@ -495,69 +467,7 @@ class System implements Root.ManifoldView {
     // View Cache initialization (14 properties * max precepts)
     this.viewCache = new Array(maxP * 14).fill(undefined);
 
-    const bytesF64 = Float64Array.BYTES_PER_ELEMENT; // 8
-    const bytesU32 = Uint32Array.BYTES_PER_ELEMENT; // 4
-    const bytesU8 = Uint8Array.BYTES_PER_ELEMENT; // 1
-
-    const blockF64 = maxP * bytesF64;
-    const blockU32 = maxP * bytesU32;
-    const blockU8 = maxP * bytesU8;
-
-    // Calculate total buffer size required for all views.
-    const totalBytes =
-      blockF64 * 14 + // mass, scope, depth, time, posX, posY, posZ, posW, density, entropyRate, potency, intensity, decayRate, checksum
-      blockU32 * 2 + // PartLayer, ComplexLayer
-      blockU8 * 3; // operatorClass, allocated, slotType
-
-    this.buffer = new SharedArrayBuffer(totalBytes);
-
-    let offset = 0;
-
-    // Map 64-bit physical properties into the buffer.
-    this.mass = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.scope = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.depth = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.time = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.posX = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.posY = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.posZ = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.posW = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.density = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.entropyRate = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.potency = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.intensity = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.decayRate = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-    this.checksum = new Float64Array(this.buffer, offset, maxP);
-    offset += blockF64;
-
-    // Map 32-bit structural layers into the buffer.
-    this.PartLayer = new Uint32Array(this.buffer, offset, maxP);
-    offset += blockU32;
-    this.ComplexLayer = new Uint32Array(this.buffer, offset, maxP);
-    offset += blockU32;
-
-    // Map 8-bit logical classifications into the buffer.
-    this.operatorClass = new Uint8Array(this.buffer, offset, maxP);
-    offset += blockU8;
-
-    this.allocated = new Uint8Array(this.buffer, offset, maxP);
-    offset += blockU8;
-
-    this.slotType = new Uint8Array(this.buffer, offset, maxP);
-    offset += blockU8;
+    this.soa = new ManifoldSOA(maxP);
   }
 
   /**

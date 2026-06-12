@@ -8,7 +8,7 @@
 
 ### List of primitives
 
-* [x] SOA (can be a class) - `src/_lib/soa/` (GridIndex4D, BarnesHut4D);
+* [x] SOA (can be a class) - `src/_lib/soa/` (GridIndex4D, BarnesHut4D, ManifoldSOA - System.ts's precept buffers);
 * [x] Checksum (i.e. TMR, CRC-32) - `src/_lib/checksum/` (crc32, TMRFreeList);
 * [x] Math (`gpu_`, `cpu_`) - `src/_lib/math/TensorMath.ts`;
 * [x] Geometry (topology, positioning, etc.) - `src/_lib/geometry/Waves.ts`;
