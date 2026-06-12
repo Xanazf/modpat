@@ -99,15 +99,6 @@ export function trans<A extends number, B extends number, C extends number>(
 
 // --- Path equality (homotopy check) ------------------------------------------
 
-export interface PathEqualityResult {
-  /** True when the loop path₁ + reversed(path₂) encloses no persistent H₁ generator. */
-  homotopic: boolean;
-  /** H₁ bars whose generators are enclosed by the loop (analogy candidates). */
-  straddledH1Bars: PersistenceBar[];
-  /** [0, 1] - fraction of qualified H₁ generators straddled. */
-  analogyScore: number;
-}
-
 /**
  * pathEqual(p, q): check whether two paths between the same endpoints are
  * homotopic by testing whether their loop encloses a persistent H₁ generator.
@@ -126,7 +117,7 @@ export function pathEqual<A extends number, B extends number>(
   q: ProofPath<A, B>,
   h1Bars: PersistenceBar[],
   minPersistence = 0
-): PathEqualityResult {
+): Geodesy.PathEqualityResult {
   if (h1Bars.length === 0) {
     return { homotopic: true, straddledH1Bars: [], analogyScore: 0 };
   }

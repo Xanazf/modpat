@@ -726,3 +726,67 @@ declare namespace Skills {
     handler: import("@i_skills/index").SkillHandler;
   }
 }
+
+/** Geodesy - HoTT-kernel path/homotopy shapes (E3, topology/HoTTKernel). */
+declare namespace Geodesy {
+  interface PathEqualityResult {
+    /** True when the loop path₁ + reversed(path₂) encloses no persistent H₁ generator. */
+    homotopic: boolean;
+    /** H₁ bars whose generators are enclosed by the loop (analogy candidates). */
+    straddledH1Bars: import("@core_s/PersistentHomology").PersistenceBar[];
+    /** [0, 1] - fraction of qualified H₁ generators straddled. */
+    analogyScore: number;
+  }
+}
+
+declare namespace Mapping {
+  /** Boot-time configuration for Runtime.boot(). */
+  interface RuntimeOptions {
+    /** Atomizer to use (default: "semantic"). Automatically falls back to "base" if embeddings are unavailable. */
+    atomizer?: import("@core_i/Runtime").AtomizerMode;
+    /** DuckDB path (default: ":memory:"). */
+    db?: string;
+    /** Skip SelfConcept initialisation - useful in test environments that don't need identity axioms. */
+    skipIdentity?: boolean;
+    /** Called if the requested atomizer fails to load and the runtime falls back to "base". */
+    onFallback?: (reason: string) => void;
+    /**
+     * Disable the automatic maintenance tick (decay + age refresh).
+     * Useful in tests that want a fully static manifold.
+     * Default: tick is started automatically.
+     */
+    noTick?: boolean;
+    /**
+     * Disable full ManifoldLifecycle wrapping (TMR allocator, primary/emergency
+     * failover, gravitational consolidation, and dream cycle).
+     * Default: lifecycle is active. Set this in unit/stress/perf tests that need
+     * a plain System with lightweight decay only.
+     */
+    noLifecycle?: boolean;
+    /**
+     * Disable worker threads.  Useful in test environments that don't need
+     * off-thread computation and want to avoid the worker startup overhead.
+     */
+    noWorkers?: boolean;
+    /**
+     * Root paths to scan for TypeScript/JavaScript source files.
+     * When set, an AstSeedWorker is created and started automatically if the
+     * manifold is fresh (system.length < 100 precepts at boot).
+     */
+    astSeedPaths?: string[];
+    /** Options forwarded to AstSeedWorker.start(). */
+    astSeedOptions?: import("@workers/AstSeedWorker").AstSeedOptions;
+    /**
+     * Interval in ms for the autonomous learner cycle (default: 10 000).
+     * Handled by Traveler.startAutonomy() internally.
+     */
+    learnerIntervalMs?: number;
+    /**
+     * Enable the background constellation gap scanner (default: true when lifecycle is active).
+     * Set to false to disable proactive curiosity enqueueing.
+     */
+    proactivity?: boolean;
+    /** Gap scan interval in ms (default: 30 000). */
+    gapScanIntervalMs?: number;
+  }
+}

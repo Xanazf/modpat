@@ -37,7 +37,7 @@ import { expressFromSinks } from "@skill_lang/SurfaceExpression";
 import { IntentTag } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
 import { seedRandom } from "@utils/seededRandom";
-import { type AstSeedOptions, AstSeedWorker } from "@workers/AstSeedWorker";
+import { AstSeedWorker } from "@workers/AstSeedWorker";
 import type { SkillHandler } from "./skills";
 
 // ---------------------------------------------------------------------------
@@ -174,55 +174,6 @@ export function createTestTraveler(
 
 export type AtomizerMode = "semantic" | "base" | "spectral";
 
-export interface RuntimeOptions {
-  /** Atomizer to use (default: "semantic"). Automatically falls back to "base" if embeddings are unavailable. */
-  atomizer?: AtomizerMode;
-  /** DuckDB path (default: ":memory:"). */
-  db?: string;
-  /** Skip SelfConcept initialisation - useful in test environments that don't need identity axioms. */
-  skipIdentity?: boolean;
-  /** Called if the requested atomizer fails to load and the runtime falls back to "base". */
-  onFallback?: (reason: string) => void;
-  /**
-   * Disable the automatic maintenance tick (decay + age refresh).
-   * Useful in tests that want a fully static manifold.
-   * Default: tick is started automatically.
-   */
-  noTick?: boolean;
-  /**
-   * Disable full ManifoldLifecycle wrapping (TMR allocator, primary/emergency
-   * failover, gravitational consolidation, and dream cycle).
-   * Default: lifecycle is active. Set this in unit/stress/perf tests that need
-   * a plain System with lightweight decay only.
-   */
-  noLifecycle?: boolean;
-  /**
-   * Disable worker threads.  Useful in test environments that don't need
-   * off-thread computation and want to avoid the worker startup overhead.
-   */
-  noWorkers?: boolean;
-  /**
-   * Root paths to scan for TypeScript/JavaScript source files.
-   * When set, an AstSeedWorker is created and started automatically if the
-   * manifold is fresh (system.length < 100 precepts at boot).
-   */
-  astSeedPaths?: string[];
-  /** Options forwarded to AstSeedWorker.start(). */
-  astSeedOptions?: AstSeedOptions;
-  /**
-   * Interval in ms for the autonomous learner cycle (default: 10 000).
-   * Handled by Traveler.startAutonomy() internally.
-   */
-  learnerIntervalMs?: number;
-  /**
-   * Enable the background constellation gap scanner (default: true when lifecycle is active).
-   * Set to false to disable proactive curiosity enqueueing.
-   */
-  proactivity?: boolean;
-  /** Gap scan interval in ms (default: 30 000). */
-  gapScanIntervalMs?: number;
-}
-
 export class Runtime {
   public readonly system: System;
   public readonly atomizer: Atomic.Engine;
@@ -253,7 +204,7 @@ export class Runtime {
   /** The ego-centre precept.  null when skipIdentity was set. */
   public readonly identity: SelfConcept | null;
   /**
-   * ManifoldLifecycle instance (active by default unless RuntimeOptions.noLifecycle).
+   * ManifoldLifecycle instance (active by default unless Mapping.RuntimeOptions.noLifecycle).
    * Provides TMR allocation, primary/emergency failover, consolidation and
    * dream cycle on top of the plain System.  null when noLifecycle is set.
    */
@@ -327,7 +278,7 @@ export class Runtime {
    * Constructs and wires the full stack:
    *   System → Atomizer → Store → Traveler → Language → Skills → SelfConcept
    */
-  static async boot(opts: RuntimeOptions = {}): Promise<Runtime> {
+  static async boot(opts: Mapping.RuntimeOptions = {}): Promise<Runtime> {
     seedRandom(DOPAT_CONFIG.SEED);
     const system = new System();
 
@@ -545,12 +496,12 @@ export class Runtime {
   /**
    * Starts the lightweight maintenance tick: decays atom masses and temporal
    * freshness (posW) on every interval.  Called automatically by boot() unless
-   * RuntimeOptions.noTick is set.
+   * Mapping.RuntimeOptions.noTick is set.
    */
   startTick(
     intervalMs: number = DOPAT_CONFIG.observability.TICK_INTERVAL_MS,
     opts: Pick<
-      RuntimeOptions,
+      Mapping.RuntimeOptions,
       "learnerIntervalMs" | "proactivity" | "gapScanIntervalMs"
     > = {}
   ): void {
