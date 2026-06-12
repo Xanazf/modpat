@@ -14,24 +14,8 @@ import type Store from "@core_s/Memory";
 import type Unfolder from "@mutate/Unfolder";
 import logger from "@utils/SpectralLogger";
 
-export type InquiryStatus =
-  | "pending"
-  | "tried_dict"
-  | "tried_wiki"
-  | "ask_user"
-  | "resolved";
-
-export interface InquiryItem {
-  id: string;
-  topic: string;
-  originalQuery: string;
-  status: InquiryStatus;
-  addedAt: number;
-  attempts: number;
-}
-
 export class InquiryQueue {
-  private items: Map<string, InquiryItem> = new Map();
+  private items: Map<string, Memory.InquiryItem> = new Map();
   private store?: Store;
   /** Optional hook called on each new enqueue - used by Traveler.spawnIntent. */
   public onEnqueue?: (topic: string) => void;
@@ -41,7 +25,7 @@ export class InquiryQueue {
   }
 
   /** Bulk-load items from a previous session (called once at boot). */
-  public populate(items: InquiryItem[]): void {
+  public populate(items: Memory.InquiryItem[]): void {
     for (const item of items) {
       if (!this.items.has(item.id)) this.items.set(item.id, item);
     }
@@ -108,7 +92,7 @@ export class InquiryQueue {
     }
   }
 
-  public pendingUserQuestions(): InquiryItem[] {
+  public pendingUserQuestions(): Memory.InquiryItem[] {
     return [...this.items.values()].filter(i => i.status === "ask_user");
   }
 
@@ -123,9 +107,9 @@ export class InquiryQueue {
     system: Root.ManifoldView,
     atomizer: Atomic.Engine,
     store?: Store,
-    onResolved?: (item: InquiryItem, answer: string) => void
-  ): Promise<InquiryItem[]> {
-    const toAsk: InquiryItem[] = [];
+    onResolved?: (item: Memory.InquiryItem, answer: string) => void
+  ): Promise<Memory.InquiryItem[]> {
+    const toAsk: Memory.InquiryItem[] = [];
 
     const candidates = [...this.items.values()]
       .filter(i => i.status === "pending" || i.status === "tried_dict")
@@ -192,7 +176,7 @@ export class InquiryQueue {
   }
 
   private async _retry(
-    item: InquiryItem,
+    item: Memory.InquiryItem,
     mapper: Traveler,
     atomizer: Atomic.Engine,
     system: Root.ManifoldView,

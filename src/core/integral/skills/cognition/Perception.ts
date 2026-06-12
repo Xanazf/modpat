@@ -2,7 +2,7 @@
  * Perception – the Observe → Follow → Read pipeline as a plain function module.
  *
  * All functions take their dependencies explicitly. Mutable cache state
- * (semantic spatial index, synthesizer) is bundled in PerceptionCache, which
+ * (semantic spatial index, synthesizer) is bundled in Cognition.PerceptionCache, which
  * the Traveler creates once and passes on every call.
  */
 
@@ -10,14 +10,12 @@ import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { resolveLogicFormula } from "@core_i/formula/E1Formula";
 import { OperatorClass, SlotType } from "@core_i/System";
-import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
-import { type FrameworkId, resolveActiveAtoms } from "@mutate/FrameworkIndex";
+import { resolveActiveAtoms } from "@mutate/FrameworkIndex";
 import { type CodePattern, Synthesizer } from "@skill_code/Coder";
 import { gateEmit } from "@skill_cogi/Coherence";
 import { reduceAdditive, reduceStatements } from "@skill_cogi/Reduction";
-import type { Language } from "@skill_lang/Language";
 import nlp from "compromise";
 
 /** Parses an integer numeral; null for non-numeric tokens. */
@@ -33,44 +31,7 @@ type PerceptionOptions = Mapping.PerceptionOptions;
 type CoherentResult = Mapping.CoherentResult;
 type PerceptionCapture = Mapping.PerceptionCapture;
 
-/** Everything perception needs from the Traveler. */
-export interface PerceptionDeps {
-  readonly system: Root.ManifoldView;
-  readonly atomizer: Atomic.Engine;
-  store: Store | null;
-  language: Language | null;
-  lifecycle: ManifoldLifecycle | null;
-  /** The locomotion grid index, already built by buildGridIndex(). */
-  readonly gridIndex: GridIndex4D;
-  buildGridIndex(): void;
-  traverse(
-    src: number,
-    tgt: number,
-    opts: Mapping.RouteOptions
-  ): Promise<Uint32Array>;
-  getMetricForce(
-    px: number,
-    py: number,
-    pz: number,
-    pw: number,
-    pens: any[],
-    boost: Set<number> | undefined,
-    activeAtoms?: Set<number>
-  ): [V: number, fx: number, fy: number, fz: number, fw: number];
-  boostAtomMasses(ids: Uint32Array): void;
-  readonly position: [number, number, number, number];
-  readonly activeFrameworks: Set<FrameworkId>;
-  readonly lastInferentialEffort: number;
-}
-
-/** Mutable cache owned by the Traveler and passed into perception calls. */
-export interface PerceptionCache {
-  spatialIndex: GridIndex4D;
-  lastIndexedLength: number;
-  readonly synthesizer: Synthesizer;
-}
-
-export function makePerceptionCache(): PerceptionCache {
+export function makePerceptionCache(): Cognition.PerceptionCache {
   return {
     spatialIndex: new GridIndex4D(),
     lastIndexedLength: -1,
@@ -83,10 +44,10 @@ export function makePerceptionCache(): PerceptionCache {
 export async function perceive(
   ids: Uint32Array,
   opts: PerceptionOptions,
-  deps: PerceptionDeps,
-  cache: PerceptionCache,
+  deps: Cognition.PerceptionDeps,
+  cache: Cognition.PerceptionCache,
   maxLen: number
-): Promise<PerceiveResult> {
+): Promise<Cognition.PerceiveResult> {
   if (ids.length > maxLen) {
     throw new Error(
       `Sequence length ${ids.length} exceeds max DOD buffer capacity ${maxLen}`
@@ -130,8 +91,8 @@ export async function perceive(
 export async function perceiveCapturing(
   ids: Uint32Array,
   opts: PerceptionOptions,
-  deps: PerceptionDeps,
-  cache: PerceptionCache,
+  deps: Cognition.PerceptionDeps,
+  cache: Cognition.PerceptionCache,
   maxLen: number
 ): Promise<PerceptionCapture> {
   const r = await perceive(ids, opts, deps, cache, maxLen);
@@ -151,8 +112,8 @@ export async function perceiveCoherent(
     maxIterations?: number;
     contextScopes?: Set<number>;
   },
-  deps: PerceptionDeps,
-  cache: PerceptionCache,
+  deps: Cognition.PerceptionDeps,
+  cache: Cognition.PerceptionCache,
   maxLen: number
 ): Promise<CoherentResult> {
   const r = await observeSettlingGradient(
@@ -174,43 +135,12 @@ export async function perceiveCoherent(
 
 // -- Observe → Follow → Read ------------------------------------------------
 
-/**
- * Which mechanism produced a perceive result. Rule-bearing provenances
- * (vault / reduction / partlayer / formula / geodesic) moved along the
- * reduction axis - their short outputs are trustworthy conclusions. "cluster"
- * is the mass-ranked neighbourhood fallback: fluent but rule-free, so the
- * emission gate must hold it to the full anti-echo test at ANY length.
- */
-export type Provenance = Mapping.Provenance;
-
-export interface PerceiveResult {
-  ids: Uint32Array;
-  sinkStrength: number;
-  provenance: Provenance;
-  /**
-   * Graded abstention tier (Phase 2). "definitive" - emitted through the gate
-   * (or the gate was off). "hedged" - the gate abstained but a non-void
-   * candidate exists; `candidate` carries it so the caller can surface it with
-   * an explicit hedge instead of pure silence. "silent" - nothing to offer.
-   */
-  confidence: "definitive" | "hedged" | "silent";
-  /** The gated-out candidate backing a "hedged" abstention. */
-  candidate?: Uint32Array;
-}
-
-/** What the Observe → Follow → Read pipeline returns (pre-gate). */
-export interface ObserveResult {
-  ids: Uint32Array;
-  sinkStrength: number;
-  provenance: Provenance;
-}
-
 export async function observeSettlingGradient(
   ids: Uint32Array,
   opts: PerceptionOptions,
-  deps: PerceptionDeps,
-  cache: PerceptionCache
-): Promise<ObserveResult> {
+  deps: Cognition.PerceptionDeps,
+  cache: Cognition.PerceptionCache
+): Promise<Cognition.ObserveResult> {
   if (ids.length === 0)
     return { ids: new Uint32Array(0), sinkStrength: 0, provenance: "void" };
   const {
@@ -446,7 +376,7 @@ export function settleAtoms(
   driftTargets: Map<number, readonly [number, number, number, number]>,
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
-  deps: PerceptionDeps
+  deps: Cognition.PerceptionDeps
 ): void {
   const { system, getMetricForce } = deps;
   const step = DOPAT_CONFIG.PHYSICS.GRADIENT_STEP;
@@ -496,7 +426,7 @@ function _settleProbe(
   driftTargets: Map<number, readonly [number, number, number, number]>,
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
-  deps: PerceptionDeps
+  deps: Cognition.PerceptionDeps
 ): { x: number; y: number; z: number; w: number } | null {
   const { system, getMetricForce } = deps;
   let cx = 0,
@@ -696,7 +626,7 @@ async function _resolveCodeSynthesis(
   system: Root.ManifoldView,
   atomizer: Atomic.Engine,
   store: Store,
-  cache: PerceptionCache
+  cache: Cognition.PerceptionCache
 ): Promise<Uint32Array> {
   const lastId = ids[ids.length - 1];
   const lookupIds =
@@ -779,7 +709,7 @@ export function collectSequence(
 
 function _ensureSpatialIndex(
   system: Root.ManifoldView,
-  cache: PerceptionCache
+  cache: Cognition.PerceptionCache
 ): void {
   const n = system.length;
   if (n === cache.lastIndexedLength) return;
@@ -831,7 +761,7 @@ function _resolveMultiTokenSemanticLookup(
   subjectIds: Uint32Array,
   operatorId: number,
   system: Root.ManifoldView,
-  cache: PerceptionCache
+  cache: Cognition.PerceptionCache
 ): Uint32Array {
   if (subjectIds.length === 0) return new Uint32Array(0);
   const opScope = system.scope[operatorId],
@@ -997,7 +927,7 @@ function _resolveMultiTokenSemanticLookup(
 
 async function _resolveSemanticDerivation(
   ids: Uint32Array,
-  deps: PerceptionDeps
+  deps: Cognition.PerceptionDeps
 ): Promise<Uint32Array | null> {
   const { system, atomizer, store } = deps;
   if (store) {

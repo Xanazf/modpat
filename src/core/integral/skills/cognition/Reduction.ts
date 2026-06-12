@@ -21,20 +21,6 @@ import nlp from "compromise";
 /** Number-line scale: posW = value × this. Matches the atomizer convention. */
 export const NUMBER_LINE_SCALE = 0.1;
 
-export interface ReductionResult {
-  /** The reduct: a freshly materialized node distinct from the operands. */
-  resultId: number;
-  /** Numeric value of the reduct, read back from its W position. */
-  value: number;
-  /** posW of the reduct (its number-line coordinate). */
-  reductW: number;
-  /**
-   * |reductW − posW(A)|: how far the conclusion moved along the reduction axis.
-   * Strictly positive for a genuine reduction; zero would mean an echo.
-   */
-  reductionDistance: number;
-}
-
 /** Reads the numeral a number-line position encodes. */
 export function numberFromW(posW: number): number {
   return Math.round(posW / NUMBER_LINE_SCALE);
@@ -54,7 +40,7 @@ export function reduceAdditive(
   operandBId: number,
   system: Root.ManifoldView,
   atomizer: Atomic.Engine
-): ReductionResult | null {
+): Cognition.ReductionResult | null {
   const op =
     operator === "+" || operator === "plus"
       ? "+"
@@ -95,42 +81,6 @@ export function reduceAdditive(
 
 // -- Universal instantiation / IS-transitivity as IS-graph traversal --------
 
-export interface IsRelation {
-  /** Lemmatized subject. */
-  subject: string;
-  /** Lemmatized predicate / object. */
-  object: string;
-  /** True for universal rules ("all X are Y"); false for instances ("Z is X"). */
-  universal: boolean;
-  /** True for "is/are not" - never a positive IS edge; a negative edge instead. */
-  negated: boolean;
-  /**
-   * True when this relation was produced by a rule firing (a discharged
-   * implication or an eliminated disjunction), not stated as a premise.
-   * Crossing a derived edge makes a conclusion a genuine derivation even at
-   * hop 1 - the rule application IS the reduction step.
-   */
-  derived?: boolean;
-}
-
-export interface EntailmentResult {
-  /** Predicates reachable from the subject via IS edges (distinct from it). */
-  conclusions: string[];
-  /** Inference steps (hops) to each conclusion - the reduction distance. */
-  hops: Map<string, number>;
-  /**
-   * Conclusions where a rule genuinely fired: hop >= 2, or the path crossed a
-   * rule-derived edge (a discharged implication / eliminated disjunction).
-   */
-  derived: string[];
-  /** Predicates negatively concluded ("not X") via a negated universal edge. */
-  negative: string[];
-  /** Hops to each negative conclusion (positive path + the negated edge). */
-  negHops: Map<string, number>;
-  /** Negative conclusions where a rule fired (hop >= 2 or a derived edge). */
-  derivedNegative: string[];
-}
-
 /** Lowercases, strips a leading article / "not", and singularizes the noun. */
 export function lemma(raw: string): string {
   const w = raw
@@ -148,7 +98,7 @@ function relation(
   subject: string,
   object: string,
   universal: boolean
-): IsRelation {
+): Cognition.IsRelation {
   return {
     subject: lemma(subject),
     object: lemma(object),
@@ -164,8 +114,8 @@ function relation(
  *   "Z is (a|an|the) X"              -> instance        Z --is--> X
  * "is/are not" marks the relation negated (never an edge).
  */
-export function parseIsFacts(text: string): IsRelation[] {
-  const out: IsRelation[] = [];
+export function parseIsFacts(text: string): Cognition.IsRelation[] {
+  const out: Cognition.IsRelation[] = [];
   for (const raw of text.split(/[.;]/)) {
     const s = raw.toLowerCase().trim();
     if (!s) continue;
@@ -195,14 +145,10 @@ export function parseIsFacts(text: string): IsRelation[] {
  */
 export function reduceEntailment(
   subject: string,
-  relations: IsRelation[]
-): EntailmentResult {
-  interface Edge {
-    to: string;
-    derived: boolean;
-  }
-  const adj = new Map<string, Edge[]>();
-  const negAdj = new Map<string, Edge[]>();
+  relations: Cognition.IsRelation[]
+): Cognition.EntailmentResult {
+  const adj = new Map<string, Cognition.Edge[]>();
+  const negAdj = new Map<string, Cognition.Edge[]>();
   for (const r of relations) {
     const m = r.negated ? negAdj : adj;
     if (!m.has(r.subject)) m.set(r.subject, []);
@@ -256,38 +202,6 @@ export function reduceEntailment(
 
 // -- Implications & disjunctions: rules that fire and lay derived edges ------
 
-/**
- * A clause is the unit conditionals and alternations quantify over: either an
- * IS-fact ("the ground is wet") or an atomic proposition ("it rains", "p").
- */
-export type Clause =
-  | { kind: "is"; subject: string; object: string; negated: boolean }
-  | { kind: "atom"; key: string; negated: boolean };
-
-export interface Implication {
-  antecedent: Clause;
-  consequent: Clause;
-  /** Set once the antecedent held and the consequent was asserted. */
-  discharged?: boolean;
-}
-
-export interface Disjunction {
-  left: Clause;
-  right: Clause;
-  /** Set once one disjunct was refuted and the other asserted. */
-  resolved?: boolean;
-}
-
-export interface LogicFacts {
-  relations: IsRelation[];
-  implications: Implication[];
-  disjunctions: Disjunction[];
-  /** Atomic propositions asserted as standalone sentences ("it rains"). */
-  atoms: Set<string>;
-  /** Atomic propositions asserted negated ("it does not rain"). */
-  negAtoms: Set<string>;
-}
-
 /** Normalizes an atomic clause to a comparable key ("it rains" -> "rain"). */
 function clauseKey(raw: string): string {
   const s = raw
@@ -301,7 +215,7 @@ function clauseKey(raw: string): string {
 }
 
 /** Parses one clause: an IS-fact if it has a copula, else an atomic key. */
-export function parseClause(raw: string): Clause | null {
+export function parseClause(raw: string): Cognition.Clause | null {
   const s = raw
     .toLowerCase()
     .replace(/\|-.*$/, "")
@@ -326,8 +240,8 @@ export function parseClause(raw: string): Clause | null {
  * disjunctions ("either A or B" / "A or B"), and atomic assertions. The query
  * segment (the one carrying the Sink "|-") is never a premise and is skipped.
  */
-export function parseStatements(text: string): LogicFacts {
-  const facts: LogicFacts = {
+export function parseStatements(text: string): Cognition.LogicFacts {
+  const facts: Cognition.LogicFacts = {
     relations: [],
     implications: [],
     disjunctions: [],
@@ -368,7 +282,10 @@ export function parseStatements(text: string): LogicFacts {
 }
 
 /** Does the clause hold in the asserted facts? */
-function clauseHolds(c: Clause, facts: LogicFacts): boolean {
+function clauseHolds(
+  c: Cognition.Clause,
+  facts: Cognition.LogicFacts
+): boolean {
   if (c.kind === "atom") {
     if (c.negated) return facts.negAtoms.has(c.key);
     return (
@@ -387,7 +304,10 @@ function clauseHolds(c: Clause, facts: LogicFacts): boolean {
 }
 
 /** Is the clause explicitly refuted (its negation asserted)? */
-function clauseRefuted(c: Clause, facts: LogicFacts): boolean {
+function clauseRefuted(
+  c: Cognition.Clause,
+  facts: Cognition.LogicFacts
+): boolean {
   if (c.kind === "atom") {
     if (c.negated) return facts.atoms.has(c.key);
     return facts.negAtoms.has(c.key);
@@ -401,7 +321,7 @@ function clauseRefuted(c: Clause, facts: LogicFacts): boolean {
 }
 
 /** Asserts a clause as a rule-derived fact (lays a derived edge). */
-function assertClause(c: Clause, facts: LogicFacts): void {
+function assertClause(c: Cognition.Clause, facts: Cognition.LogicFacts): void {
   if (c.kind === "is") {
     facts.relations.push({
       subject: c.subject,
@@ -436,7 +356,7 @@ function assertClause(c: Clause, facts: LogicFacts): void {
  *     A or B" alone licenses no pick, which is exactly the abstain case.
  * Chained discharges (hypothetical syllogism) fall out of the fixpoint.
  */
-export function dischargeRules(facts: LogicFacts): void {
+export function dischargeRules(facts: Cognition.LogicFacts): void {
   let changed = true;
   while (changed) {
     changed = false;
@@ -471,7 +391,7 @@ export function dischargeRules(facts: LogicFacts): void {
 export function reduceStatements(
   subject: string,
   text: string
-): EntailmentResult {
+): Cognition.EntailmentResult {
   const facts = parseStatements(text);
   dischargeRules(facts);
   return reduceEntailment(subject, facts.relations);

@@ -1,8 +1,9 @@
 /**
  * Locomotion – geodesic traversal as a plain function module.
  *
- * All functions take system, unfolder, and the mutable LocomotionState
- * explicitly. No class instantiation required.
+ * All functions take system, unfolder, and the mutable Cognition.LocomotionState
+ * explicitly. No class instantiation required. Create state with
+ * makeLocomotionState().
  */
 
 import {
@@ -24,41 +25,11 @@ import nlp from "compromise";
 
 // -- State & deps -----------------------------------------------------------
 
-/** All mutable locomotion state owned by the Traveler. Create with makeLocomotionState(). */
-export interface LocomotionState {
-  gpu: PMath.Engine | null;
-  geodesicPipeline: GPUComputePipeline | null;
-  readonly gridIndex: GridIndex4D;
-  readonly lastHolonomy: Float64Array; // 4×4 – updated each traverse
-  lastInferentialEffort: number;
-  readonly deltaGamma: Float64Array; // 64 floats – C4 Christoffel corrections
-  phiClippedCount: number;
-  _lastPathVelocity: [number, number, number, number];
-  // -- getMetricForce scratch (reused across calls; no per-call allocation) --
-  _candScratch: number[]; // candidate ids from the grid query
-  _mfInfl: Float64Array; // per-surviving-candidate base influence
-  _mfExp: Float64Array; // per-surviving-candidate exp(-d²/F) (the shared, costly term)
-  _mfDx: Float64Array;
-  _mfDy: Float64Array;
-  _mfDz: Float64Array;
-  _mfDw: Float64Array;
-  // -- relaxPath per-point candidate cache (exact: keyed by integer cell coords) --
-  _pcCands: number[][]; // one reused candidate-id list per path point
-  _pcCellX: Int32Array; // last queried cell coords per point (cache key)
-  _pcCellY: Int32Array;
-  _pcCellZ: Int32Array;
-  _pcCellW: Int32Array;
-  // -- reusable traversal path buffers (grown per query, never per call) --
-  _px: Float64Array;
-  _py: Float64Array;
-  _pe: Float64Array;
-  _pa: Float64Array;
-  readonly _relaxV: Float64Array; // length-4 scratch for relaxPath
-  readonly _relaxCF: Float64Array;
-}
-
 /** Grow the reusable path-coordinate buffers to hold a path of `steps` segments. */
-function ensurePathBuffers(state: LocomotionState, steps: number): void {
+function ensurePathBuffers(
+  state: Cognition.LocomotionState,
+  steps: number
+): void {
   if (state._px.length >= steps + 1) return;
   const n = steps + 1;
   state._px = new Float64Array(n);
@@ -68,7 +39,10 @@ function ensurePathBuffers(state: LocomotionState, steps: number): void {
 }
 
 /** Grow the per-candidate scratch caches to hold at least `n` survivors. */
-function ensureMetricForceCapacity(state: LocomotionState, n: number): void {
+function ensureMetricForceCapacity(
+  state: Cognition.LocomotionState,
+  n: number
+): void {
   if (state._mfInfl.length >= n) return;
   const cap = Math.max(n, state._mfInfl.length * 2, 64);
   state._mfInfl = new Float64Array(cap);
@@ -85,7 +59,10 @@ const CELL_SENTINEL = 0x7fffffff;
 const EMPTY_PENALTIES: never[] = [];
 
 /** Grow + invalidate the per-point candidate cache for a path of `steps` segments. */
-function resetPathCandCache(state: LocomotionState, steps: number): void {
+function resetPathCandCache(
+  state: Cognition.LocomotionState,
+  steps: number
+): void {
   const n = steps + 1;
   if (state._pcCellX.length < n) {
     state._pcCellX = new Int32Array(n);
@@ -98,7 +75,7 @@ function resetPathCandCache(state: LocomotionState, steps: number): void {
   state._pcCellX.fill(CELL_SENTINEL, 0, n); // invalidate every point's cache
 }
 
-export function makeLocomotionState(): LocomotionState {
+export function makeLocomotionState(): Cognition.LocomotionState {
   const lastHolonomy = new Float64Array(16);
   lastHolonomy[0] = lastHolonomy[5] = lastHolonomy[10] = lastHolonomy[15] = 1; // identity
   return {
@@ -135,7 +112,7 @@ export function makeLocomotionState(): LocomotionState {
 
 export function buildGridIndex(
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): void {
   state.gridIndex.buildFromSystem(system);
 }
@@ -151,7 +128,7 @@ export function getMetricForce(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState,
+  state: Cognition.LocomotionState,
   conformalOverride?: boolean
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {
   const candidates = state._candScratch;
@@ -195,7 +172,7 @@ function forceFromCandidates(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState,
+  state: Cognition.LocomotionState,
   conformalOverride?: boolean
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {
   const phys = DOPAT_CONFIG.PHYSICS,
@@ -328,7 +305,7 @@ export function getMetricForceWithInnerDerivative(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {
   const phys = DOPAT_CONFIG.PHYSICS;
   const oldGradient = phys.A_B_FULL_GRADIENT,
@@ -367,7 +344,7 @@ export function relaxPath(
   penalties: any[],
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): void {
   const v = state._relaxV;
   const cf = state._relaxCF;
@@ -467,7 +444,7 @@ export async function relaxPathGPU(
   boostScopes: Set<number> | undefined,
   penalties: any[],
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): Promise<void> {
   if (!state.geodesicPipeline) await _initGPUPipeline(state);
   const device = await gpu_math.getDevice();
@@ -593,7 +570,9 @@ export async function relaxPathGPU(
   );
 }
 
-async function _initGPUPipeline(state: LocomotionState): Promise<void> {
+async function _initGPUPipeline(
+  state: Cognition.LocomotionState
+): Promise<void> {
   const device = await gpu_math.getDevice();
   const shader = device.createShaderModule({
     code: `
@@ -659,12 +638,15 @@ async function _initGPUPipeline(state: LocomotionState): Promise<void> {
 
 // -- C4: Christoffel corrections --------------------------------------------
 
-function _updateChristoffels(scale: number, state: LocomotionState): void {
+function _updateChristoffels(
+  scale: number,
+  state: Cognition.LocomotionState
+): void {
   const delta = DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_LR * scale;
   updateChristoffels(state._lastPathVelocity, delta, state.deltaGamma);
 }
 
-export function regularizeChristoffels(state: LocomotionState): void {
+export function regularizeChristoffels(state: Cognition.LocomotionState): void {
   regularizeChristoffelsMath(
     state.deltaGamma,
     DOPAT_CONFIG.PHYSICS.CHRISTOFFEL_REGULARIZATION
@@ -679,7 +661,7 @@ export function computeHolonomy(
   pe: Float64Array,
   pa: Float64Array,
   steps: number,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): void {
   state.lastInferentialEffort = computeHolonomyMath(
     px,
@@ -757,7 +739,7 @@ function _getPotentialAndNearest(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): { potential: number; nearestId: number } {
   const nearRadius = Math.sqrt(DOPAT_CONFIG.PHYSICS.INFLUENCE_RADIUS) * 4;
   const nearestId = state.gridIndex.nearest(
@@ -791,7 +773,7 @@ function _review(
   steps: number,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): Mapping.ReviewReport {
   const phys = DOPAT_CONFIG.PHYSICS,
     trapR = Math.sqrt(phys.TRAP_DISTANCE_THRESHOLD);
@@ -830,7 +812,7 @@ function _extractIds(
   preExpandLength: number,
   targetId: number,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): Uint32Array {
   const resultIds: number[] = [];
   // Max posY seen per Z-layer, as parallel arrays scanned linearly: a single
@@ -1004,7 +986,7 @@ function _settleOnce(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): { walk: number[]; arrived: boolean } {
   const phys = DOPAT_CONFIG.PHYSICS;
   const dt = phys.SETTLE_TRAVERSE_DT,
@@ -1089,7 +1071,7 @@ export function settleDirectedPath(
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): Uint32Array {
   buildGridIndex(system, state);
   const phys = DOPAT_CONFIG.PHYSICS;
@@ -1166,7 +1148,7 @@ function settleTravel(
   targetId: number,
   options: Mapping.RouteOptions,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): Uint32Array {
   const result = settleDirectedPath(
     sourceId,
@@ -1213,7 +1195,7 @@ export async function travel(
   options: Mapping.RouteOptions,
   unfolder: Unfolder | null,
   system: Root.ManifoldView,
-  state: LocomotionState
+  state: Cognition.LocomotionState
 ): Promise<Uint32Array> {
   if (DOPAT_CONFIG.PHYSICS.SETTLING_TRAVERSE_PRIMARY)
     return settleTravel(sourceId, targetId, options, system, state);

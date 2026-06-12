@@ -383,3 +383,244 @@ declare namespace Resolution {
     ): Promise<Uint32Array>;
   }
 }
+
+/**
+ * Cognition - shapes shared across the skills/cognition pipeline (Perception,
+ * Reduction, Coherence, Locomotion, InquiryQueue).
+ */
+declare namespace Cognition {
+  /** Everything perception needs from the Traveler. */
+  interface PerceptionDeps {
+    readonly system: Root.ManifoldView;
+    readonly atomizer: Atomic.Engine;
+    store: import("@core_s/Memory").default | null;
+    language: import("@skill_lang/Language").Language | null;
+    lifecycle: import("@core_s/ManifoldLifecycle").ManifoldLifecycle | null;
+    /** The locomotion grid index, already built by buildGridIndex(). */
+    readonly gridIndex: import("@_lib/soa/GridIndex4D").GridIndex4D;
+    buildGridIndex(): void;
+    traverse(
+      src: number,
+      tgt: number,
+      opts: Mapping.RouteOptions
+    ): Promise<Uint32Array>;
+    getMetricForce(
+      px: number,
+      py: number,
+      pz: number,
+      pw: number,
+      pens: any[],
+      boost: Set<number> | undefined,
+      activeAtoms?: Set<number>
+    ): [V: number, fx: number, fy: number, fz: number, fw: number];
+    boostAtomMasses(ids: Uint32Array): void;
+    readonly position: [number, number, number, number];
+    readonly activeFrameworks: Set<
+      import("@mutate/FrameworkIndex").FrameworkId
+    >;
+    readonly lastInferentialEffort: number;
+  }
+
+  /** Mutable cache owned by the Traveler and passed into perception calls. */
+  interface PerceptionCache {
+    spatialIndex: import("@_lib/soa/GridIndex4D").GridIndex4D;
+    lastIndexedLength: number;
+    readonly synthesizer: import("@skill_code/Coder").Synthesizer;
+  }
+
+  /** Returned by the Observe → Follow → Read pipeline, post-gate. */
+  interface PerceiveResult {
+    ids: Uint32Array;
+    sinkStrength: number;
+    provenance: Mapping.Provenance;
+    /**
+     * Graded abstention tier (Phase 2). "definitive" - emitted through the gate
+     * (or the gate was off). "hedged" - the gate abstained but a non-void
+     * candidate exists; `candidate` carries it so the caller can surface it with
+     * an explicit hedge instead of pure silence. "silent" - nothing to offer.
+     */
+    confidence: "definitive" | "hedged" | "silent";
+    /** The gated-out candidate backing a "hedged" abstention. */
+    candidate?: Uint32Array;
+  }
+
+  /** What the Observe → Follow → Read pipeline returns (pre-gate). */
+  interface ObserveResult {
+    ids: Uint32Array;
+    sinkStrength: number;
+    provenance: Mapping.Provenance;
+  }
+
+  interface ReductionResult {
+    /** The reduct: a freshly materialized node distinct from the operands. */
+    resultId: number;
+    /** Numeric value of the reduct, read back from its W position. */
+    value: number;
+    /** posW of the reduct (its number-line coordinate). */
+    reductW: number;
+    /**
+     * |reductW − posW(A)|: how far the conclusion moved along the reduction axis.
+     * Strictly positive for a genuine reduction; zero would mean an echo.
+     */
+    reductionDistance: number;
+  }
+
+  interface IsRelation {
+    /** Lemmatized subject. */
+    subject: string;
+    /** Lemmatized predicate / object. */
+    object: string;
+    /** True for universal rules ("all X are Y"); false for instances ("Z is X"). */
+    universal: boolean;
+    /** True for "is/are not" - never a positive IS edge; a negative edge instead. */
+    negated: boolean;
+    /**
+     * True when this relation was produced by a rule firing (a discharged
+     * implication or an eliminated disjunction), not stated as a premise.
+     * Crossing a derived edge makes a conclusion a genuine derivation even at
+     * hop 1 - the rule application IS the reduction step.
+     */
+    derived?: boolean;
+  }
+
+  interface EntailmentResult {
+    /** Predicates reachable from the subject via IS edges (distinct from it). */
+    conclusions: string[];
+    /** Inference steps (hops) to each conclusion - the reduction distance. */
+    hops: Map<string, number>;
+    /**
+     * Conclusions where a rule genuinely fired: hop >= 2, or the path crossed a
+     * rule-derived edge (a discharged implication / eliminated disjunction).
+     */
+    derived: string[];
+    /** Predicates negatively concluded ("not X") via a negated universal edge. */
+    negative: string[];
+    /** Hops to each negative conclusion (positive path + the negated edge). */
+    negHops: Map<string, number>;
+    /** Negative conclusions where a rule fired (hop >= 2 or a derived edge). */
+    derivedNegative: string[];
+  }
+
+  /** A directed IS-graph edge used internally by reduceEntailment's BFS. */
+  interface Edge {
+    to: string;
+    derived: boolean;
+  }
+
+  /**
+   * A clause is the unit conditionals and alternations quantify over: either an
+   * IS-fact ("the ground is wet") or an atomic proposition ("it rains", "p").
+   */
+  type Clause =
+    | { kind: "is"; subject: string; object: string; negated: boolean }
+    | { kind: "atom"; key: string; negated: boolean };
+
+  interface Implication {
+    antecedent: Clause;
+    consequent: Clause;
+    /** Set once the antecedent held and the consequent was asserted. */
+    discharged?: boolean;
+  }
+
+  interface Disjunction {
+    left: Clause;
+    right: Clause;
+    /** Set once one disjunct was refuted and the other asserted. */
+    resolved?: boolean;
+  }
+
+  interface LogicFacts {
+    relations: IsRelation[];
+    implications: Implication[];
+    disjunctions: Disjunction[];
+    /** Atomic propositions asserted as standalone sentences ("it rains"). */
+    atoms: Set<string>;
+    /** Atomic propositions asserted negated ("it does not rain"). */
+    negAtoms: Set<string>;
+  }
+
+  interface CoherenceOptions {
+    /** s_effort = exp(-effortWeight · inferentialEffort). */
+    effortWeight?: number;
+    /** s_curvature = exp(-curvatureWeight · mean|R|). */
+    curvatureWeight?: number;
+    /** Singularity score above which the path is penalised (defaults to D1). */
+    singularityThreshold?: number;
+    /** score >= coherentThreshold => coherent. */
+    coherentThreshold?: number;
+  }
+
+  interface CoherenceReport {
+    /** Overall coherence in (0,1]; 1 = clean geodesic through faithful terrain. */
+    score: number;
+    /** score >= coherentThreshold. */
+    coherent: boolean;
+    /** Holonomy effort fed in (how much the path wound). */
+    inferentialEffort: number;
+    /** Mean |R| (scalar curvature) over path points. */
+    meanCurvature: number;
+    /** Max singularity score |∇φ|²/(1+φ²) over path points. */
+    maxSingularity: number;
+  }
+
+  interface GateOptions extends CoherenceOptions {
+    /** Output length above which echo detection activates. */
+    longLength?: number;
+    /** Echo fraction above which a long output is treated as a restatement. */
+    echoLimit?: number;
+    /**
+     * Whether the candidate was produced by a rule-bearing mechanism (vault
+     * recall, reduction, formula resolution, a real geodesic) rather than the
+     * mass-ranked cluster fallback. Rule-derived short outputs are conclusions
+     * and keep the short-output trust; a rule-free candidate is held to the
+     * anti-echo test at ANY length - a one-token restatement of a premise is
+     * still an echo, no matter how fluent. Defaults to true (the historical
+     * behaviour) so callers without provenance are unchanged.
+     */
+    ruleDerived?: boolean;
+  }
+
+  interface GateVerdict {
+    /** Whether the candidate output should be emitted. */
+    emit: boolean;
+    /** Short label for the decision (used in diagnostics). */
+    reason: "coherent" | "void" | "abstain-passthrough" | "incoherent" | "echo";
+    /** Underlying coherence report (terrain signal). */
+    base: CoherenceReport;
+    /** Fraction of allocated output tokens whose scope appears in the input. */
+    echoFrac: number;
+  }
+
+  /** All mutable locomotion state owned by the Traveler. Create with makeLocomotionState(). */
+  interface LocomotionState {
+    gpu: PMath.Engine | null;
+    geodesicPipeline: GPUComputePipeline | null;
+    readonly gridIndex: import("@_lib/soa/GridIndex4D").GridIndex4D;
+    readonly lastHolonomy: Float64Array; // 4×4 – updated each traverse
+    lastInferentialEffort: number;
+    readonly deltaGamma: Float64Array; // 64 floats – C4 Christoffel corrections
+    phiClippedCount: number;
+    _lastPathVelocity: [number, number, number, number];
+    // -- getMetricForce scratch (reused across calls; no per-call allocation) --
+    _candScratch: number[]; // candidate ids from the grid query
+    _mfInfl: Float64Array; // per-surviving-candidate base influence
+    _mfExp: Float64Array; // per-surviving-candidate exp(-d²/F) (the shared, costly term)
+    _mfDx: Float64Array;
+    _mfDy: Float64Array;
+    _mfDz: Float64Array;
+    _mfDw: Float64Array;
+    // -- relaxPath per-point candidate cache (exact: keyed by integer cell coords) --
+    _pcCands: number[][]; // one reused candidate-id list per path point
+    _pcCellX: Int32Array; // last queried cell coords per point (cache key)
+    _pcCellY: Int32Array;
+    _pcCellZ: Int32Array;
+    _pcCellW: Int32Array;
+    // -- reusable traversal path buffers (grown per query, never per call) --
+    _px: Float64Array;
+    _py: Float64Array;
+    _pe: Float64Array;
+    _pa: Float64Array;
+    readonly _relaxV: Float64Array; // length-4 scratch for relaxPath
+    readonly _relaxCF: Float64Array;
+  }
+}

@@ -12,14 +12,13 @@ import type {
 import type QueryDecomposer from "@mutate/QueryDecomposer";
 import type { SubQuery } from "@mutate/QueryDecomposer";
 import type Unfolder from "@mutate/Unfolder";
-import { type InquiryItem, InquiryQueue } from "@skill_cogi/InquiryQueue";
+import { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import {
   getMetricForceWithInnerDerivative as _locoGetMetricForceWithInnerDerivative,
   buildGridIndex,
   computeHolonomy,
   detectHomotopy,
   getMetricForce,
-  type LocomotionState,
   makeLocomotionState,
   regularizeChristoffels,
   reinforcePath,
@@ -28,8 +27,6 @@ import {
 } from "@skill_cogi/Locomotion";
 import {
   makePerceptionCache,
-  type PerceptionCache,
-  type PerceptionDeps,
   perceiveCapturing as perceptionCapturing,
   perceiveCoherent as perceptionCoherent,
   collectSequence as perceptionCollect,
@@ -109,8 +106,8 @@ class Traveler implements Mapping.Engine {
   private static readonly MAX_SEQUENCE_LENGTH = 1024;
 
   // Locomotion and perception state – plain objects, no class instances.
-  private readonly _loco: LocomotionState = makeLocomotionState();
-  private readonly _perc: PerceptionCache = makePerceptionCache();
+  private readonly _loco: Cognition.LocomotionState = makeLocomotionState();
+  private readonly _perc: Cognition.PerceptionCache = makePerceptionCache();
 
   /** Sink strength from the most recent inference call. */
   public lastSinkStrength = 0;
@@ -729,7 +726,7 @@ class Traveler implements Mapping.Engine {
   }
 
   /** Build the PerceptionDeps object from live Traveler state. */
-  private _perceptionDeps(): PerceptionDeps {
+  private _perceptionDeps(): Cognition.PerceptionDeps {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return {
@@ -1134,7 +1131,7 @@ class Traveler implements Mapping.Engine {
     this.getInquiryQueue().enqueueImmediate(topic, query);
   }
 
-  public async drainInquiries(n: number = 3): Promise<InquiryItem[]> {
+  public async drainInquiries(n: number = 3): Promise<Memory.InquiryItem[]> {
     if (!this.atomizer) return [];
     return this.getInquiryQueue().step(
       n,

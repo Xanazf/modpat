@@ -25,34 +25,10 @@ import type { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { computeCurvature } from "@props/Curvature";
 
-export interface CoherenceOptions {
-  /** s_effort = exp(-effortWeight · inferentialEffort). */
-  effortWeight?: number;
-  /** s_curvature = exp(-curvatureWeight · mean|R|). */
-  curvatureWeight?: number;
-  /** Singularity score above which the path is penalised (defaults to D1). */
-  singularityThreshold?: number;
-  /** score >= coherentThreshold => coherent. */
-  coherentThreshold?: number;
-}
-
-export interface CoherenceReport {
-  /** Overall coherence in (0,1]; 1 = clean geodesic through faithful terrain. */
-  score: number;
-  /** score >= coherentThreshold. */
-  coherent: boolean;
-  /** Holonomy effort fed in (how much the path wound). */
-  inferentialEffort: number;
-  /** Mean |R| (scalar curvature) over path points. */
-  meanCurvature: number;
-  /** Max singularity score |∇φ|²/(1+φ²) over path points. */
-  maxSingularity: number;
-}
-
 /** Singularity score assigned to an exact coordinate overlap (mirrors D1). */
 const OVERLAP_SINGULARITY = 1000;
 
-function defaults(): Required<CoherenceOptions> {
+function defaults(): Required<Cognition.CoherenceOptions> {
   return {
     effortWeight: 1.0,
     curvatureWeight: 0.5,
@@ -87,35 +63,7 @@ function singularityAt(
   return gradPhiSq / (1 + phi * phi);
 }
 
-export interface GateOptions extends CoherenceOptions {
-  /** Output length above which echo detection activates. */
-  longLength?: number;
-  /** Echo fraction above which a long output is treated as a restatement. */
-  echoLimit?: number;
-  /**
-   * Whether the candidate was produced by a rule-bearing mechanism (vault
-   * recall, reduction, formula resolution, a real geodesic) rather than the
-   * mass-ranked cluster fallback. Rule-derived short outputs are conclusions
-   * and keep the short-output trust; a rule-free candidate is held to the
-   * anti-echo test at ANY length - a one-token restatement of a premise is
-   * still an echo, no matter how fluent. Defaults to true (the historical
-   * behaviour) so callers without provenance are unchanged.
-   */
-  ruleDerived?: boolean;
-}
-
-export interface GateVerdict {
-  /** Whether the candidate output should be emitted. */
-  emit: boolean;
-  /** Short label for the decision (used in diagnostics). */
-  reason: "coherent" | "void" | "abstain-passthrough" | "incoherent" | "echo";
-  /** Underlying coherence report (terrain signal). */
-  base: CoherenceReport;
-  /** Fraction of allocated output tokens whose scope appears in the input. */
-  echoFrac: number;
-}
-
-function gateDefaults(): Required<GateOptions> {
+function gateDefaults(): Required<Cognition.GateOptions> {
   return {
     ...defaults(),
     /** Single noun ("animal") or SVO triple ("a is c") are trusted as-is. */
@@ -149,8 +97,8 @@ export function gateEmit(
   system: Root.ManifoldView,
   gridIndex: GridIndex4D,
   inferentialEffort: number,
-  opts: GateOptions = {}
-): GateVerdict {
+  opts: Cognition.GateOptions = {}
+): Cognition.GateVerdict {
   const o = { ...gateDefaults(), ...opts };
   const base = pathCoherence(
     outputIds,
@@ -193,8 +141,8 @@ export function pathCoherence(
   system: Root.ManifoldView,
   gridIndex: GridIndex4D,
   inferentialEffort: number,
-  opts: CoherenceOptions = {}
-): CoherenceReport {
+  opts: Cognition.CoherenceOptions = {}
+): Cognition.CoherenceReport {
   const o = { ...defaults(), ...opts };
 
   let sumCurvature = 0;
