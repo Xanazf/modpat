@@ -14,18 +14,6 @@ import type { ManifoldLayout } from "@_lib/soa/ManifoldSOA";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import type { Constellation } from "@core_s/ManifoldMetrics";
-import type { RawGap } from "@core_s/workers/manifold.worker";
-import type { AstExtractOptions, AstTriple } from "@utils/astExtract";
-
-export interface AstWorkerOpts {
-  callDepthLimit?: number;
-  includeCallSites?: boolean;
-}
-
-export interface AstResult {
-  triples: AstTriple[];
-  filePath: string;
-}
 
 type Resolver<T> = { resolve: (v: T) => void; reject: (e: Error) => void };
 
@@ -35,13 +23,6 @@ function workerPath(name: string): string {
 
 // Use tsx loader so TypeScript worker files execute without pre-compilation.
 const TSX_EXECARGV = ["--import", "tsx"];
-
-export interface OrbitalEntry {
-  id: number;
-  parentId: number | null;
-  radius: number;
-  satelliteCount: number;
-}
 
 export class WorkerPool {
   private manifoldWorker: Worker;
@@ -55,7 +36,7 @@ export class WorkerPool {
     number,
     Resolver<Mutation.DictionaryExpansion>
   >();
-  private astPending = new Map<number, Resolver<AstResult>>();
+  private astPending = new Map<number, Resolver<WorkerIPC.AstResult>>();
   private seedReady = false;
   private seedQueue: Array<() => void> = [];
   private astReady = false;
@@ -163,7 +144,10 @@ export class WorkerPool {
     });
   }
 
-  computeGaps(consts: Constellation[], length: number): Promise<RawGap[]> {
+  computeGaps(
+    consts: Constellation[],
+    length: number
+  ): Promise<WorkerIPC.RawGap[]> {
     const id = this._id();
     return new Promise((resolve, reject) => {
       this.manifoldPending.set(id, { resolve, reject });
@@ -171,7 +155,7 @@ export class WorkerPool {
     });
   }
 
-  computeOrbital(length: number): Promise<OrbitalEntry[]> {
+  computeOrbital(length: number): Promise<WorkerIPC.OrbitalEntry[]> {
     const id = this._id();
     return new Promise((resolve, reject) => {
       this.manifoldPending.set(id, { resolve, reject });
@@ -205,7 +189,10 @@ export class WorkerPool {
 
   // AST parse task (TypeScript compiler API, isolated heap)
 
-  parseAstFile(filePath: string, opts: AstWorkerOpts = {}): Promise<AstResult> {
+  parseAstFile(
+    filePath: string,
+    opts: WorkerIPC.AstWorkerOpts = {}
+  ): Promise<WorkerIPC.AstResult> {
     const id = this._id();
     return new Promise((resolve, reject) => {
       this.astPending.set(id, { resolve, reject });

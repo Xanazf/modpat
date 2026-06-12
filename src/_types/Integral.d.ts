@@ -775,7 +775,7 @@ declare namespace Mapping {
      */
     astSeedPaths?: string[];
     /** Options forwarded to AstSeedWorker.start(). */
-    astSeedOptions?: import("@workers/AstSeedWorker").AstSeedOptions;
+    astSeedOptions?: WorkerIPC.AstSeedOptions;
     /**
      * Interval in ms for the autonomous learner cycle (default: 10 000).
      * Handled by Traveler.startAutonomy() internally.

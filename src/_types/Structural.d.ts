@@ -407,6 +407,96 @@ declare namespace Mutation {
   }
 }
 
+/** WorkerIPC - request/response/progress shapes exchanged with structural/workers/*. */
+declare namespace WorkerIPC {
+  interface AstSeedProgress {
+    processed: number;
+    total: number;
+    triples: number;
+    running: boolean;
+    done: boolean;
+  }
+
+  interface AstSeedOptions {
+    batchSize?: number;
+    intervalMs?: number;
+    callDepthLimit?: number;
+    includeCallSites?: boolean;
+    onProgress?: (p: AstSeedProgress) => void;
+    pool?: import("@core_s/WorkerPool").WorkerPool;
+    /** Node cap above which structural placement is skipped (Phase-4 boundary). */
+    maxPlacementNodes?: number;
+  }
+
+  interface AstWorkerOpts {
+    callDepthLimit?: number;
+    includeCallSites?: boolean;
+  }
+
+  interface AstResult {
+    triples: import("@utils/astExtract").AstTriple[];
+    filePath: string;
+  }
+
+  interface OrbitalEntry {
+    id: number;
+    parentId: number | null;
+    radius: number;
+    satelliteCount: number;
+  }
+
+  /** Raw gap record: no labels (atomizer not available in worker; main thread enriches). */
+  interface RawGap {
+    constellationIdx: number;
+    atomA: number;
+    atomB: number;
+    distance: number;
+    gapScore: number;
+  }
+
+  interface WorkerInit {
+    buffer: SharedArrayBuffer;
+    layout: import("@_lib/soa/ManifoldSOA").ManifoldLayout;
+  }
+
+  interface ManifoldRequest {
+    id: number;
+    type: "constellations" | "gaps" | "orbital";
+    length: number;
+    // for gaps, we also receive the previously-computed constellations list
+    consts?: import("@core_s/ManifoldMetrics").Constellation[];
+  }
+
+  interface SeedRequest {
+    id: number;
+    word: string;
+  }
+
+  interface SeedResult {
+    found: boolean;
+    word: string;
+    definitions: string[];
+    synonyms: string[];
+  }
+
+  interface AstRequest {
+    id: number;
+    filePath: string;
+    opts: import("@utils/astExtract").AstExtractOptions;
+  }
+
+  interface AstResponse {
+    id: number;
+    triples?: import("@utils/astExtract").AstTriple[];
+    error?: string;
+  }
+
+  interface WikiRequest {
+    id: number;
+    topic: string;
+  }
+}
+
 declare namespace Memory {
   type InquiryStatus =
     | "pending"

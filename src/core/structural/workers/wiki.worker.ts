@@ -15,11 +15,6 @@ axios.defaults.headers.common["User-Agent"] =
 const CHAR_CAP = 6000;
 const FETCH_TIMEOUT_MS = 8000;
 
-interface WikiRequest {
-  id: number;
-  topic: string;
-}
-
 async function fetchWikipedia(topic: string): Promise<string | null> {
   try {
     const content = await Promise.race([
@@ -38,7 +33,7 @@ async function fetchWikipedia(topic: string): Promise<string | null> {
   }
 }
 
-parentPort!.on("message", async (msg: WikiRequest) => {
+parentPort!.on("message", async (msg: WorkerIPC.WikiRequest) => {
   const { id, topic } = msg;
   try {
     const result = await fetchWikipedia(topic);

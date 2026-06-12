@@ -8,36 +8,20 @@
 
 import fs from "node:fs";
 import { parentPort } from "node:worker_threads";
-import {
-  type AstExtractOptions,
-  type AstTriple,
-  extractAstTriples,
-} from "@utils/astExtract";
+import { extractAstTriples } from "@utils/astExtract";
 
-interface AstRequest {
-  id: number;
-  filePath: string;
-  opts: AstExtractOptions;
-}
-
-interface AstResponse {
-  id: number;
-  triples?: AstTriple[];
-  error?: string;
-}
-
-parentPort!.on("message", (msg: AstRequest) => {
+parentPort!.on("message", (msg: WorkerIPC.AstRequest) => {
   const { id, filePath, opts } = msg;
   try {
     const sourceText = fs.readFileSync(filePath, "utf8");
     const triples = extractAstTriples(sourceText, filePath, opts);
-    parentPort!.postMessage({ id, triples } satisfies AstResponse);
+    parentPort!.postMessage({ id, triples } satisfies WorkerIPC.AstResponse);
   } catch (err: any) {
     parentPort!.postMessage({
       id,
       triples: [],
       error: err?.message ?? String(err),
-    } satisfies AstResponse);
+    } satisfies WorkerIPC.AstResponse);
   }
 });
 

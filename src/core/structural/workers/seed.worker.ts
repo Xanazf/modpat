@@ -28,20 +28,8 @@ async function init(): Promise<void> {
   }
 }
 
-interface SeedRequest {
-  id: number;
-  word: string;
-}
-
-interface SeedResult {
-  found: boolean;
-  word: string;
-  definitions: string[];
-  synonyms: string[];
-}
-
-function lookup(word: string): SeedResult {
-  const result: SeedResult = {
+function lookup(word: string): WorkerIPC.SeedResult {
+  const result: WorkerIPC.SeedResult = {
     found: false,
     word,
     definitions: [],
@@ -91,7 +79,7 @@ function lookup(word: string): SeedResult {
 
 // Initialize WordNet before accepting messages.
 init().then(() => {
-  parentPort!.on("message", (msg: SeedRequest) => {
+  parentPort!.on("message", (msg: WorkerIPC.SeedRequest) => {
     const { id, word } = msg;
     try {
       const result = lookup(word);

@@ -7,7 +7,6 @@
  */
 
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
-import type { ManifoldLayout } from "@_lib/soa/ManifoldSOA";
 import { parentPort, workerData } from "node:worker_threads";
 import type { Constellation } from "@core_s/ManifoldMetrics";
 import {
@@ -19,21 +18,7 @@ import {
 } from "@core_s/ManifoldMetrics";
 import { ManifoldReader } from "@core_s/ManifoldReader";
 
-// Raw gap record: no labels (atomizer not available in worker; main thread enriches).
-export interface RawGap {
-  constellationIdx: number;
-  atomA: number;
-  atomB: number;
-  distance: number;
-  gapScore: number;
-}
-
-interface WorkerInit {
-  buffer: SharedArrayBuffer;
-  layout: ManifoldLayout;
-}
-
-const { buffer, layout } = workerData as WorkerInit;
+const { buffer, layout } = workerData as WorkerIPC.WorkerInit;
 
 // Cached reader - reused for every task; length is patched per-message.
 const reader = new ManifoldReader(buffer, layout, 0);
@@ -51,21 +36,13 @@ function getIndex(length: number): GridIndex4D {
   return cachedIndex;
 }
 
-interface ManifoldRequest {
-  id: number;
-  type: "constellations" | "gaps" | "orbital";
-  length: number;
-  // for gaps, we also receive the previously-computed constellations list
-  consts?: Constellation[];
-}
-
 function computeRawGaps(
   consts: Constellation[],
   opts: { maxPerConstellation?: number; minMassRatio?: number }
-): RawGap[] {
+): WorkerIPC.RawGap[] {
   const { maxPerConstellation = 2, minMassRatio = 0.05 } = opts;
   const minMass = reader.c * minMassRatio;
-  const result: RawGap[] = [];
+  const result: WorkerIPC.RawGap[] = [];
 
   for (let ci = 0; ci < consts.length; ci++) {
     const c = consts[ci];
@@ -108,7 +85,7 @@ function computeRawGaps(
   return result;
 }
 
-parentPort!.on("message", (msg: ManifoldRequest) => {
+parentPort!.on("message", (msg: WorkerIPC.ManifoldRequest) => {
   reader.length = msg.length;
   const { id, type, length } = msg;
 

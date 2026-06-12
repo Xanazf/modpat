@@ -25,25 +25,6 @@ import type Store from "@core_s/Memory";
 import type { WorkerPool } from "@core_s/WorkerPool";
 import { type AstTriple, extractAstTriples } from "@utils/astExtract";
 
-export interface AstSeedProgress {
-  processed: number;
-  total: number;
-  triples: number;
-  running: boolean;
-  done: boolean;
-}
-
-export interface AstSeedOptions {
-  batchSize?: number;
-  intervalMs?: number;
-  callDepthLimit?: number;
-  includeCallSites?: boolean;
-  onProgress?: (p: AstSeedProgress) => void;
-  pool?: WorkerPool;
-  /** Node cap above which structural placement is skipped (Phase-4 boundary). */
-  maxPlacementNodes?: number;
-}
-
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx"]);
 const IGNORE_DIRS = new Set([
   "node_modules",
@@ -113,7 +94,7 @@ export class AstSeedWorker {
     return this.cursor >= this.files.length;
   }
 
-  snapshot(): AstSeedProgress {
+  snapshot(): WorkerIPC.AstSeedProgress {
     return {
       processed: this._processed,
       total: this.files.length,
@@ -139,7 +120,7 @@ export class AstSeedWorker {
     system: Root.ManifoldView,
     atomizer: Atomic.Engine,
     store: Store,
-    opts: AstSeedOptions = {}
+    opts: WorkerIPC.AstSeedOptions = {}
   ): void {
     if (this._running || this.isDone) return;
     this._running = true;
