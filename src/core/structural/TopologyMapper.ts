@@ -1,50 +1,7 @@
 import { DOPAT_CONFIG } from "@config";
-import {
-  computePersistentHomology,
-  type PersistenceBar,
-  type PersistenceDiagram,
-} from "./PersistentHomology";
-
-export type { PersistenceBar, PersistenceDiagram };
+import { computePersistentHomology } from "./PersistentHomology";
 
 export type LensType = "posX" | "mass" | "density";
-
-export interface MapperNode {
-  id: number;
-  atoms: number[];
-  /** Centre of the lens interval that produced this cluster. */
-  lensValue: number;
-  clusterCenter: [number, number, number, number];
-  /** Human-readable: "posX:3" = third cluster along the posX lens. */
-  label: string;
-}
-
-export interface MapperEdge {
-  nodeA: number;
-  nodeB: number;
-  commonAtoms: number[];
-  /** True when this edge straddles a persistent H₁ loop. */
-  topoInterest: boolean;
-}
-
-export interface NerveGraph {
-  nodes: MapperNode[];
-  edges: MapperEdge[];
-  /** Persistence diagram used to annotate edges. */
-  diagram: PersistenceDiagram;
-}
-
-export interface MapperOpts {
-  lens?: LensType;
-  numIntervals?: number;
-  /** Fractional overlap in [0, 1) between adjacent lens intervals. Default 0.5. */
-  overlap?: number;
-  minClusterSize?: number;
-  /** Single-linkage clustering threshold in 4D. Default INFLUENCE_RADIUS / 4. */
-  clusterRadius?: number;
-  topK?: number;
-  maxRadius?: number;
-}
 
 /**
  * TDA Mapper over the manifold.
@@ -58,8 +15,8 @@ export interface MapperOpts {
  */
 export function buildNerveGraph(
   system: Root.ManifoldView,
-  opts?: MapperOpts
-): NerveGraph {
+  opts?: Topology.MapperOpts
+): Topology.NerveGraph {
   const lens = opts?.lens ?? "posX";
   const numIntervals = opts?.numIntervals ?? 10;
   const overlap = Math.max(0, Math.min(0.99, opts?.overlap ?? 0.5));
@@ -98,7 +55,7 @@ export function buildNerveGraph(
   const step = intervalWidth * (1 - overlap);
 
   // For each interval: collect atoms, cluster, produce MapperNodes.
-  const nodes: MapperNode[] = [];
+  const nodes: Topology.MapperNode[] = [];
   let globalNodeId = 0;
 
   // Track which atoms belong to which nodes (for nerve construction).
@@ -155,7 +112,7 @@ export function buildNerveGraph(
   }
 
   // Build edges from atom memberships: any two nodes sharing an atom get an edge.
-  const edgeMap = new Map<string, MapperEdge>(); // "a:b" → edge
+  const edgeMap = new Map<string, Topology.MapperEdge>(); // "a:b" → edge
 
   for (const [atomId, nodeIds] of atomToNodes) {
     for (let i = 0; i < nodeIds.length; i++) {
@@ -297,7 +254,7 @@ function singleLinkage(
  * Returns the TopologyMapper node IDs that a given atom participates in,
  * encoded as a comma-separated string.  Used as the vault topo_signature.
  */
-export function atomTopoSignature(atomId: number, graph: NerveGraph): string {
+export function atomTopoSignature(atomId: number, graph: Topology.NerveGraph): string {
   const nodeIds: number[] = [];
   for (const node of graph.nodes) {
     if (node.atoms.includes(atomId)) nodeIds.push(node.id);

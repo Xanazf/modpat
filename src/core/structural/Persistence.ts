@@ -1,7 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
 import type System from "@core_i/System";
 import type { DuckDBConnection } from "@duckdb/node-api";
-import type { CobordismRecord } from "./ManifoldLifecycle";
 
 /**
  * Increment SCHEMA_VERSION when:
@@ -291,7 +290,7 @@ export class SystemPersistence {
    * Saves a cobordism record to the persistent store.
    * @param record - The cobordism record to persist.
    */
-  public async saveCobordismRecord(record: CobordismRecord): Promise<void> {
+  public async saveCobordismRecord(record: Memory.CobordismRecord): Promise<void> {
     const stmt = await this.connection.prepare(
       "INSERT OR REPLACE INTO cobordism_history (tick_index, h0_component_count, h1_bar_count, total_h1_persistence) VALUES (?, ?, ?, ?)"
     );
@@ -310,7 +309,7 @@ export class SystemPersistence {
    * Retrieves all persisted cobordism records, sorted by tick_index ASC.
    * @returns A list of cobordism records.
    */
-  public async loadCobordismHistory(): Promise<CobordismRecord[]> {
+  public async loadCobordismHistory(): Promise<Memory.CobordismRecord[]> {
     const res = await this.connection.run(
       "SELECT tick_index, h0_component_count, h1_bar_count, total_h1_persistence FROM cobordism_history ORDER BY tick_index ASC"
     );

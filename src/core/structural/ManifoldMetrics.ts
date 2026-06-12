@@ -149,17 +149,6 @@ export function satellites(
 
 // Constellation detection
 
-export interface Constellation {
-  /** Sequential identifier within the current snapshot. */
-  id: number;
-  /** ID of the most massive member - the gravitational centre ("star"). */
-  star: number;
-  /** All member atom IDs, including the star. */
-  members: number[];
-  /** Total mass of all members. */
-  totalMass: number;
-}
-
 /**
  * Detects all orbital clusters (constellations) across the manifold.
  *
@@ -174,7 +163,7 @@ export interface Constellation {
 export function constellations(
   system: Root.ManifoldView,
   opts: { minSize?: number; index?: GridIndex4D } = {}
-): Constellation[] {
+): Memory.Constellation[] {
   const { minSize = 2, index } = opts;
   const n = system.length;
   const parent = new Int32Array(n).fill(-1);
@@ -241,7 +230,7 @@ export function constellations(
     g.push(id);
   }
 
-  const result: Constellation[] = [];
+  const result: Memory.Constellation[] = [];
   let seqId = 0;
   for (const members of groups.values()) {
     if (members.length < minSize) continue;
@@ -261,23 +250,6 @@ export function constellations(
 
 // Constellation gap detection
 
-export interface ConstellationGap {
-  constellation: Constellation;
-  atomA: number;
-  atomB: number;
-  labelA: string;
-  labelB: string;
-  /** 4D distance between the two atoms. */
-  distance: number;
-  /**
-   * Gap score = distance / combinedOrbitRadius × combinedMass.
-   * High score = heavy atoms that are barely inside each other's orbit -
-   * the most "strained" connection in the constellation, most likely to
-   * represent a missing inferential bridge.
-   */
-  gapScore: number;
-}
-
 /**
  * Identifies the most strained atom pairs within each constellation - pairs
  * that are orbitally bound but barely overlapping, suggesting their gravitational
@@ -291,13 +263,13 @@ export interface ConstellationGap {
  */
 export function constellationGaps(
   system: Root.ManifoldView,
-  consts: Constellation[],
+  consts: Memory.Constellation[],
   atomizer: Atomic.Engine,
   opts: { maxPerConstellation?: number; minMassRatio?: number } = {}
-): ConstellationGap[] {
+): Memory.ConstellationGap[] {
   const { maxPerConstellation = 2, minMassRatio = 0.1 } = opts;
   const minMass = system.c * minMassRatio;
-  const gaps: ConstellationGap[] = [];
+  const gaps: Memory.ConstellationGap[] = [];
 
   for (const c of consts) {
     if (c.members.length < 3) continue;

@@ -3,33 +3,6 @@ import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { computeCurvature } from "@props/Curvature";
 
-export interface PersistenceBar {
-  birth: number;
-  /** Infinity for essential (never-dying) features. */
-  death: number;
-  /** Atom ID of the cycle or component generator. */
-  generatorAtomId: number;
-}
-
-export interface PersistenceDiagram {
-  h0: PersistenceBar[];
-  h1: PersistenceBar[];
-}
-
-export interface PersistenceOpts {
-  /** Top atoms by |mass| to include. Default 500. */
-  topK?: number;
-  /** Maximum edge length in the Vietoris–Rips filtration. Default BASE_RADIUS × 2. */
-  maxRadius?: number;
-}
-
-interface PHEdge {
-  /** Index into the atoms array (not the system atom ID). */
-  a: number;
-  b: number;
-  dist: number;
-}
-
 /**
  * Persistent homology (H₀ and H₁) of the Vietoris–Rips complex built on the
  * top-K atoms by |mass|.
@@ -42,8 +15,8 @@ interface PHEdge {
  */
 export function computePersistentHomology(
   system: Root.ManifoldView,
-  opts?: PersistenceOpts
-): PersistenceDiagram {
+  opts?: Topology.PersistenceOpts
+): Topology.PersistenceDiagram {
   const topK = opts?.topK ?? 500;
   const maxRadius = opts?.maxRadius ?? DOPAT_CONFIG.orbital.BASE_RADIUS * 2;
 
@@ -76,7 +49,7 @@ function buildEdges(
   atoms: number[],
   system: Root.ManifoldView,
   maxRadius: number
-): PHEdge[] {
+): Topology.PHEdge[] {
   const n = atoms.length;
 
   // Build GridIndex4D for neighbourhood queries
@@ -99,7 +72,7 @@ function buildEdges(
     ).phi;
   }
 
-  const edges: PHEdge[] = [];
+  const edges: Topology.PHEdge[] = [];
   const conformalEnabled = phys.CONFORMAL_ENABLED;
 
   for (let i = 0; i < n; i++) {
@@ -182,12 +155,12 @@ class MassUF {
 
 function computeH0(
   atoms: number[],
-  edges: PHEdge[],
+  edges: Topology.PHEdge[],
   system: Root.ManifoldView
-): PersistenceBar[] {
+): Topology.PersistenceBar[] {
   const n = atoms.length;
   const uf = new MassUF(n, atoms, system);
-  const bars: PersistenceBar[] = [];
+  const bars: Topology.PersistenceBar[] = [];
 
   for (const edge of edges) {
     const result = uf.union(edge.a, edge.b);
@@ -257,9 +230,9 @@ function xorSortedInPlace(target: number[], other: number[]): void {
 
 function computeH1(
   atoms: number[],
-  edges: PHEdge[],
+  edges: Topology.PHEdge[],
   system: Root.ManifoldView
-): PersistenceBar[] {
+): Topology.PersistenceBar[] {
   const n = atoms.length;
 
   // Pass 1: mark H₀-merge edges via a fresh union-find.
@@ -275,7 +248,7 @@ function computeH1(
 
   // Pass 2: index free edges (potential 1-cycle generators).
   const freeIdx = new Int32Array(edges.length).fill(-1);
-  const free: PHEdge[] = [];
+  const free: Topology.PHEdge[] = [];
   for (let ei = 0; ei < edges.length; ei++) {
     if (!isMerge[ei]) {
       freeIdx[ei] = free.length;
@@ -299,13 +272,7 @@ function computeH1(
   }
 
   // Pass 4: enumerate triangles (a < b < c, all three edges present).
-  interface Triangle {
-    filtDist: number;
-    col: number[]; // sorted free-edge indices (boundary ∩ free)
-    repAtomId: number;
-  }
-
-  const triangles: Triangle[] = [];
+  const triangles: Topology.PHTriangle[] = [];
 
   for (let a = 0; a < n; a++) {
     const nbA = adjHigh.get(a);
@@ -348,7 +315,7 @@ function computeH1(
   const pivotFor = new Map<number, number>();
   const columns = triangles.map(t => [...t.col]);
   const paired = new Uint8Array(free.length);
-  const bars: PersistenceBar[] = [];
+  const bars: Topology.PersistenceBar[] = [];
 
   for (let j = 0; j < triangles.length; j++) {
     const col = columns[j];

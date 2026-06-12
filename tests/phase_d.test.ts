@@ -7,7 +7,6 @@ import Traveler from "@core_i/Traveler";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import { metrics } from "@core_s/Metrics";
 import { SystemPersistence } from "@core_s/Persistence";
-import type { PersistenceBar } from "@core_s/PersistentHomology";
 import { detectSingularities } from "@props/Singularity";
 import { describe, it } from "./utils/harness";
 
@@ -373,7 +372,7 @@ export async function runPhaseDTests() {
 
       const traveler = new Traveler(sys);
       const pathA = new Uint32Array([a, mid, b]);
-      const bars: PersistenceBar[] = [
+      const bars: Topology.PersistenceBar[] = [
         { birth: 0, death: 50, generatorAtomId: gen },
       ];
 
@@ -404,7 +403,7 @@ export async function runPhaseDTests() {
       const traveler = new Traveler(sys);
       const pathA = new Uint32Array([src, top1, top2, tgt]);
       const pathB = new Uint32Array([src, bot1, bot2, tgt]);
-      const bars: PersistenceBar[] = [
+      const bars: Topology.PersistenceBar[] = [
         { birth: 0, death: 100, generatorAtomId: gen },
       ];
 
@@ -439,7 +438,7 @@ export async function runPhaseDTests() {
       const traveler = new Traveler(sys);
       const pathA = new Uint32Array([src, hi1, tgt]);
       const pathB = new Uint32Array([src, lo1, tgt]);
-      const bars: PersistenceBar[] = [
+      const bars: Topology.PersistenceBar[] = [
         { birth: 0, death: 80, generatorAtomId: gen },
       ];
 
@@ -466,7 +465,7 @@ export async function runPhaseDTests() {
       const pathB = new Uint32Array([src, bot, tgt]);
 
       // Bar with very short persistence (death - birth = 2).
-      const bars: PersistenceBar[] = [
+      const bars: Topology.PersistenceBar[] = [
         { birth: 0, death: 2, generatorAtomId: gen },
       ];
 

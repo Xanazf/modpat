@@ -8,7 +8,6 @@
 
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { parentPort, workerData } from "node:worker_threads";
-import type { Constellation } from "@core_s/ManifoldMetrics";
 import {
   constellations,
   distance4D,
@@ -37,7 +36,7 @@ function getIndex(length: number): GridIndex4D {
 }
 
 function computeRawGaps(
-  consts: Constellation[],
+  consts: Memory.Constellation[],
   opts: { maxPerConstellation?: number; minMassRatio?: number }
 ): WorkerIPC.RawGap[] {
   const { maxPerConstellation = 2, minMassRatio = 0.05 } = opts;

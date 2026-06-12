@@ -754,7 +754,7 @@ async function handleCommand(raw: string): Promise<void> {
       const count = Number.isFinite(n) && n > 0 ? n : 10;
       process.stdout.write(gray(`  Computing constellations…\n`));
 
-      let groups: import("@core_s/ManifoldMetrics").Constellation[];
+      let groups: Memory.Constellation[];
       if (runtime.workers) {
         groups = await runtime.workers.computeConstellations(system.length);
         // Filter by minSize in main thread (worker returns all).
@@ -929,15 +929,15 @@ async function pushUpdateToVisualizer(): Promise<void> {
       }
     }
 
-    const res = await store.pushManifoldUpdate(2000, pathNodeIds);
-    if (res) {
-      if (res.src !== undefined) {
-        visualizerSrc = res.src;
-      }
-      if (res.tgt !== undefined) {
-        visualizerTgt = res.tgt;
-      }
-    }
+    // const res = await store.pushManifoldUpdate(2000, pathNodeIds);
+    // if (res) {
+    //   if (res.src !== undefined) {
+    //     visualizerSrc = res.src;
+    //   }
+    //   if (res.tgt !== undefined) {
+    //     visualizerTgt = res.tgt;
+    //   }
+    // }
   } catch {
     // Ignore error
   }

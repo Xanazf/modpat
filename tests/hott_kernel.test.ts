@@ -1,7 +1,6 @@
 import { multiplyMatrices4x4, transposeMatrix4x4 } from "@_lib/math/TensorMath";
 import assert from "node:assert/strict";
 import System from "@core_i/System";
-import type { PersistenceBar } from "@core_s/PersistentHomology";
 import {
   ProofPath,
   pathEqual,
@@ -181,7 +180,7 @@ export async function runHoTTKernelTests() {
       const c = addAtom(sys, 5, 5);
       const I = identity4x4();
       const p = new ProofPath(a as typeof a, b as typeof b, [a, c, b], I, 1.0);
-      const h1Bars: PersistenceBar[] = [];
+      const h1Bars: Topology.PersistenceBar[] = [];
       const result = pathEqual(sys, p, p, h1Bars);
       assert.ok(result.homotopic, "Identical paths should be homotopic");
       assert.strictEqual(result.analogyScore, 0);
@@ -223,7 +222,7 @@ export async function runHoTTKernelTests() {
         I,
         1.0
       );
-      const h1Bars: PersistenceBar[] = [
+      const h1Bars: Topology.PersistenceBar[] = [
         { birth: 0, death: 100, generatorAtomId: gen },
       ];
       const result = pathEqual(sys, p, q, h1Bars);

@@ -2,20 +2,11 @@ import { DOPAT_CONFIG } from "@config";
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 
-type MetricType = "counter" | "histogram" | "gauge";
-
-export interface MetricEntry {
-  type: MetricType;
-  value: number;
-  count: number;
-  sum: number;
-  min: number;
-  max: number;
-}
+export type MetricType = "counter" | "histogram" | "gauge";
 
 class Metrics {
   private static _instance: Metrics | null = null;
-  private readonly data: Map<string, MetricEntry> = new Map();
+  private readonly data: Map<string, Memory.MetricEntry> = new Map();
   private tickCount = 0;
 
   static get(): Metrics {
@@ -46,7 +37,7 @@ class Metrics {
   }
 
   /** Return a plain-object snapshot of all metrics. */
-  getSnapshot(): Record<string, MetricEntry> {
+  getSnapshot(): Record<string, Memory.MetricEntry> {
     return Object.fromEntries(this.data);
   }
 
@@ -81,7 +72,7 @@ class Metrics {
     }
   }
 
-  private ensure(name: string, type: MetricType): MetricEntry {
+  private ensure(name: string, type: MetricType): Memory.MetricEntry {
     let e = this.data.get(name);
     if (!e) {
       e = { type, value: 0, count: 0, sum: 0, min: Infinity, max: -Infinity };

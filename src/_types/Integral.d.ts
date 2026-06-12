@@ -733,7 +733,7 @@ declare namespace Geodesy {
     /** True when the loop path₁ + reversed(path₂) encloses no persistent H₁ generator. */
     homotopic: boolean;
     /** H₁ bars whose generators are enclosed by the loop (analogy candidates). */
-    straddledH1Bars: import("@core_s/PersistentHomology").PersistenceBar[];
+    straddledH1Bars: Topology.PersistenceBar[];
     /** [0, 1] - fraction of qualified H₁ generators straddled. */
     analogyScore: number;
   }

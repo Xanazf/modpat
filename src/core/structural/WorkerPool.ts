@@ -13,7 +13,6 @@
 import type { ManifoldLayout } from "@_lib/soa/ManifoldSOA";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import type { Constellation } from "@core_s/ManifoldMetrics";
 
 type Resolver<T> = { resolve: (v: T) => void; reject: (e: Error) => void };
 
@@ -136,7 +135,7 @@ export class WorkerPool {
 
   // Manifold tasks (read-only, SharedArrayBuffer)
 
-  computeConstellations(length: number): Promise<Constellation[]> {
+  computeConstellations(length: number): Promise<Memory.Constellation[]> {
     const id = this._id();
     return new Promise((resolve, reject) => {
       this.manifoldPending.set(id, { resolve, reject });
@@ -145,7 +144,7 @@ export class WorkerPool {
   }
 
   computeGaps(
-    consts: Constellation[],
+    consts: Memory.Constellation[],
     length: number
   ): Promise<WorkerIPC.RawGap[]> {
     const id = this._id();

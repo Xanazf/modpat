@@ -16,7 +16,6 @@ import {
   multiplyMatrices4x4,
   transposeMatrix4x4,
 } from "@_lib/math/TensorMath";
-import type { PersistenceBar } from "@core_s/PersistentHomology";
 
 // --- ProofPath ----------------------------------------------------------------
 
@@ -115,7 +114,7 @@ export function pathEqual<A extends number, B extends number>(
   system: Root.ManifoldView,
   p: ProofPath<A, B>,
   q: ProofPath<A, B>,
-  h1Bars: PersistenceBar[],
+  h1Bars: Topology.PersistenceBar[],
   minPersistence = 0
 ): Geodesy.PathEqualityResult {
   if (h1Bars.length === 0) {
@@ -141,7 +140,7 @@ export function pathEqual<A extends number, B extends number>(
   }
 
   const qualified = h1Bars.filter(b => b.death - b.birth > minPersistence);
-  const straddled: PersistenceBar[] = [];
+  const straddled: Topology.PersistenceBar[] = [];
 
   for (const bar of qualified) {
     const id = bar.generatorAtomId;

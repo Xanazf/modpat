@@ -67,6 +67,91 @@ declare namespace Topology {
     h0: PersistenceBar[];
     h1: PersistenceBar[];
   }
+
+  interface PersistenceOpts {
+    topK?: number;
+    maxRadius?: number;
+  }
+
+  interface PHEdge {
+    a: number;
+    b: number;
+    dist: number;
+  }
+
+  /** A 2-simplex in the Vietoris-Rips complex used for H1 column reduction. */
+  interface PHTriangle {
+    filtDist: number;
+    col: number[];
+    repAtomId: number;
+  }
+
+  /** A 2-simplex in the session-overlap nerve used for Cech H1 column reduction. */
+  interface SheafTriangle {
+    i: number;
+    j: number;
+    k: number;
+    eIJ: number;
+    eIK: number;
+    eJK: number;
+  }
+
+  interface MapperNode {
+    id: number;
+    atoms: number[];
+    lensValue: number;
+    clusterCenter: [number, number, number, number];
+    label: string;
+  }
+
+  interface MapperEdge {
+    nodeA: number;
+    nodeB: number;
+    commonAtoms: number[];
+    topoInterest: boolean;
+  }
+
+  interface NerveGraph {
+    nodes: MapperNode[];
+    edges: MapperEdge[];
+    diagram: PersistenceDiagram;
+  }
+
+  interface MapperOpts {
+    lens?: import("@core_s/TopologyMapper").LensType;
+    numIntervals?: number;
+    overlap?: number;
+    minClusterSize?: number;
+    clusterRadius?: number;
+    topK?: number;
+    maxRadius?: number;
+  }
+}
+
+/** Property - shapes for structural/properties (Curvature, Singularity, WaveForm). */
+declare namespace Property {
+  interface CurvatureResult {
+    phi: number;
+    nabla2phi: number;
+    gradPhiSq: number;
+    R: number;
+  }
+
+  interface SingularityCandidate {
+    atomId: number;
+    score: number;
+  }
+
+  interface WaveForm {
+    signature: string;
+    target_pattern: string;
+    net_energy: number;
+    anchor_x: number;
+    anchor_y: number;
+    anchor_z: number;
+    anchor_w: number;
+    source_indices: Uint32Array;
+  }
 }
 
 /** Grounding - shapes for structural/grounding (GroundGraph, placement, fidelity). */
@@ -464,7 +549,7 @@ declare namespace WorkerIPC {
     type: "constellations" | "gaps" | "orbital";
     length: number;
     // for gaps, we also receive the previously-computed constellations list
-    consts?: import("@core_s/ManifoldMetrics").Constellation[];
+    consts?: Memory.Constellation[];
   }
 
   interface SeedRequest {
@@ -512,6 +597,62 @@ declare namespace Memory {
     status: InquiryStatus;
     addedAt: number;
     attempts: number;
+  }
+
+  /** One overlap (1-simplex) between two sessions in the Cech cover. */
+  interface SessionOverlap {
+    sessionA: string;
+    sessionB: string;
+    sharedClusterIds: Set<import("@mutate/FrameworkIndex").ClusterId>;
+    restrictionDifference: Float64Array;
+  }
+
+  interface SessionSheaf {
+    overlaps: SessionOverlap[];
+    h1Betti: number;
+    conflictingClusters: Set<import("@mutate/FrameworkIndex").ClusterId>;
+  }
+
+  /** One tick's topology snapshot, recorded for cobordism history. */
+  interface CobordismRecord {
+    tickIndex: number;
+    h0ComponentCount: number;
+    h1BarCount: number;
+    totalH1Persistence: number;
+  }
+
+  interface MetricEntry {
+    type: import("@core_s/Metrics").MetricType;
+    value: number;
+    count: number;
+    sum: number;
+    min: number;
+    max: number;
+  }
+
+  interface SeedProgress {
+    processed: number;
+    total: number;
+    matured: number;
+    running: boolean;
+    done: boolean;
+  }
+
+  interface Constellation {
+    id: number;
+    star: number;
+    members: number[];
+    totalMass: number;
+  }
+
+  interface ConstellationGap {
+    constellation: Constellation;
+    atomA: number;
+    atomB: number;
+    labelA: string;
+    labelB: string;
+    distance: number;
+    gapScore: number;
   }
 
   enum KnowledgeState {

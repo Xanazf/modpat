@@ -16,26 +16,6 @@ import {
 } from "@duckdb/node-api";
 import { scopesInSameSupercluster } from "@mutate/FrameworkIndex";
 
-/**
- * Represents the stable, collapsed state of a logical derivation.
- * A WaveForm captures the relationship between input generic variables
- * and their resolved output quanta.
- */
-interface WaveForm {
-  /** The universal topological signature of the input interference pattern. */
-  signature: string;
-  /** The target to match the interference pattern against. */
-  target_pattern: string;
-  /** The stored net energy of the pattern. */
-  net_energy: number;
-  /** The coordinates of the pattern in the manifold. */
-  anchor_x: number;
-  anchor_y: number;
-  anchor_z: number;
-  anchor_w: number;
-  /** Indices mapping the generic variable placeholders to the physical output. */
-  source_indices: Uint32Array;
-}
 
 /**
  * The Store (Vault) acts as the long-term memory for the logic engine.

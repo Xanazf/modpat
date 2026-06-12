@@ -2,13 +2,6 @@ import type { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { SlotType } from "@core_i/System";
 
-export interface CurvatureResult {
-  phi: number;
-  nabla2phi: number;
-  gradPhiSq: number;
-  R: number;
-}
-
 /**
  * Scalar curvature computation for the 4D conformal metric.
  *
@@ -33,7 +26,7 @@ export function computeCurvature(
   pz: number,
   pw: number,
   boost?: Set<number>
-): CurvatureResult {
+): Property.CurvatureResult {
   const {
     INFLUENCE_RADIUS,
     INFLUENCE_FALLOFF: F,

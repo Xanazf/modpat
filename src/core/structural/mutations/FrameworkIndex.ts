@@ -1,5 +1,4 @@
 import { DOPAT_CONFIG } from "@config";
-import type { NerveGraph } from "@core_s/TopologyMapper";
 
 declare const __superBrand: unique symbol;
 declare const __clusterBrand: unique symbol;
@@ -107,7 +106,7 @@ export function entailment(node: FormulaNode & { type: "implies" }): number {
 
 export function buildFrameworkIndex(
   system: Root.ManifoldView,
-  nerveGraph: NerveGraph,
+  nerveGraph: Topology.NerveGraph,
   opts?: Mutation.FrameworkBuildOpts
 ): Mutation.FrameworkIndex {
   const base = DOPAT_CONFIG.orbital.BASE_RADIUS;

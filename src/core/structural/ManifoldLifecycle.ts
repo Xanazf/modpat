@@ -12,27 +12,7 @@ import { detectSingularities } from "@props/Singularity";
 import type { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import { random } from "@utils/seededRandom";
 import type { SystemPersistence } from "./Persistence";
-import {
-  buildNerveGraph,
-  type NerveGraph,
-  type PersistenceBar,
-} from "./TopologyMapper";
-
-/**
- * D4 – Snapshot of the manifold's topological state at one topology tick.
- * Used to identify cobordant episodes (structurally similar manifold phases)
- * for long-term memory consolidation.
- */
-export interface CobordismRecord {
-  /** Monotonically increasing topology-tick index. */
-  tickIndex: number;
-  /** Number of essential H₀ components (death = ∞). */
-  h0ComponentCount: number;
-  /** Total number of H₁ bars (including infinite). */
-  h1BarCount: number;
-  /** Sum of finite H₁ bar lifetimes (death − birth). */
-  totalH1Persistence: number;
-}
+import { buildNerveGraph } from "./TopologyMapper";
 
 /**
  * The ManifoldLifecycle acts as the guardian and regulator of the logical manifolds.
@@ -87,11 +67,11 @@ export class ManifoldLifecycle {
   /** Guard preventing concurrent topology analyses (like isDreaming for dreamCycle). */
   private _isTopoRunning = false;
   /** Latest TDA Mapper nerve graph, refreshed every TOPO_TICK_INTERVAL ticks. */
-  private _nerveGraph: NerveGraph | null = null;
+  private _nerveGraph: Topology.NerveGraph | null = null;
   /** H₁ bars from the last topology snapshot, used to prioritise dreamCycle. */
-  private _h1Bars: PersistenceBar[] = [];
+  private _h1Bars: Topology.PersistenceBar[] = [];
   /** H₀ bars (all filtration levels) from the last topology snapshot. */
-  private _prevH0: PersistenceBar[] = [];
+  private _prevH0: Topology.PersistenceBar[] = [];
   /** Atom IDs in persistent H₁ bars → preferred expansion targets. */
   private _dreamPriorityAtoms: Set<number> = new Set();
   /** InquiryQueue for routing component_birth curiosity events. */
@@ -106,7 +86,7 @@ export class ManifoldLifecycle {
   private _singularityTick = 0;
 
   // -- D4: Cobordism history --------------------------------------------------
-  private _cobordismHistory: CobordismRecord[] = [];
+  private _cobordismHistory: Memory.CobordismRecord[] = [];
   private _globalTickIndex = 0;
   private static readonly COBORDISM_HISTORY_SIZE = 10;
 
@@ -320,7 +300,7 @@ export class ManifoldLifecycle {
   }
 
   /** Latest TDA Mapper nerve graph, or null before the first topology tick. */
-  public getNerveGraph(): NerveGraph | null {
+  public getNerveGraph(): Topology.NerveGraph | null {
     return this._nerveGraph;
   }
 
@@ -483,7 +463,7 @@ export class ManifoldLifecycle {
     const totalH1Persistence = h1
       .filter(b => b.death !== Infinity)
       .reduce((sum, b) => sum + (b.death - b.birth), 0);
-    const record: CobordismRecord = {
+    const record: Memory.CobordismRecord = {
       tickIndex: this._globalTickIndex++,
       h0ComponentCount: h0.filter(b => b.death === Infinity).length,
       h1BarCount: h1.length,
@@ -637,7 +617,7 @@ export class ManifoldLifecycle {
    * share consolidated manifold representations and are candidates for
    * long-term memory consolidation.
    */
-  public getCobordantEpisodes(tickIndex: number): CobordismRecord[] {
+  public getCobordantEpisodes(tickIndex: number): Memory.CobordismRecord[] {
     const target = this._cobordismHistory.find(r => r.tickIndex === tickIndex);
     if (!target) return [];
     return this._cobordismHistory.filter(r => {
@@ -655,7 +635,7 @@ export class ManifoldLifecycle {
   }
 
   /** D4 - All recorded cobordism snapshots, most recent first. */
-  public getCobordismHistory(): CobordismRecord[] {
+  public getCobordismHistory(): Memory.CobordismRecord[] {
     return [...this._cobordismHistory].reverse();
   }
 

@@ -20,14 +20,6 @@ import type Store from "@core_s/Memory";
 import type { WorkerPool } from "@core_s/WorkerPool";
 import type { DictionaryExpander } from "@mutate/Unfolder";
 
-export interface SeedProgress {
-  processed: number;
-  total: number;
-  matured: number;
-  running: boolean;
-  done: boolean;
-}
-
 export class VocabSeedWorker {
   private readonly words: string[];
   private cursor = 0;
@@ -52,7 +44,7 @@ export class VocabSeedWorker {
     return this.cursor >= this.words.length;
   }
 
-  snapshot(): SeedProgress {
+  snapshot(): Memory.SeedProgress {
     return {
       processed: this._processed,
       total: this.words.length,
@@ -90,7 +82,7 @@ export class VocabSeedWorker {
     opts: {
       batchSize?: number;
       intervalMs?: number;
-      onProgress?: (p: SeedProgress) => void;
+      onProgress?: (p: Memory.SeedProgress) => void;
       pool?: WorkerPool;
     } = {}
   ): void {

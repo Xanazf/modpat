@@ -2,12 +2,6 @@ import type { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { computeCurvature } from "./Curvature";
 
-export interface SingularityCandidate {
-  atomId: number;
-  /** |∇φ|² / (1 + φ²) - the singularity score. */
-  score: number;
-}
-
 /**
  * D1 – Scan the manifold for singularity candidates.
  *
@@ -21,9 +15,9 @@ export interface SingularityCandidate {
 export function detectSingularities(
   system: Root.ManifoldView,
   grid: GridIndex4D
-): SingularityCandidate[] {
+): Property.SingularityCandidate[] {
   const threshold = DOPAT_CONFIG.PHYSICS.SINGULARITY_THRESHOLD;
-  const candidates: SingularityCandidate[] = [];
+  const candidates: Property.SingularityCandidate[] = [];
 
   for (let i = 0; i < system.length; i++) {
     if (!system.isAllocated(i)) continue;

@@ -1,23 +1,5 @@
 import type { ClusterId } from "@mutate/FrameworkIndex";
 
-// --- public interfaces --------------------------------------------------------
-
-export interface SessionOverlap {
-  sessionA: string;
-  sessionB: string;
-  sharedClusterIds: Set<ClusterId>;
-  /** Semantic divergence per shared cluster; length === sharedClusterIds.size. */
-  restrictionDifference: Float64Array;
-}
-
-export interface SessionSheaf {
-  overlaps: SessionOverlap[];
-  /** H¹ Betti number of the session nerve complex (0 = globally consistent). */
-  h1Betti: number;
-  /** Cluster IDs appearing in contradictory (non-bounding) 1-cycles. */
-  conflictingClusters: Set<ClusterId>;
-}
-
 /**
  * Compute the Čech cohomology of the session cover.
  *
@@ -34,7 +16,7 @@ export interface SessionSheaf {
 export function computeSessionSheaf(
   activations: Map<string, Set<ClusterId>>,
   sessionClusterPhi?: Map<string, Map<ClusterId, number>>
-): SessionSheaf {
+): Memory.SessionSheaf {
   const sessions = [...activations.keys()];
   const n = sessions.length;
 
@@ -43,7 +25,7 @@ export function computeSessionSheaf(
   }
 
   // -- Build overlaps (1-simplices) ------------------------------------------
-  const overlaps: SessionOverlap[] = [];
+  const overlaps: Memory.SessionOverlap[] = [];
   // edgeIndex[i][j] (i < j) = index into overlaps array
   const edgeIdx = new Map<number, number>(); // packed key i*n+j → overlap index
 
@@ -89,15 +71,7 @@ export function computeSessionSheaf(
 
   // -- Find triangles (2-simplices): i < j < k with non-empty TRIPLE intersection --
   // Čech cohomology requires A∩B∩C ≠ ∅ for a 2-simplex, not just pairwise overlaps.
-  interface Triangle {
-    i: number;
-    j: number;
-    k: number;
-    eIJ: number; // edge index for (i,j)
-    eIK: number;
-    eJK: number;
-  }
-  const triangles: Triangle[] = [];
+  const triangles: Topology.SheafTriangle[] = [];
   for (let i = 0; i < n; i++) {
     const setI = activations.get(sessions[i])!;
     for (let j = i + 1; j < n; j++) {
@@ -181,7 +155,7 @@ export function computeSessionSheaf(
 
 function connectedComponents(
   n: number,
-  overlaps: SessionOverlap[],
+  overlaps: Memory.SessionOverlap[],
   sessions: string[]
 ): number {
   const parent = new Int32Array(n);
