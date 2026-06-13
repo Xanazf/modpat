@@ -906,8 +906,8 @@ async function handleCommand(raw: string): Promise<void> {
   }
 }
 
-let visualizerSrc: string | null = null;
-let visualizerTgt: string | null = null;
+const visualizerSrc: string | null = null;
+const visualizerTgt: string | null = null;
 
 async function pushUpdateToVisualizer(): Promise<void> {
   try {

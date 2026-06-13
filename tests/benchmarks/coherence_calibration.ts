@@ -323,6 +323,6 @@ run()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await gpu_math.dispose().catch(() => {});
+    if (gpu_math.dispose) await gpu_math.dispose().catch(() => {});
     process.exit(process.exitCode ?? 0);
   });

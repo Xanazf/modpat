@@ -16,7 +16,6 @@ import {
 } from "@duckdb/node-api";
 import { scopesInSameSupercluster } from "@mutate/FrameworkIndex";
 
-
 /**
  * The Store (Vault) acts as the long-term memory for the logic engine.
  *

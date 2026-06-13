@@ -254,7 +254,10 @@ function singleLinkage(
  * Returns the TopologyMapper node IDs that a given atom participates in,
  * encoded as a comma-separated string.  Used as the vault topo_signature.
  */
-export function atomTopoSignature(atomId: number, graph: Topology.NerveGraph): string {
+export function atomTopoSignature(
+  atomId: number,
+  graph: Topology.NerveGraph
+): string {
   const nodeIds: number[] = [];
   for (const node of graph.nodes) {
     if (node.atoms.includes(atomId)) nodeIds.push(node.id);

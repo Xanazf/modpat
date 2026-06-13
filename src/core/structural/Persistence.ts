@@ -290,7 +290,9 @@ export class SystemPersistence {
    * Saves a cobordism record to the persistent store.
    * @param record - The cobordism record to persist.
    */
-  public async saveCobordismRecord(record: Memory.CobordismRecord): Promise<void> {
+  public async saveCobordismRecord(
+    record: Memory.CobordismRecord
+  ): Promise<void> {
     const stmt = await this.connection.prepare(
       "INSERT OR REPLACE INTO cobordism_history (tick_index, h0_component_count, h1_bar_count, total_h1_persistence) VALUES (?, ?, ?, ?)"
     );
