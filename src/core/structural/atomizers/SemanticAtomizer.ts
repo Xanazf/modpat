@@ -1,6 +1,7 @@
 import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
+import { OperatorClass, SlotType } from "@core_i/helpers/enums";
+import { classifyOperatorToken } from "@core_i/helpers/functions";
 import type System from "@core_i/System";
-import { classifyOperatorToken, OperatorClass, SlotType } from "@core_i/System";
 import nlp from "compromise";
 import { BaseAtomizer, COOCCURRENCE_STOPWORDS } from "./BaseAtomizer";
 

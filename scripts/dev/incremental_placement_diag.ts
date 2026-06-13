@@ -12,17 +12,14 @@
  */
 
 import LogicAtomizer from "@atomics/LogicAtomizer";
-import {
-  buildGraphFromAstTriples,
-  EdgeKind,
-  NodeKind,
-} from "@core_s/grounding/GroundGraph";
+import { buildGraphFromAstTriples } from "@core_s/grounding/GroundGraph";
 import { mapFidelity } from "@core_s/grounding/MapFidelity";
 import {
   placeGraph,
   placeGraphIncremental,
   randomPlacement,
 } from "@core_s/grounding/StructuralGrounding";
+import { EdgeKind, NodeKind } from "@core_s/helpers/enums";
 import { extractAstTriples } from "@utils/astExtract";
 import { random, seedRandom } from "@utils/seededRandom";
 

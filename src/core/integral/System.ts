@@ -3,187 +3,12 @@ import {
   type ManifoldLayout,
   ManifoldSOA,
 } from "@_lib/soa/ManifoldSOA";
-import { DOPAT_CONFIG, SYNTAX_ATTRACTORS, validateConfig } from "@config";
+import { DOPAT_CONFIG, validateConfig } from "@config";
 import { RingBuffer } from "ring-buffer-ts";
+import { OperatorClass, SlotType, TargetBuffer } from "./helpers/enums";
+import { classifyOperatorToken, LogicOperations } from "./helpers/functions";
 
-/**
- * Enumeration of physical property buffers within the logical manifold.
- * These buffers correspond to the different dimensions of a logical precept's existence.
- */
-enum TargetBuffer {
-  /** Matter: The logical importance or content of posX. */
-  Mass = 0,
-  /** Kind: The structural identifier or content of posY. */
-  Scope = 1,
-  /** Energy: The logical potential or content of posZ. */
-  Depth = 2,
-  /** Age: The temporal state or content of posW. */
-  Time = 3,
-  /** Topological X-coordinate (Matter). */
-  PosX = 4,
-  /** Topological Y-coordinate (Kind). */
-  PosY = 5,
-  /** Topological Z-coordinate (Energy). */
-  PosZ = 6,
-  /** Topological W-coordinate (Age). */
-  PosW = 7,
-  /** Matter Density (Mass / Scope) at posX:posY. */
-  Density = 8,
-  /** Temporal Decay Rate (Time / Scope) at posW:posY. */
-  EntropyRate = 9,
-  /** Logical Potency (Depth / Mass) at posZ:posX. */
-  Potency = 10,
-  /** Logical Intensity (Depth / Scope) at posZ:posY. */
-  Intensity = 11,
-  /** Per-precept rate of logical decay. */
-  DecayRate = 12,
-  /** Physical hash of the precept's state for integrity. */
-  Checksum = 13,
-}
-
-/**
- * Bitmask enum for VAR slot roles within a code pattern.
- * Stored in system.slotType[] so the Mapper can perceive and attract toward
- * continuation points during geodesic path relaxation.
- */
-export enum SlotType {
-  None = 0,
-  Leaf = 1 << 0, // concrete identifier or literal
-  Body = 1 << 1, // sub-pattern continuation
-  Condition = 1 << 2, // boolean expression
-  Parameter = 1 << 3, // argument / parameter list
-  TypeHint = 1 << 4, // type annotation
-}
-
-/**
- * Classification of logical operators as "massive bodies" that attract and define
- * the relationships between variables in the heat field.
- */
-export enum OperatorClass {
-  /** No operator assigned. */
-  None = 0,
-  /** Operators that shift the identity or state (e.g., "is", "becomes"). */
-  IdentityShift = 1,
-  /** Logical conjunctions (e.g., "and", "but"). */
-  Conjunction = 2,
-  /** A logical sink or conclusion point (e.g., "therefore"). */
-  Sink = 3,
-  /** Existential or universal quantifiers. */
-  Quantifier = 4,
-  /** Modifiers that define the scope of a statement (e.g., "all", "some"). */
-  Modifier = 5,
-  /** Logical negation or inversion. */
-  Inversion = 6,
-  /** Action-oriented operators that define events or transformations. */
-  Action = 7,
-  /** Query-based operators used for logical interrogation. */
-  Query = 8,
-  /** Syntactic landmarks for physicalized code synthesis. */
-  SyntaxAnchor = 9,
-  /** Proactive curiosity signal spawned by motivation sources (CognitiveLoop). */
-  Intent = 10,
-  /** Binary arithmetic operators (+, -, *, /, plus, minus, times, divided). */
-  Arithmetic = 11,
-  /** Capability anchor: skill attractor that the Mapper navigates toward. */
-  Capability = 12,
-}
-
-/**
- * Classifies a raw string token into its corresponding OperatorClass.
- *
- * @param token The string representation of the operator.
- * @returns The classified OperatorClass.
- */
-function classifyOperatorToken(token: string): OperatorClass {
-  const norm = token.trim().toLowerCase();
-
-  // Arithmetic operators and identity binding symbols must be classified
-  // before the SYNTAX_ATTRACTORS guard because "+", "-", "*", "/", "=" all
-  // appear in STRUCTURES (needed for code synthesis landmark detection) and
-  // would otherwise be silently promoted to SyntaxAnchor, preventing the
-  // SVO split from firing on statements like "1+1=2".
-  switch (norm) {
-    case "+":
-    case "-":
-    case "*":
-    case "/":
-    case "%":
-    case "plus":
-    case "minus":
-    case "times":
-    case "multiplied":
-    case "divided":
-      return OperatorClass.Arithmetic;
-    case "equals":
-    case "=":
-      return OperatorClass.IdentityShift;
-  }
-
-  // TypeScript Physicalized Code Synthesis: check syntax attractors.
-  if (
-    SYNTAX_ATTRACTORS.KEYWORDS.has(norm) ||
-    SYNTAX_ATTRACTORS.STRUCTURES.has(norm)
-  ) {
-    return OperatorClass.SyntaxAnchor;
-  }
-
-  // TODO: allow the Mapper to expand this list
-  // - needs "persistent identity" check;
-  //  - operators are immutable across contexts;
-  //  - if new_operator != immutable { new_operator = OperatorClass.None }
-  // - possibly needs human review;
-  switch (norm) {
-    case "implies":
-    case "=>":
-    case "is":
-    case "am": // first-person singular present of "to be"
-    case "are":
-    case "was":
-    case "were":
-    case "can":
-    case "after": // ordinal succession - encodes the number-line "next" relation
-    case "before": // ordinal precedence
-      return OperatorClass.IdentityShift;
-    case "&&":
-    case "and":
-    case "but":
-      return OperatorClass.Conjunction;
-    case "|-":
-    case "then":
-    case "therefore":
-      return OperatorClass.Sink;
-    case "exists":
-      return OperatorClass.Quantifier;
-    case "all":
-    case "for all":
-    case "every":
-    case "some":
-    case "any":
-      return OperatorClass.Modifier;
-    case "not":
-    case "!":
-    case "didn't":
-    case "did not":
-    case "cannot":
-      return OperatorClass.Inversion;
-    case "do":
-    case "did":
-    case "born":
-    case "died":
-    case "invented":
-    case "discovered":
-      return OperatorClass.Action;
-    case "how":
-    case "who":
-    case "what":
-    case "where":
-    case "when":
-    case "why":
-      return OperatorClass.Query;
-    default:
-      return OperatorClass.None;
-  }
-}
+export { classifyOperatorToken, OperatorClass, SlotType, TargetBuffer };
 
 /**
  * Internal mapping of TargetBuffer indices to property keys on the System class.
@@ -219,59 +44,6 @@ const BufferMap: (
   "decayRate",
   "checksum",
 ];
-
-/**
- * A collection of mathematical operations for analyzing the logical manifold.
- */
-const LogicOperations = {
-  /**
-   * Calculates the inverse square of a precept's mass relative to a target distance.
-   * Simulates the "gravitational" pull of a logical entity.
-   *
-   * @param system The logical manifold to query.
-   * @param source The index of the source precept.
-   * @param target The distance (or target index) to calculate against.
-   * @returns The resulting attenuated logical mass.
-   */
-  calculateInverseSquare(
-    system: Root.ManifoldView,
-    source: number,
-    target: number
-  ): number {
-    const baseMass = system.mass[source];
-    // If the target is the source itself, return full mass.
-    if (target === 0) return baseMass;
-    // Apply physically rigorous isotropic point source flux constant (1 / 4πr²)
-    return baseMass / (4 * Math.PI * target * target);
-  },
-
-  /**
-   * Determines if a precept has become "supermassive," potentially creating a logical singularity.
-   * Supermassive precepts attract variables with extreme force but may collapse if the scope is too small.
-   *
-   * @param system The logical manifold.
-   * @param id The index of the precept.
-   * @returns True if the precept exceeds the blackbody limit.
-   */
-  isSupermassive(system: Root.ManifoldView, id: number): boolean {
-    return (
-      system.mass[id] > DOPAT_CONFIG.BLACKBODY_LIMIT && system.scope[id] <= 1
-    );
-  },
-
-  /**
-   * Determines if a precept is "universal," having infinite scope and minimal individual mass.
-   *
-   * @param system The logical manifold.
-   * @param id The index of the precept.
-   * @returns True if the precept qualifies as universal.
-   */
-  isUniversal(system: Root.ManifoldView, id: number): boolean {
-    return (
-      system.mass[id] < system.epsilon && system.scope[id] > system.maxilon
-    );
-  },
-};
 
 /**
  * Shared empty set returned by getIdsByScope() on a miss,
@@ -1025,5 +797,5 @@ class SystemRef {
   }
 }
 
-export { classifyOperatorToken, LogicOperations, SystemRef, TargetBuffer };
+export { LogicOperations, SystemRef };
 export default System;

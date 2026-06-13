@@ -41,7 +41,9 @@ import logger from "@utils/SpectralLogger";
 import { extractTopic } from "@utils/topicExtraction";
 import nlp from "compromise";
 import { resolveLogicFormula } from "./formula/E1Formula";
-import { classifyOperatorToken, OperatorClass, SystemRef } from "./System";
+import { OperatorClass } from "./helpers/enums";
+import { classifyOperatorToken } from "./helpers/functions";
+import { SystemRef } from "./System";
 import type { SkillHandler } from "./skills";
 
 // Canonical definitions live in src/_types/Integral.d.ts (Mapping namespace).

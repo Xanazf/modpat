@@ -1,10 +1,7 @@
 import { DOPAT_CONFIG } from "@config";
+import { OperatorClass, type SlotType } from "@core_i/helpers/enums";
+import { classifyOperatorToken } from "@core_i/helpers/functions";
 import type System from "@core_i/System";
-import {
-  classifyOperatorToken,
-  OperatorClass,
-  type SlotType,
-} from "@core_i/System";
 import { NUMBER_LINE_SCALE } from "@skill_cogi/Reduction";
 import { BaseAtomizer, COOCCURRENCE_STOPWORDS } from "./BaseAtomizer";
 

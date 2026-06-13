@@ -264,18 +264,3 @@ export function atomTopoSignature(
   }
   return nodeIds.sort((a, b) => a - b).join(",");
 }
-
-/**
- * Jaccard similarity between two topo_signature strings.
- * Both are comma-separated node-ID lists.
- */
-export function topoSignatureJaccard(a: string, b: string): number {
-  if (!a && !b) return 1;
-  if (!a || !b) return 0;
-  const sa = new Set(a.split(",").map(Number));
-  const sb = new Set(b.split(",").map(Number));
-  let inter = 0;
-  for (const x of sa) if (sb.has(x)) inter++;
-  const union = sa.size + sb.size - inter;
-  return union === 0 ? 0 : inter / union;
-}

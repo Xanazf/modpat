@@ -5,7 +5,8 @@
  * code-ingestion pipeline (was Coder.processCode).
  */
 
-import { SlotType, type SystemRef } from "@core_i/System";
+import { SlotType } from "@core_i/helpers/enums";
+import type { SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
 import { generate, parse, walk } from "abstract-syntax-tree";

@@ -32,8 +32,9 @@
  * Pure module: plain data + a builder, no System or DB dependency.
  */
 
+import { EdgeKind, NodeKind } from "@core_s/helpers/enums";
+import { parseNumericLabel } from "@core_s/helpers/functions";
 import { lemma } from "@skill_cogi/Reduction";
-import { EdgeKind, NodeKind, parseNumericLabel } from "./GroundGraph";
 
 const ARITH_SYMBOL: Record<string, string> = {
   "+": "+",

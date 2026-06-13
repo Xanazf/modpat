@@ -1,6 +1,6 @@
 import type { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-import { SlotType } from "@core_i/System";
+import { SlotType } from "@core_i/helpers/enums";
 
 /**
  * Scalar curvature computation for the 4D conformal metric.

@@ -9,7 +9,7 @@
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { resolveLogicFormula } from "@core_i/formula/E1Formula";
-import { OperatorClass, SlotType } from "@core_i/System";
+import { OperatorClass, SlotType } from "@core_i/helpers/enums";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { resolveActiveAtoms } from "@mutate/FrameworkIndex";

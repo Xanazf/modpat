@@ -17,7 +17,7 @@ import {
 } from "@_lib/math/TensorMath";
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-import { SlotType } from "@core_i/System";
+import { SlotType } from "@core_i/helpers/enums";
 import { metrics } from "@core_s/Metrics";
 import type Unfolder from "@mutate/Unfolder";
 import { CURVATURE_WGSL } from "@props/Curvature";

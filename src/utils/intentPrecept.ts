@@ -1,4 +1,4 @@
-import { OperatorClass } from "@core_i/System";
+import { OperatorClass } from "@core_i/helpers/enums";
 
 export enum IntentTag {
   INQUIRY_GAP = 0,

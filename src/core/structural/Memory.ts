@@ -1,14 +1,11 @@
 import Atomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
+import { OperatorClass, SlotType } from "@core_i/helpers/enums";
+import { classifyOperatorToken } from "@core_i/helpers/functions";
 import type System from "@core_i/System";
-import {
-  classifyOperatorToken,
-  OperatorClass,
-  SlotType,
-  SystemRef,
-} from "@core_i/System";
+import { SystemRef } from "@core_i/System";
+import { topoSignatureJaccard } from "@core_s/helpers/functions";
 import { metrics } from "@core_s/Metrics";
-import { topoSignatureJaccard } from "@core_s/TopologyMapper";
 import {
   type DuckDBConnection,
   DuckDBInstance,

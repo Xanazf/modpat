@@ -12,81 +12,9 @@
  * any coordinate is assigned.
  */
 
+import { EdgeKind, NodeKind } from "@core_s/helpers/enums";
+import { parseNumericLabel, yToKind } from "@core_s/helpers/functions";
 import type { AstTriple } from "@utils/astExtract";
-
-export enum EdgeKind {
-  /** Structural nesting: module->symbol, class->member, parent term->subterm. */
-  Containment = 0,
-  /** Use / dependency: call, import, type annotation, premise->rule. */
-  Reference = 1,
-  /** Equivalence / rewrite: equality, modus ponens, arithmetic evaluation. */
-  Reduction = 2,
-}
-
-/**
- * Canonical node kinds. The numeric companion (kindToY) is the posY (Kind-axis)
- * coordinate, chosen to match astExtract's existing kindY scheme so code, logic,
- * and math stratify on the same axis.
- */
-export enum NodeKind {
-  Type = 0,
-  Class = 1,
-  Function = 2,
-  Variable = 3,
-  Enum = 4,
-  Module = 5,
-  Literal = 6,
-  Operator = 7,
-  Term = 8,
-}
-
-/** posY value per kind. Code kinds reuse astExtract's hints (0.0..0.9). */
-const KIND_Y: Record<NodeKind, number> = {
-  [NodeKind.Type]: 0.0,
-  [NodeKind.Class]: 0.1,
-  [NodeKind.Function]: 0.3,
-  [NodeKind.Variable]: 0.6,
-  [NodeKind.Enum]: 0.8,
-  [NodeKind.Module]: 0.9,
-  [NodeKind.Literal]: 0.5,
-  [NodeKind.Operator]: 0.7,
-  [NodeKind.Term]: 0.4,
-};
-
-const ALL_KINDS: NodeKind[] = [
-  NodeKind.Type,
-  NodeKind.Class,
-  NodeKind.Function,
-  NodeKind.Variable,
-  NodeKind.Enum,
-  NodeKind.Module,
-  NodeKind.Literal,
-  NodeKind.Operator,
-  NodeKind.Term,
-];
-
-export function kindToY(k: NodeKind): number {
-  return KIND_Y[k] ?? KIND_Y[NodeKind.Term];
-}
-
-/** Maps a posY hint (e.g. astExtract.kindY) back to the nearest NodeKind. */
-export function yToKind(y: number): NodeKind {
-  let best = NodeKind.Term;
-  let bestD = Number.POSITIVE_INFINITY;
-  for (const k of ALL_KINDS) {
-    const d = Math.abs(KIND_Y[k] - y);
-    if (d < bestD) {
-      bestD = d;
-      best = k;
-    }
-  }
-  return best;
-}
-
-/** Parses a bare numeric literal label; returns null for non-numeric labels. */
-export function parseNumericLabel(label: string): number | null {
-  return /^-?\d+(?:\.\d+)?$/.test(label.trim()) ? parseFloat(label) : null;
-}
 
 // -- astExtract -> GroundGraph ----------------------------------------------
 

@@ -159,7 +159,7 @@ declare namespace Grounding {
   interface GroundNode {
     id: number;
     label: string;
-    kind: import("@core_s/grounding/GroundGraph").NodeKind;
+    kind: import("@core_s/helpers/enums").NodeKind;
     /** Parsed value when the label is a numeric literal, else null. */
     numeric: number | null;
   }
@@ -167,7 +167,7 @@ declare namespace Grounding {
   interface GroundEdge {
     from: number;
     to: number;
-    kind: import("@core_s/grounding/GroundGraph").EdgeKind;
+    kind: import("@core_s/helpers/enums").EdgeKind;
     /** Relative pull strength (astExtract energy, or 1.0 by default). */
     weight: number;
   }
@@ -195,7 +195,7 @@ declare namespace Grounding {
   interface AdjacencyEntry {
     node: number;
     weight: number;
-    kind: import("@core_s/grounding/GroundGraph").EdgeKind;
+    kind: import("@core_s/helpers/enums").EdgeKind;
   }
 
   /** Result of mapFidelity(). */

@@ -17,11 +17,7 @@ import {
   groundAstIntoSystem,
   groundGraphIntoSystem,
 } from "@core_s/grounding/AstGrounding";
-import {
-  buildGraphFromAstTriples,
-  EdgeKind,
-  NodeKind,
-} from "@core_s/grounding/GroundGraph";
+import { buildGraphFromAstTriples } from "@core_s/grounding/GroundGraph";
 import { buildGraphFromLogic } from "@core_s/grounding/LogicGraph";
 import { mapFidelity } from "@core_s/grounding/MapFidelity";
 import {
@@ -30,6 +26,7 @@ import {
   randomPlacement,
 } from "@core_s/grounding/StructuralGrounding";
 import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
+import { EdgeKind, NodeKind } from "@core_s/helpers/enums";
 import { extractAstTriples } from "@utils/astExtract";
 import logger from "@utils/SpectralLogger";
 import { random, seedRandom } from "@utils/seededRandom";

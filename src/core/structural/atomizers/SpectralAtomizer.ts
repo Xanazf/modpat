@@ -1,6 +1,6 @@
 import { ComplexArray } from "@_lib/geometry/Waves";
+import { OperatorClass, type SlotType } from "@core_i/helpers/enums";
 import type System from "@core_i/System";
-import { OperatorClass, type SlotType } from "@core_i/System";
 import { BaseAtomizer } from "./BaseAtomizer";
 
 /**

@@ -16,7 +16,8 @@ import LogicAtomizer from "@atomics/LogicAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import System, { OperatorClass, type SystemRef } from "@core_i/System";
+import { OperatorClass } from "@core_i/helpers/enums";
+import System, { type SystemRef } from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import {

@@ -15,29 +15,9 @@
  *   • "I have other atoms in my orbit" → satellites(id).length > 0
  */
 
-import { distance4DPoints } from "@_lib/math/TensorMath";
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-
-// Core geometry
-
-/** Euclidean distance between two atoms in the 4D (Matter×Kind×Energy×Age) manifold. */
-export function distance4D(
-  id1: number,
-  id2: number,
-  system: Root.ManifoldView
-): number {
-  return distance4DPoints(
-    system.posX[id1],
-    system.posY[id1],
-    system.posZ[id1],
-    system.posW[id1],
-    system.posX[id2],
-    system.posY[id2],
-    system.posZ[id2],
-    system.posW[id2]
-  );
-}
+import { distance4D } from "@core_s/helpers/functions";
 
 /**
  * Gravitational zone of influence for an atom.

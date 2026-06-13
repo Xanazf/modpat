@@ -8,9 +8,9 @@
 
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { parentPort, workerData } from "node:worker_threads";
+import { distance4D } from "@core_s/helpers/functions";
 import {
   constellations,
-  distance4D,
   orbitalParent,
   orbitRadius,
   satellites,

@@ -1,8 +1,8 @@
 import { TMRFreeList } from "@_lib/checksum/TMRFreeList";
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-import type { TargetBuffer } from "@core_i/System";
-import System, { OperatorClass, SystemRef } from "@core_i/System";
+import { OperatorClass, type TargetBuffer } from "@core_i/helpers/enums";
+import System, { SystemRef } from "@core_i/System";
 import { metrics } from "@core_s/Metrics";
 import { DeltaQueue } from "@mutate/DeltaQueue";
 import { buildFrameworkIndex } from "@mutate/FrameworkIndex";

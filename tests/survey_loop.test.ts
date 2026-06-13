@@ -20,8 +20,8 @@ import {
   localizeDivergences,
   surveyLoop,
 } from "@core_s/grounding/BehaviouralFidelity";
-import { EdgeKind, NodeKind } from "@core_s/grounding/GroundGraph";
 import { mapFidelity } from "@core_s/grounding/MapFidelity";
+import { EdgeKind, NodeKind } from "@core_s/helpers/enums";
 import { NUMBER_LINE_SCALE } from "@skill_cogi/Reduction";
 import logger from "@utils/SpectralLogger";
 import { describe, it } from "./utils/harness";
