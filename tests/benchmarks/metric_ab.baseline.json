@@ -292,22 +292,22 @@
     "avgTimeFullGradMs": 136.82
   },
   "external": {
-    "date": "2026-05-22T15:26:53.828Z",
+    "date": "2026-06-13T12:44:15.810Z",
     "ruletaker": {
-      "hop1": 0.4,
-      "hop2": 0.5,
+      "hop1": 0.6,
+      "hop2": 0.75,
       "hop3": 1,
       "hop4": 1,
       "hop5": 1,
-      "overall": 0.78
+      "overall": 0.87
     },
     "proofwriter": {
-      "chainCompletion": 0.5
+      "chainCompletion": 0.833
     },
     "logicalNli": {
-      "entailment": 0.667,
+      "entailment": 1,
       "contradiction": 1,
-      "overall": 0.833
+      "overall": 1
     }
   }
 }
