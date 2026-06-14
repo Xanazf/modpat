@@ -183,7 +183,7 @@ const DOPAT_CONFIG = {
      * KB is inert, so existing suites are untouched. The influence of each
      * ground-truth source is measured in scripts/dev/survey_loop_influence_bench.ts.
      */
-    SURVEY_LOOP_ENABLED: false,
+    SURVEY_LOOP_ENABLED: true,
     /**
      * TRAVELER step 1 - Spatial jitter radius (XYZ axes) applied when placing a
      * newly ingested atom at the manifold pole (0, 0, 0, 0).  Small enough that
