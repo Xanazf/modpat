@@ -82,7 +82,8 @@ export default defineDemotedPath({
       input: "a sequence with an unlabelled connective token",
       expected:
         "infers OperatorClass from resonance flow ratio and writes it back to the manifold after CONFIRM_THRESHOLD=3 confirmations",
-      supersededBehavior: "none — E1Formula requires operator classes pre-assigned",
+      supersededBehavior:
+        "none — E1Formula requires operator classes pre-assigned",
     },
     {
       id: "missing-link-inquiry",

@@ -361,6 +361,14 @@ declare namespace Grounding {
     passCount: number;
     /** Spread (max-min) of the implied W values; small = consistent story. */
     spread: number;
+    /**
+     * Fraction of implied W values within half a number-line step of the median
+     * - the multi-fault-robust signal. A genuinely mis-surveyed precept tells a
+     * consistent story even when OTHER precepts are also corrupt (most of its
+     * failing partners are sound, so their implied coordinates agree); a precept
+     * merely implicated by others' faults gets a scattered, low-consensus story.
+     */
+    consensus: number;
   }
 
   interface SurveyLoopResult {
@@ -372,6 +380,109 @@ declare namespace Grounding {
     repairs: Suspect[];
     /** True if the loop ended with every prediction matching the territory. */
     converged: boolean;
+  }
+
+  /**
+   * Code channel (Phase 4.5): a survey loop whose territory is REAL EXECUTION.
+   * The geometry predicts a function's reduct by composing grounded operand W
+   * positions (beta-reduction as traversal); the actual values come from running
+   * the TypeScript through `tsx`, in a separate process the placer never touches -
+   * so agreement here is the first fidelity number the parser cannot smuggle in.
+   */
+  interface CodeSurveyResult extends SurveyLoopResult {
+    /** Territory answers, executed once via tsx (constant across coord repairs). */
+    actuals: number[];
+  }
+
+  // -- Closed-world logic channel (Phase 4.5, the approximate-homomorphism case) --
+
+  /**
+   * One closed-world prediction case: does the geometry place `target` among
+   * source `src`'s nearest nodes, as the closed-world model says it should?
+   * `entailed` is the model's verdict (territory); `predicted` is the geometry's.
+   */
+  interface ClosedWorldCase {
+    src: number;
+    target: number;
+    srcLabel: string;
+    targetLabel: string;
+    /** The closed-world model entails src |- target (transitive consequence). */
+    entailed: boolean;
+    /** The grounded placement ranks target within src's nearest-|entailed| set. */
+    predicted: boolean;
+    match: boolean;
+  }
+
+  interface ClosedWorldReport {
+    total: number;
+    matched: number;
+    /** Fraction of entailed consequences the geometry recovers (recall@k=|model|). */
+    fidelity: number;
+    cases: ClosedWorldCase[];
+    /** Entailed pairs the geometry failed to place near - errors with addresses. */
+    divergences: ClosedWorldCase[];
+  }
+
+  /** A graph-domain suspect: re-placement, not coordinate-solving, is the repair. */
+  interface ClosedWorldSuspect {
+    id: number;
+    label: string;
+    /** Failing consequence pairs this node participates in (as src or target). */
+    failCount: number;
+    /** Passing pairs it participates in (counter-evidence). */
+    passCount: number;
+    /**
+     * Mean squared mismatch between this node's manifold distances and the TRUE
+     * graph's hop distances over its neighbourhood - the territory's evidence
+     * that it is mis-placed (a faithfully placed hub scores ~0 even when hard to
+     * recall). The localization signal; re-placement minimizes it.
+     */
+    stress: number;
+  }
+
+  interface ClosedWorldLoopResult {
+    before: ClosedWorldReport;
+    after: ClosedWorldReport;
+    /** Each node re-placed, in order. */
+    repairs: ClosedWorldSuspect[];
+    converged: boolean;
+  }
+
+  // -- The wired survey loop (learnCycle's territory-correction tick) ----------
+
+  /**
+   * A ground-truth source the survey loop can run against the LIVE System,
+   * repairing precept coordinates in place. `source` distinguishes a
+   * SELF-supplied territory (free, no authoring - arithmetic/code the system
+   * generates and evaluates itself) from a KB-supplied one (an authored
+   * knowledge base whose closed-world consequences are the truth).
+   */
+  interface GroundTruthChannel {
+    readonly name: string;
+    readonly source: "self" | "kb";
+    /** Measures against the territory, repairs in place, returns the outcome. */
+    run(system: Root.ManifoldView, atomizer: Atomic.Engine): ChannelReport;
+  }
+
+  interface ChannelReport {
+    name: string;
+    source: "self" | "kb";
+    /** Behavioural fidelity before / after this channel's repairs. */
+    fidelityBefore: number;
+    fidelityAfter: number;
+    /** Precepts whose coordinate was corrected. */
+    repairs: number;
+    /**
+     * Units of ground truth consumed - the cost axis of the self-vs-KB
+     * comparison. Self channels generate these for free (expressions evaluated);
+     * KB channels pay for each authored relation.
+     */
+    groundTruthUnits: number;
+  }
+
+  interface SurveyTickReport {
+    channels: ChannelReport[];
+    totalRepairs: number;
   }
 }
 

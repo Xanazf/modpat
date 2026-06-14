@@ -1,6 +1,7 @@
 import { gpu_math, multiplyMatrices4x4 } from "@_lib/math/TensorMath";
 import { createHash } from "node:crypto";
 import { DOPAT_CONFIG } from "@config";
+import { runSurveyTick } from "@core_s/grounding/SurveyLoopRunner";
 import type { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
@@ -98,6 +99,14 @@ class Traveler implements Mapping.Engine {
   private lastSkillElected = 0;
   /** Last-abstracted signature for feedback loop. */
   public lastSignature: string | null = null;
+
+  /**
+   * Phase 4.5 - ground-truth channels the survey loop runs each learnCycle when
+   * `SURVEY_LOOP_ENABLED` is on (territory-correction of drifted terrain). Empty
+   * by default, so the tick is inert until a channel is registered (a
+   * self-supplied arithmetic channel, an authored-KB closed-world channel).
+   */
+  public surveyChannels: Grounding.GroundTruthChannel[] = [];
 
   /** Maximum input length enforced by perceive(). */
   private static readonly MAX_SEQUENCE_LENGTH = 1024;
@@ -1098,7 +1107,43 @@ class Traveler implements Mapping.Engine {
     // C4: decay Christoffel corrections toward zero once per learnCycle.
     this.regularizeChristoffels();
 
+    // Phase 4.5: territory-correction tick - re-point reinforcement from usage
+    // to ground truth, re-placing any precept the territory says has drifted.
+    if (DOPAT_CONFIG.PHYSICS.SURVEY_LOOP_ENABLED) this.runSurveyLoopTick();
+
     report.summary = await this.store.getKnowledgeSummary();
+    return report;
+  }
+
+  /**
+   * Phase 4.5 - the survey loop made continuous. Runs every registered
+   * ground-truth channel against the live manifold, re-placing drifted precepts
+   * in situ, and emits per-source observability gauges. Safe to call directly
+   * (the bench does); `learnCycle` calls it when `SURVEY_LOOP_ENABLED` is on.
+   */
+  public runSurveyLoopTick(): Grounding.SurveyTickReport {
+    const report = runSurveyTick(
+      this.system,
+      this.atomizer,
+      this.surveyChannels
+    );
+    for (const c of report.channels) {
+      metrics.gauge(`survey.${c.source}.fidelity`, c.fidelityAfter);
+      if (c.repairs > 0)
+        metrics.increment(`survey.${c.source}.repairs`, c.repairs);
+    }
+    if (report.totalRepairs > 0) {
+      logger.debug(
+        `[SURVEY] ${report.totalRepairs} terrain repair(s): ` +
+          report.channels
+            .filter(c => c.repairs > 0)
+            .map(
+              c =>
+                `${c.name} ${c.fidelityBefore.toFixed(3)}->${c.fidelityAfter.toFixed(3)} (${c.repairs})`
+            )
+            .join(", ")
+      );
+    }
     return report;
   }
 

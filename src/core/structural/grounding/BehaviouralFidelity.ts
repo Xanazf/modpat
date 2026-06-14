@@ -137,9 +137,15 @@ export function localizeDivergences(
   }
 
   const suspects: Grounding.Suspect[] = [];
+  const tol = NUMBER_LINE_SCALE / 2;
   for (const [id, ws] of implied) {
     ws.sort((a, b) => a - b);
     const suggestedW = ws[Math.floor(ws.length / 2)];
+    // Consensus: the median is robust to outliers from co-corrupted partners,
+    // so a true fault's implied coordinates cluster at its real value even when
+    // other precepts are also wrong. Measure how tightly they agree.
+    let agree = 0;
+    for (const w of ws) if (Math.abs(w - suggestedW) <= tol) agree++;
     suspects.push({
       id,
       label: atomizer.decodeSequence(new Uint32Array([id]), system).trim(),
@@ -148,16 +154,19 @@ export function localizeDivergences(
       failCount: failCount.get(id) ?? 0,
       passCount: passCount.get(id) ?? 0,
       spread: ws[ws.length - 1] - ws[0],
+      consensus: ws.length > 0 ? agree / ws.length : 0,
     });
   }
 
-  // Strongest suspect first: most failing participations, fewest passing,
-  // most consistent implied coordinate.
+  // Strongest suspect first: the most CONSISTENT story (consensus) wins, then
+  // most failing participations, then fewest passing. Consensus is the
+  // multi-fault-robust replacement for the old spread tie-break - it stays high
+  // for a genuine fault even when several precepts are corrupt at once.
   suspects.sort(
     (a, b) =>
+      b.consensus - a.consensus ||
       b.failCount - a.failCount ||
-      a.passCount - b.passCount ||
-      a.spread - b.spread
+      a.passCount - b.passCount
   );
   return suspects;
 }
@@ -198,23 +207,32 @@ export function surveyLoop(
   const repairs: Grounding.Suspect[] = [];
 
   while (current.fidelity < 1 && repairs.length < maxRepairs) {
-    const suspects = localizeDivergences(current, system, atomizer);
-    // A suspect must tell a CONSISTENT story (implied coordinates agree) and
-    // be corroborated by more than one divergence, unless one is all there is.
-    const top = suspects.find(
+    const suspects = localizeDivergences(current, system, atomizer).filter(
+      // A consistent story (consensus), corroborated by more than one
+      // divergence unless one is all there is. Consensus (not spread) is the
+      // gate so SIMULTANEOUS faults are still each repairable.
       s =>
-        s.spread < NUMBER_LINE_SCALE / 2 &&
+        s.consensus >= 0.5 &&
         (s.failCount >= 2 || current.divergences.length === 1)
     );
-    if (!top) break;
-    repairPrecept(system, top.id, top.suggestedW);
-    const next = behaviouralFidelity(exprs, system, atomizer);
-    if (next.divergences.length >= current.divergences.length) {
-      // The repair did not help: revert the write and stop rather than thrash.
-      repairPrecept(system, top.id, top.currentW);
-      break;
+    if (suspects.length === 0) break;
+
+    // Apply the strongest suspect that actually reduces divergences; if it
+    // doesn't, revert and try the next (a wrong pick must not stall the rest).
+    let applied: Grounding.Suspect | null = null;
+    let next = current;
+    for (const s of suspects) {
+      repairPrecept(system, s.id, s.suggestedW);
+      const candidate = behaviouralFidelity(exprs, system, atomizer);
+      if (candidate.divergences.length < current.divergences.length) {
+        applied = s;
+        next = candidate;
+        break;
+      }
+      repairPrecept(system, s.id, s.currentW); // revert, try the next suspect
     }
-    repairs.push(top);
+    if (!applied) break;
+    repairs.push(applied);
     current = next;
   }
 

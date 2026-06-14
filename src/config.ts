@@ -173,6 +173,18 @@ const DOPAT_CONFIG = {
      */
     COLD_START_COOCCURRENCE_ENABLED: true,
     /**
+     * Phase 4.5 - the survey loop, wired into learnCycle. When on, each
+     * learnCycle ends with a territory-correction tick: every registered
+     * GroundTruthChannel (self-supplied arithmetic, KB-supplied closed-world)
+     * predicts via the geometry, checks against the territory, and re-places any
+     * drifted precept in situ - the loop made continuous rather than a
+     * diagnostic. Default OFF: it only acts where ground-truth channels are
+     * registered (none by default), and a System with no grounded numerals /
+     * KB is inert, so existing suites are untouched. The influence of each
+     * ground-truth source is measured in scripts/dev/survey_loop_influence_bench.ts.
+     */
+    SURVEY_LOOP_ENABLED: false,
+    /**
      * TRAVELER step 1 - Spatial jitter radius (XYZ axes) applied when placing a
      * newly ingested atom at the manifold pole (0, 0, 0, 0).  Small enough that
      * co-ingested atoms are distinguishable by D1 singularity detection, large

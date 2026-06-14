@@ -13,7 +13,8 @@ export default defineDemotedPath({
   demotedOn: "2026-06-12",
   supersededBy:
     "ground-truth corrections written into precept coordinates (local, addressable) rather than a learned connection blob",
-  rollbackFlag: "DOPAT_CONFIG.PHYSICS.SETTLING_TRAVERSE_PRIMARY=false (rides with relaxPath)",
+  rollbackFlag:
+    "DOPAT_CONFIG.PHYSICS.SETTLING_TRAVERSE_PRIMARY=false (rides with relaxPath)",
   retirementReason:
     "Measured: random deltaGamma degrades onPath 0.952 to 0.926; fidelity-reward hill-climb saturates at +0.016 (noise on a 32-pair corpus). Structural: the deltaGamma force is non-dissipative and voids the settle's Lyapunov dE/dt <= 0 guarantee; its reward loop lived in the retired relaxPath review; a 64-float blob is un-addressable, the implicit-weights regime the thesis rejects.",
   capabilityDelta:
@@ -23,7 +24,8 @@ export default defineDemotedPath({
   dependencySurface: [
     {
       id: "christoffel-force",
-      description: "deltaGamma + _christoffelForce training in Traveler (still in tree behind the flag).",
+      description:
+        "deltaGamma + _christoffelForce training in Traveler (still in tree behind the flag).",
       locate: { file: "src/core/integral/Traveler.ts", pattern: "deltaGamma" },
     },
   ],

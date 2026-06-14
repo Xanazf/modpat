@@ -22,6 +22,6 @@ export async function runCharacterization(): Promise<never> {
   throw new Error(
     `resonance-path is quarantined: ${CASES.length} capability cases are dormant ` +
       "(no live mechanism). Revive per recover.sh + manifest.dependencySurface, " +
-      "wire this guard to the revived perceive entry, then flip the tier to live-demoted.",
+      "wire this guard to the revived perceive entry, then flip the tier to live-demoted."
   );
 }
