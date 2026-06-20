@@ -318,6 +318,17 @@ export default class SemanticAtomizer
         );
       }
 
+      // Stance: a content token directly preceded by a negation is placed at the
+      // antipode of its concept (X/Y/Z reflected, number-line W preserved), so
+      // "X" and "not X" cancel under wave superposition (see BaseAtomizer).
+      if (
+        !isOp &&
+        i > 0 &&
+        classifyOperatorToken(tokens[i - 1].text) === OperatorClass.Inversion
+      ) {
+        this.applyContrastStance(system, id, scope);
+      }
+
       system.update(id);
     }
 

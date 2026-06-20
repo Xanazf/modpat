@@ -3,7 +3,7 @@
  *
  * A "demoted path" is a mechanism that was once primary and has since been
  * superseded. The cardinal rule of this archive (see REGISTRY.md): a primary
- * mechanism is NEVER deleted, only demoted — so a superseded idea keeps its
+ * mechanism is NEVER deleted, only demoted - so a superseded idea keeps its
  * code, its provenance, the capability it uniquely had, and a guard that
  * detects when it could come back. This is the ablation archive of the
  * research: alternatives kept WITH their measurements, not dropped into git's
@@ -26,7 +26,7 @@ export interface DependencyProbe {
   locate: { file: string; pattern: string };
 }
 
-/** One capability the demoted path had — the spec a revival must satisfy. */
+/** One capability the demoted path had - the spec a revival must satisfy. */
 export interface CapabilityCase {
   id: string;
   /** The inference this case exercises (e.g. "contradiction A ∧ ¬A"). */
@@ -35,7 +35,7 @@ export interface CapabilityCase {
   input: string;
   /** What the demoted path produces / a revival must reproduce. */
   expected: string;
-  /** What the current primary does instead — i.e. the gap that justifies keeping this. */
+  /** What the current primary does instead - i.e. the gap that justifies keeping this. */
   supersededBehavior: string;
 }
 

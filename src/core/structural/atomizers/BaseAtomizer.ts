@@ -234,4 +234,65 @@ export abstract class BaseAtomizer {
     }
     return bestId === -1 ? Number.NaN : system.posX[bestId];
   }
+
+  /**
+   * Stance / antonym positioning (the spatial dual of referent grounding).
+   *
+   * Referent grounding places a token TOWARD its concept; stance places a
+   * negated token at the ANTIPODE of its concept - "negation as opposition, not
+   * absence" (the same relation the structural-grounding stance field encodes
+   * for contrast pairs, here generalised to every atomizer at ingestion). A term
+   * and its negation then sit on opposite manifold halves, so superposing them
+   * cancels to the zero vector - this is the geometry the WaveResolver reads as a
+   * contradiction, with no negation enum dispatch.
+   *
+   * Reflection is over X/Y/Z only; posW (number-line value for numerals, age for
+   * everything else) is preserved - opposition is a spatial orientation, not a
+   * time/value shift. The token reflects off its concept's canonical pole (the
+   * highest-mass already-placed atom sharing the scope) so an affirmed X and its
+   * negation ¬X are exact spatial antipodes regardless of where each sits in the
+   * sequence; with no prior referent it reflects its own affirmed position.
+   */
+  protected applyContrastStance(
+    system: Root.ManifoldView,
+    id: number,
+    scope: number
+  ): void {
+    const pole = this.referentPosition(system, scope, id);
+    if (pole) {
+      system.posX[id] = -pole[0];
+      system.posY[id] = -pole[1];
+      system.posZ[id] = -pole[2];
+    } else {
+      system.posX[id] = -system.posX[id];
+      system.posY[id] = -system.posY[id];
+      system.posZ[id] = -system.posZ[id];
+    }
+  }
+
+  /**
+   * The concept's canonical (affirmed) pole as a full X/Y/Z position: the
+   * highest-mass already-allocated atom carrying `scope`, excluding `excludeId`.
+   * Highest mass = most central / most grounded. Returns null when the scope has
+   * no other atom yet. The spatial counterpart of {@link referentPosX}.
+   */
+  protected referentPosition(
+    system: Root.ManifoldView,
+    scope: number,
+    excludeId: number
+  ): [number, number, number] | null {
+    let bestId = -1;
+    let bestMass = -Infinity;
+    for (const id of system.getIdsByScope(scope)) {
+      if (id === excludeId || !system.isAllocated(id)) continue;
+      const m = system.mass[id];
+      if (m > bestMass) {
+        bestMass = m;
+        bestId = id;
+      }
+    }
+    return bestId === -1
+      ? null
+      : [system.posX[bestId], system.posY[bestId], system.posZ[bestId]];
+  }
 }

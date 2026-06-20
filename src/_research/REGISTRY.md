@@ -37,9 +37,14 @@ Reasons:
   conjunction cases regressed to unknown for months.
 
 Capability lost (the reason to keep it):
-- Contradiction. "A and not A" cancels to net energy at or below zero and emits
-  unknown as a derived result. E1Formula has no contradiction rule and returns
-  null instead, deferring to settling.
+- Contradiction. CORRECTED 2026-06-19: this was an OVERCLAIM. "A and not A" does
+  NOT cancel to net energy ≤ 0 - the matrix returns "A" (maxNetEnergy=0.1115,
+  verified in scripts/dev/contradiction_cancellation_probe.ts). The capability is
+  delivered instead by the WaveResolver (vector cancellation on geometry), wired
+  live as the `interference` provenance. NOT a lost capability of this path.
+- Modus tollens (graded). The −W_LENSING back-coupling drives ¬A to a continuous
+  energy minimum - a graded-confidence MT, where E1Formula Rule MT is boolean.
+  Genuinely unreplaced and verified.
 - Operator discovery. Infers an operator class from resonance flow and writes
   it back to the manifold after three confirmations. No replacement.
 - Missing-link signal. The backward wave flags reference-chain gaps as bridge

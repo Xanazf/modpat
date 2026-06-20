@@ -139,6 +139,17 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
         system.decayRate[id] = 0;
       }
 
+      // Stance: a content token directly preceded by a negation is placed at the
+      // antipode of its concept (X/Y/Z reflected, number-line W preserved), so
+      // "X" and "not X" cancel under wave superposition (see BaseAtomizer).
+      if (
+        !isOperator &&
+        i > 0 &&
+        classifyOperatorToken(tokens[i - 1]) === OperatorClass.Inversion
+      ) {
+        this.applyContrastStance(system, id, scope);
+      }
+
       // Finalize derived properties.
       system.update(id);
     }

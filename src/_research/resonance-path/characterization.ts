@@ -1,7 +1,7 @@
 /**
  * Resonance-path characterization guard.
  *
- * DORMANT while the path is quarantined — there is no live mechanism to assert
+ * DORMANT while the path is quarantined - there is no live mechanism to assert
  * against. The cases (sourced from the manifest) are the contract a revival
  * must satisfy. On revival:
  *   1. restore the mechanism (see recover.sh + manifest.dependencySurface),
@@ -10,7 +10,7 @@
  *   4. flip the manifest tier to "live-demoted".
  *
  * That sequence is exactly the discipline the original resonance path never had
- * — which is why its deletion went unnoticed until R4/R5 had been wrong for
+ * - which is why its deletion went unnoticed until R4/R5 had been wrong for
  * months.
  */
 import type { CapabilityCase } from "../_schema";

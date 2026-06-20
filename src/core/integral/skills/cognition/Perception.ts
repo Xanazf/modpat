@@ -9,6 +9,7 @@
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { resolveLogicFormula } from "@core_i/formula/E1Formula";
+import { resolveWave } from "@core_i/formula/WaveResolver";
 import { OperatorClass, SlotType } from "@core_i/helpers/enums";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
@@ -228,6 +229,21 @@ export async function observeSettlingGradient(
         boostAtomMasses(e1Result);
       }
       return { ids: e1Result, sinkStrength: 1.0, provenance: "formula" };
+    }
+
+    // Phase E1w: wave interference. E1Formula returns null on a contradiction
+    // (a concept superposed with its negation) and defers; the wave channel
+    // DERIVES the verdict from geometry - the opposing atoms cancel to a
+    // zero-amplitude band, and that flat band IS the conclusion `unknown`. Wave
+    // is the authority for the case the symbolic rules structurally cannot
+    // express; it preempts the noisy cluster/settling fallback below.
+    const wave = resolveWave(ids, system);
+    if (wave?.contradiction) {
+      return {
+        ids: atomizer.ingestSequence("unknown", system),
+        sinkStrength: 0,
+        provenance: "interference",
+      };
     }
   }
 

@@ -198,15 +198,19 @@ declare namespace Mapping {
 
   /**
    * Which mechanism produced a perceive result. Rule-bearing provenances
-   * (vault / reduction / partlayer / formula / geodesic) moved along the
-   * reduction axis; "cluster" is the mass-ranked neighbourhood fallback, which
-   * the emission gate holds to the anti-echo test at any output length.
+   * (vault / reduction / partlayer / formula / interference / geodesic) moved
+   * along the reduction axis; "cluster" is the mass-ranked neighbourhood
+   * fallback, which the emission gate holds to the anti-echo test at any output
+   * length. "interference" is the wave channel's geometry-derived verdict (a
+   * contradiction cancelled to a zero-amplitude band) - distinct from
+   * "formula"'s symbolic rule miss that merely defers.
    */
   type Provenance =
     | "vault"
     | "reduction"
     | "partlayer"
     | "formula"
+    | "interference"
     | "synth"
     | "geodesic"
     | "cluster"

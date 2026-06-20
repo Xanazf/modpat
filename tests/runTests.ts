@@ -35,7 +35,9 @@ import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { runStructuralGroundingTests } from "./structural_grounding.test";
 import { runSurveyLoopTests } from "./survey_loop.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
+import { runCompositionTests } from "./composition.test";
 import { runTravelerCorrectionsTests } from "./traveler_corrections.test";
+import { runWaveResolverTests } from "./wave_resolver.test";
 import { executeUMAPSuite } from "./umap_loader.test";
 import { executeUnfolderSuite } from "./unfolder.test";
 import { TestHarness } from "./utils/harness";
@@ -123,6 +125,8 @@ async function run() {
     await runWithTimeout("framework_index", runFrameworkIndexTests);
     await runWithTimeout("traveler_corrections", runTravelerCorrectionsTests);
     await runWithTimeout("fuzzy_connectives", runFuzzyConnectivesTests);
+    await runWithTimeout("wave_resolver", runWaveResolverTests);
+    await runWithTimeout("composition", runCompositionTests);
     await runWithTimeout("session_sheaf", runSessionSheafTests);
     await runWithTimeout("hott_kernel", runHoTTKernelTests);
     await runWithTimeout("phi_session", runPhiSessionTest);
