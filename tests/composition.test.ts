@@ -208,6 +208,48 @@ export async function runCompositionTests() {
       );
     });
 
+    await it("compound-name decompose: reads constituents off the name (no prior synthesis)", async () => {
+      const atomizer = new Atomizer();
+      await atomizer.init();
+      const sys = new System();
+      // "how to make X" with X a compound name → its modifiers ARE the recipe,
+      // the category head "alloy" dropped, no composition ever ingested.
+      const ask = (phrase: string): string => {
+        const out = resolveCompositionQuery(
+          atomizer.ingestSequence(phrase, sys),
+          sys,
+          atomizer
+        );
+        return out ? atomizer.decodeSequence(out, sys).trim() : "null";
+      };
+      for (const phrase of [
+        "how to make titanium-iridium alloy",
+        "what makes titanium-iridium alloy",
+        "what is titanium-iridium alloy made of",
+      ]) {
+        const ans = ask(phrase);
+        assert.ok(
+          ans.includes("titanium") && ans.includes("iridium"),
+          `"${phrase}" → constituents, got "${ans}"`
+        );
+      }
+      // ternary alloy: all three constituents named
+      const ternary = ask("how to make copper-tin-zinc alloy");
+      assert.ok(
+        ["copper", "tin", "zinc"].every(m => ternary.includes(m)),
+        `ternary recipe names all constituents, got "${ternary}"`
+      );
+    });
+
+    await it("an opaque single-word product is honestly unknown", async () => {
+      const atomizer = new Atomizer();
+      await atomizer.init();
+      const sys = new System();
+      // "bronze" is not a compound name and was never composed → no recipe.
+      const q = atomizer.ingestSequence("how do you make bronze", sys);
+      assert.equal(resolveCompositionQuery(q, sys, atomizer), null);
+    });
+
     await it("a non-composition query returns null (no false fire)", async () => {
       const atomizer = new Atomizer();
       await atomizer.init();

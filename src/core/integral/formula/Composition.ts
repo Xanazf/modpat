@@ -130,6 +130,7 @@ export function compose(
 // -- Query path (step 12) ----------------------------------------------------
 // Operator-class codes (mirror helpers/enums.ts; keep this file import-light).
 const OC_NONE = 0;
+const OC_QUERY = 8; // "how" / "what" - a recipe/decompose interrogation
 
 /**
  * Function words that are neither parents nor a product name in a composition
@@ -153,6 +154,8 @@ const COMPOSE_STOPWORDS = new Set([
   "to",
   "do",
   "does",
+  "you",
+  "i",
   "it",
 ]);
 
@@ -177,18 +180,43 @@ const COMPOSE_TRIGGERS = new Set([
 ]);
 
 /**
+ * Category HEAD nouns - the KIND of a composed thing, never a constituent. In a
+ * compound name like "titanium-iridium alloy" the modifiers (titanium, iridium)
+ * are the constituents and "alloy" is the category, dropped when reading the
+ * recipe off the name.
+ */
+const CATEGORY_HEADS = new Set([
+  "alloy",
+  "mixture",
+  "compound",
+  "blend",
+  "solution",
+  "composite",
+  "amalgam",
+  "combination",
+  "mix",
+  "brew",
+  "concoction",
+]);
+
+/**
  * Resolve a composition query off the manifold (step 12 - compose/decompose
- * wired into a query path). Two shapes, both returning the answer's atom ids or
- * null when the input is not a composition query (so the caller falls through):
+ * wired into a query path). Returns the answer's atom ids, or null when the input
+ * is not a composition query (so the caller falls through). Three shapes:
  *
  *  - SYNTHESIS:  "A and B make Z"  → compose A⊕B into a product atom and bind the
  *    name Z to its compound scope (Z now IS the composition). Returns [product].
- *  - DECOMPOSE:  "what is Z made of" → if Z carries a compound scope, recover and
- *    emit its two parents by name ("A and B"). The decompose-as-traversal answer.
+ *  - DECOMPOSE (stored): "what is steam made of" → steam carries a compound scope
+ *    (from a prior synthesis), so decomposeScope recovers its two parents by name.
+ *  - DECOMPOSE (name): "how to make titanium-iridium alloy" / "what is X made of"
+ *    where X is a COMPOUND NAME → its modifiers ARE the constituents (the category
+ *    head "alloy" dropped); we compose their scopes on the fly and decompose to
+ *    recover them through the primitive. This needs no prior `compose` - the
+ *    recipe is read off the name's own morphology.
  *
- * Pure read of scope/operatorClass + the existing compose/decomposeScope; the
- * only mutation is the synthesis product (and its name binding), mirroring how the
- * reduction fast-path mints a reduct.
+ * Pure read of scope/operatorClass + compose/decomposeScope; the only mutation is
+ * the synthesis product (and its name binding), like the reduction fast-path's
+ * minted reduct. The name-decompose path is side-effect-free (a question).
  */
 export function resolveCompositionQuery(
   ids: Uint32Array,
@@ -206,45 +234,89 @@ export function resolveCompositionQuery(
     !COMPOSE_STOPWORDS.has(words[i]) &&
     !COMPOSE_TRIGGERS.has(words[i]) &&
     !/^-?\d+$/.test(words[i]);
+  const conceptsIn = (lo: number, hi: number): number[] => {
+    const out: number[] = [];
+    for (let i = lo; i < hi; i++) if (isConcept(i)) out.push(i);
+    return out;
+  };
 
-  // -- DECOMPOSE: "... Z made of" / "... Z composed of" ----------------------
+  // Emit the constituents of the concept-phrase that NAMES a product. Distinct
+  // scopes only (so "titanium and titanium" can't arise); category heads dropped.
+  const decomposeNamed = (phrase: number[]): Uint32Array | null => {
+    const scopes: number[] = [];
+    const seen = new Set<number>();
+    for (const i of phrase) {
+      if (CATEGORY_HEADS.has(words[i])) continue;
+      const sc = system.scope[ids[i]];
+      if (!seen.has(sc)) {
+        seen.add(sc);
+        scopes.push(sc);
+      }
+    }
+    if (scopes.length === 1) {
+      // A single named concept is decomposable only if it is a STORED composition.
+      const dec = decomposeScope(scopes[0]);
+      if (!dec) return null;
+      const a = atomizer.resolveScope(dec.parents[0]);
+      const b = atomizer.resolveScope(dec.parents[1]);
+      return a && b ? atomizer.ingestSequence(`${a} and ${b}`, system) : null;
+    }
+    if (scopes.length === 2) {
+      // Compound name: compose the two modifier scopes on the fly and decompose
+      // to recover them through the primitive (normalized parent order).
+      const dec = decomposeScope(composeScope(scopes[0], scopes[1]));
+      const a = dec && atomizer.resolveScope(dec.parents[0]);
+      const b = dec && atomizer.resolveScope(dec.parents[1]);
+      return a && b ? atomizer.ingestSequence(`${a} and ${b}`, system) : null;
+    }
+    if (scopes.length >= 3) {
+      // ≥3-constituent name (e.g. a ternary alloy): list all named constituents.
+      const names = scopes
+        .map(sc => atomizer.resolveScope(sc))
+        .filter((w): w is string => !!w);
+      return names.length >= 2
+        ? atomizer.ingestSequence(names.join(" and "), system)
+        : null;
+    }
+    return null;
+  };
+
+  // -- DECOMPOSE (passive): "... Z made of" / "... Z composed of" -------------
+  // The Z-phrase is everything before the "made"/"composed of" pivot.
   const ofIdx = words.findIndex(
     (w, i) => (w === "made" || w === "composed") && words[i + 1] === "of"
   );
-  if (ofIdx > 0) {
-    for (let i = ofIdx - 1; i >= 0; i--) {
-      if (!isConcept(i)) continue;
-      const dec = decomposeScope(system.scope[ids[i]]);
-      if (!dec) return null; // named concept, but not a composition
-      const a = atomizer.resolveScope(dec.parents[0]);
-      const b = atomizer.resolveScope(dec.parents[1]);
-      if (a && b) return atomizer.ingestSequence(`${a} and ${b}`, system);
-      return null;
+  if (ofIdx > 0) return decomposeNamed(conceptsIn(0, ofIdx));
+
+  // -- DECOMPOSE (active): "how to make Z" / "what makes Z" -------------------
+  // A Query token (how/what) with a make-trigger whose parents are NOT before it
+  // (that is the synthesis shape) - the recipe question, so Z is AFTER the trigger.
+  let hasQuery = false;
+  for (const id of ids)
+    if (system.operatorClass[id] === OC_QUERY) {
+      hasQuery = true;
+      break;
     }
-    return null;
-  }
+  const tIdx = words.findIndex(w => COMPOSE_TRIGGERS.has(w));
+  const beforeConcepts = tIdx >= 0 ? conceptsIn(0, tIdx) : [];
+  if (hasQuery && tIdx >= 0 && beforeConcepts.length < 2)
+    return decomposeNamed(conceptsIn(tIdx + 1, N));
 
   // -- SYNTHESIS: "A and B make Z" -------------------------------------------
-  const tIdx = words.findIndex(w => COMPOSE_TRIGGERS.has(w));
-  if (tIdx > 0) {
-    const before: number[] = [];
-    const after: number[] = [];
-    for (let i = 0; i < N; i++) {
-      if (i === tIdx || !isConcept(i)) continue;
-      (i < tIdx ? before : after).push(i);
-    }
-    if (before.length < 2) return null;
-    // First and last distinct concepts before the trigger are the two parents.
-    const aId = ids[before[0]];
-    const bId = ids[before[before.length - 1]];
+  if (tIdx > 0 && beforeConcepts.length >= 2) {
+    const aId = ids[beforeConcepts[0]];
+    const bId = ids[beforeConcepts[beforeConcepts.length - 1]];
     if (aId === bId) return null;
     const productId = compose(aId, bId, system);
     if (productId < 0) return null;
-    // Bind the product name (the concept after the trigger), if given, so a later
-    // "what is Z made of" recovers the parents.
-    if (after.length > 0) {
+    // Bind the product name when it is a single fresh token ("steam"), so a later
+    // "what is steam made of" recovers the parents from the stored composition. A
+    // compound product name ("titanium-iridium alloy") is left to the name path.
+    const after = conceptsIn(tIdx + 1, N).filter(
+      i => !CATEGORY_HEADS.has(words[i])
+    );
+    if (after.length === 1)
       atomizer.bindSymbolScope(words[after[0]], system.scope[productId]);
-    }
     return new Uint32Array([productId]);
   }
 
