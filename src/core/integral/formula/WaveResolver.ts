@@ -33,6 +33,17 @@ const OC_IDENTITY = 1; // implies / is / are - forms an A⇒B bridge
 const COHERENCE_EPS = 1e-6;
 
 /**
+ * Cross-band opposition thresholds (step 5). Two bands count as an asserted
+ * opposition only when their resultants are near-exactly antipodal (cosine below
+ * −0.999) AND comparable in magnitude (smaller/larger > 0.5, so a real cancelling
+ * pair, not a tiny stray vs a dominant one). The near-exact cosine is the guard
+ * against false positives: lexical antonyms are PLACED at exact antipodes, so they
+ * clear it; unrelated grounded concepts do not align to −0.999 by chance.
+ */
+const ANTIPODE_COS_EPS = -0.999;
+const ANTIPODE_MAG_RATIO = 0.5;
+
+/**
  * The phasor is the SPATIAL orientation (X, Y, Z) only. The W axis is excluded
  * on purpose: posW carries temporal age AND the number-line value of numerals
  * (`posW = n × scale`), neither of which is logical phase - a concept negated is
@@ -51,11 +62,31 @@ export interface WaveBand {
   negated: boolean;
 }
 
+/**
+ * A determinate negated conclusion derived from geometry (step 10): an
+ * implication bridge rotated an antecedent band by π (modus tollens), so the
+ * antecedent now points opposite its pole and resolves to `¬antecedent`. This is
+ * the wave channel's reading of the whole opposition family, not just the
+ * fully-cancelled `contradiction` case - and it carries a graded `confidence`
+ * (the band's coherence) that the symbolic E1Formula cannot give.
+ */
+export interface WaveConclusion {
+  /** The scope concluded negated (the implication's antecedent). */
+  scope: number;
+  /** The antecedent band's atom ids. */
+  ids: number[];
+  /** Normalized directional coherence |net|/Σ(amp·|pos|) of the concluded band -
+   *  the graded sink confidence in [0,1] (1 = a clean single phasor). */
+  confidence: number;
+}
+
 export interface WaveResolution {
   /** A scope band collapsed to |net| ≈ 0 - caller emits `unknown`. */
   contradiction: boolean;
   /** The scope of the first cancelled band, or null. */
   contradictionScope: number | null;
+  /** A bridge-derived `¬antecedent` reading (modus tollens), or null. */
+  conclusion: WaveConclusion | null;
   bands: WaveBand[];
 }
 
@@ -95,6 +126,10 @@ interface BandAccum {
   scope: number;
   net: Vec3;
   absMass: number;
+  /** Σ amp·|pos| - the band's total momentum magnitude, the denominator for a
+   *  NORMALIZED directional coherence in [0,1] (1 = all atoms in phase, 0 =
+   *  fully cancelled), distinct from the |pole|-scaled `coherence` field. */
+  absMom: number;
   ids: number[];
 }
 
@@ -122,10 +157,12 @@ export function resolveWave(
       scope,
       net: [0, 0, 0] as Vec3,
       absMass: 0,
+      absMom: 0,
       ids: [],
     };
     for (let k = 0; k < 3; k++) b.net[k] += amp * p[k];
     b.absMass += amp;
+    b.absMom += amp * magnitude(p);
     b.ids.push(id);
     bands.set(scope, b);
   }
@@ -152,6 +189,8 @@ export function resolveWave(
   }
 
   // -- 3. transport: a negated consequent rotates its antecedent band by π -----
+  // A rotated antecedent is the modus-tollens conclusion `¬antecedent` (step 10).
+  const rotated = new Set<number>();
   for (const { from, to } of bridges) {
     const src = bands.get(to);
     const dst = bands.get(from);
@@ -159,14 +198,17 @@ export function resolveWave(
     if (!src || !dst || !poleTo) continue;
     if (dot(src.net, poleTo) < 0) {
       for (let k = 0; k < 3; k++) dst.net[k] = -dst.net[k]; // π rotation
+      rotated.add(from);
     }
   }
 
   // -- 4. read logic off each band's resultant -------------------------------
   const out: WaveBand[] = [];
+  const bandList = [...bands.values()];
   let contradiction = false;
   let contradictionScope: number | null = null;
-  for (const b of bands.values()) {
+  let conclusion: WaveConclusion | null = null;
+  for (const b of bandList) {
     const coherence = b.absMass > 0 ? magnitude(b.net) / b.absMass : 0;
     const pole = poleOf(b.scope);
     const negated = pole ? dot(b.net, pole) < 0 : false;
@@ -178,8 +220,50 @@ export function resolveWave(
       contradiction = true;
       if (contradictionScope === null) contradictionScope = b.scope;
     }
+    // A band the bridge rotated to point opposite its pole is the modus-tollens
+    // conclusion `¬antecedent` - the determinate non-contradiction reading.
+    if (rotated.has(b.scope) && negated && conclusion === null) {
+      // Normalized directional coherence in [0,1] - 1 when the antecedent band is
+      // a single clean phasor, < 1 when its atoms partially cancel.
+      const confidence = b.absMom > 0 ? magnitude(b.net) / b.absMom : 0;
+      conclusion = { scope: b.scope, ids: b.ids, confidence };
+    }
     out.push({ scope: b.scope, ids: b.ids, coherence, negated });
   }
 
-  return { contradiction, contradictionScope, bands: out };
+  // -- 5. cross-band opposition (lexical antonyms) ----------------------------
+  // Within-band cancellation (step 4) catches "A ∧ ¬A": both atoms share one
+  // scope and sum to zero. LEXICAL antonyms ("hot ∧ cold") are DISTINCT concepts
+  // in DISTINCT scopes, so they never share a band - but the stance step placed
+  // each at the other's antipode, so their band resultants point in OPPOSITE
+  // directions. Two bands whose nets are near-antipodal (and comparable in
+  // magnitude) are therefore an asserted opposition - a contradiction read off
+  // geometry, with no "not" token and no antonym lexicon at resolve time
+  // (deliberate antipodal placement is what makes the cosine ≈ −1; unrelated
+  // grounded concepts do not line up this exactly).
+  if (!contradiction) {
+    for (let i = 0; i < bandList.length && !contradiction; i++) {
+      const a = bandList[i];
+      const magA = magnitude(a.net);
+      if (magA < COHERENCE_EPS) continue;
+      for (let j = i + 1; j < bandList.length; j++) {
+        const b = bandList[j];
+        const magB = magnitude(b.net);
+        if (magB < COHERENCE_EPS) continue;
+        const cos = dot(a.net, b.net) / (magA * magB);
+        const ratio = Math.min(magA, magB) / Math.max(magA, magB);
+        if (cos < ANTIPODE_COS_EPS && ratio > ANTIPODE_MAG_RATIO) {
+          contradiction = true;
+          contradictionScope = a.scope;
+          break;
+        }
+      }
+    }
+  }
+
+  // A contradiction subsumes any negated-conclusion reading (the band cancelled
+  // outright), so don't also emit an MT conclusion in that case.
+  if (contradiction) conclusion = null;
+
+  return { contradiction, contradictionScope, conclusion, bands: out };
 }

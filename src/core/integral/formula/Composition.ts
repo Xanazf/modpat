@@ -127,6 +127,130 @@ export function compose(
   return steamId;
 }
 
+// -- Query path (step 12) ----------------------------------------------------
+// Operator-class codes (mirror helpers/enums.ts; keep this file import-light).
+const OC_NONE = 0;
+
+/**
+ * Function words that are neither parents nor a product name in a composition
+ * query - the grammatical scaffold of "what is X made of" / "A and B make Z".
+ */
+const COMPOSE_STOPWORDS = new Set([
+  "what",
+  "is",
+  "are",
+  "was",
+  "made",
+  "composed",
+  "of",
+  "a",
+  "an",
+  "the",
+  "and",
+  "with",
+  "from",
+  "into",
+  "to",
+  "do",
+  "does",
+  "it",
+]);
+
+/** Verbs that signal "combine the preceding concepts into the following one". */
+const COMPOSE_TRIGGERS = new Set([
+  "make",
+  "makes",
+  "made",
+  "form",
+  "forms",
+  "formed",
+  "combine",
+  "combines",
+  "combined",
+  "mix",
+  "mixes",
+  "mixed",
+  "yield",
+  "yields",
+  "produce",
+  "produces",
+]);
+
+/**
+ * Resolve a composition query off the manifold (step 12 - compose/decompose
+ * wired into a query path). Two shapes, both returning the answer's atom ids or
+ * null when the input is not a composition query (so the caller falls through):
+ *
+ *  - SYNTHESIS:  "A and B make Z"  → compose A⊕B into a product atom and bind the
+ *    name Z to its compound scope (Z now IS the composition). Returns [product].
+ *  - DECOMPOSE:  "what is Z made of" → if Z carries a compound scope, recover and
+ *    emit its two parents by name ("A and B"). The decompose-as-traversal answer.
+ *
+ * Pure read of scope/operatorClass + the existing compose/decomposeScope; the
+ * only mutation is the synthesis product (and its name binding), mirroring how the
+ * reduction fast-path mints a reduct.
+ */
+export function resolveCompositionQuery(
+  ids: Uint32Array,
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine
+): Uint32Array | null {
+  const N = ids.length;
+  if (N < 3) return null;
+  const wordOf = (id: number): string =>
+    (atomizer.resolveScope(system.scope[id]) ?? "").toLowerCase().trim();
+  const words = Array.from(ids, wordOf);
+  const isConcept = (i: number): boolean =>
+    system.operatorClass[ids[i]] === OC_NONE &&
+    words[i].length > 0 &&
+    !COMPOSE_STOPWORDS.has(words[i]) &&
+    !COMPOSE_TRIGGERS.has(words[i]) &&
+    !/^-?\d+$/.test(words[i]);
+
+  // -- DECOMPOSE: "... Z made of" / "... Z composed of" ----------------------
+  const ofIdx = words.findIndex(
+    (w, i) => (w === "made" || w === "composed") && words[i + 1] === "of"
+  );
+  if (ofIdx > 0) {
+    for (let i = ofIdx - 1; i >= 0; i--) {
+      if (!isConcept(i)) continue;
+      const dec = decomposeScope(system.scope[ids[i]]);
+      if (!dec) return null; // named concept, but not a composition
+      const a = atomizer.resolveScope(dec.parents[0]);
+      const b = atomizer.resolveScope(dec.parents[1]);
+      if (a && b) return atomizer.ingestSequence(`${a} and ${b}`, system);
+      return null;
+    }
+    return null;
+  }
+
+  // -- SYNTHESIS: "A and B make Z" -------------------------------------------
+  const tIdx = words.findIndex(w => COMPOSE_TRIGGERS.has(w));
+  if (tIdx > 0) {
+    const before: number[] = [];
+    const after: number[] = [];
+    for (let i = 0; i < N; i++) {
+      if (i === tIdx || !isConcept(i)) continue;
+      (i < tIdx ? before : after).push(i);
+    }
+    if (before.length < 2) return null;
+    // First and last distinct concepts before the trigger are the two parents.
+    const aId = ids[before[0]];
+    const bId = ids[before[before.length - 1]];
+    if (aId === bId) return null;
+    const productId = compose(aId, bId, system);
+    if (productId < 0) return null;
+    // Bind the product name (the concept after the trigger), if given, so a later
+    // "what is Z made of" recovers the parents.
+    if (after.length > 0) {
+      atomizer.bindSymbolScope(words[after[0]], system.scope[productId]);
+    }
+    return new Uint32Array([productId]);
+  }
+
+  return null;
+}
+
 /** A product atom decomposed back into its parents' live atom ids. */
 export interface Decomposition extends ScopeDecomposition {
   /** Allocated atoms carrying each parent scope (empty if the parent is gone). */

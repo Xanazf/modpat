@@ -144,6 +144,23 @@ export async function runWaveResolverTests() {
         true,
         "¬B stays negated"
       );
+      // Step 10: the rotated antecedent IS the emitted MT conclusion ¬A, with a
+      // graded sink confidence (1.0 for a clean single-phasor antecedent).
+      assert.ok(res.conclusion, "MT must surface a negated conclusion");
+      assert.equal(res.conclusion.scope, SCOPE_A);
+      assert.ok(
+        res.conclusion.confidence > 0.99,
+        `clean MT antecedent confidence ≈ 1, got ${res.conclusion.confidence}`
+      );
+    });
+
+    await it("A ∧ B → no MT conclusion (nothing rotated)", async () => {
+      const sys = fresh();
+      const a = placeContent(sys, SCOPE_A, P);
+      const and = placeOp(sys, OperatorClass.Conjunction);
+      const b = placeContent(sys, SCOPE_B, Q);
+      const res = resolveWave(new Uint32Array([a, and, b]), sys, poleOf);
+      assert.equal(res?.conclusion, null, "no bridge ⇒ no negated conclusion");
     });
   });
 
@@ -185,6 +202,67 @@ export async function runWaveResolverTests() {
         "fire ∧ ¬fire must collapse to a contradiction"
       );
       assert.equal(res.contradictionScope, fireScope);
+    });
+  });
+
+  // -- Step 9: lexical antonym stance (opposition with no "not" token) ---------
+  await describe("WaveResolver – lexical antonym opposition (step 9)", async () => {
+    const atomizer = new Atomizer();
+    await atomizer.init();
+
+    const ingest = (phrase: string) => {
+      const sys = new System();
+      const ids = atomizer.ingestSequence(phrase, sys);
+      return { sys, ids };
+    };
+    const distOf = (sys: System, ids: Uint32Array, wa: string, wb: string) => {
+      const sa = atomizer.getSymbolScope(wa);
+      const sb = atomizer.getSymbolScope(wb);
+      const a = Array.from(ids).find(id => sys.scope[id] === sa)!;
+      const b = Array.from(ids).find(id => sys.scope[id] === sb)!;
+      return Math.hypot(
+        sys.posX[a] - sys.posX[b],
+        sys.posY[a] - sys.posY[b],
+        sys.posZ[a] - sys.posZ[b]
+      );
+    };
+
+    await it("opposed-pair distance ≫ neutral-pair distance", async () => {
+      const opp = ingest("hot and cold");
+      const neu = ingest("hot and water");
+      const dOpp = distOf(opp.sys, opp.ids, "hot", "cold");
+      const dNeu = distOf(neu.sys, neu.ids, "hot", "water");
+      assert.ok(
+        dOpp > dNeu * 10,
+        `opposed ${dOpp.toFixed(2)} must be ≫ neutral ${dNeu.toFixed(2)}`
+      );
+    });
+
+    await it('"hot and cold" → contradiction with no "not" token', async () => {
+      const { sys, ids } = ingest("hot and cold");
+      const res = resolveWave(ids, sys);
+      assert.ok(res);
+      assert.equal(
+        res.contradiction,
+        true,
+        "lexical opposites must collapse to a contradiction"
+      );
+    });
+
+    await it('"true and false" → contradiction (adjective opposition)', async () => {
+      const { sys, ids } = ingest("true and false");
+      const res = resolveWave(ids, sys);
+      assert.equal(res?.contradiction, true);
+    });
+
+    await it("a non-antonym pair does NOT collapse (no false unknown)", async () => {
+      const { sys, ids } = ingest("hot and water");
+      const res = resolveWave(ids, sys);
+      assert.equal(
+        res?.contradiction,
+        false,
+        "unrelated concepts must not read as a contradiction"
+      );
     });
   });
 
@@ -230,6 +308,24 @@ export async function runWaveResolverTests() {
         t.lastProvenance,
         "interference",
         "fire ∧ water is not a contradiction"
+      );
+    });
+
+    // -- Step 11: the wave channel runs in PROBE MODE too ---------------------
+    await it("contradiction derives unknown via interference even in probe mode", async () => {
+      const t = freshTraveler();
+      const ids = atomizer.ingestSequence("fire and not fire |-", system);
+      const out = await t.perceive(ids, { probeMode: true });
+      const ans = atomizer.decodeSequence(out, system).trim();
+      assert.equal(
+        ans,
+        "unknown",
+        "probe-mode contradiction must still derive unknown"
+      );
+      assert.equal(
+        t.lastProvenance,
+        "interference",
+        "wave channel must fire in probe mode (no !probeMode guard)"
       );
     });
   });

@@ -1,5 +1,6 @@
 import { UMAPLoader } from "@core_s/UMAPLoader";
 import { DOPAT_CONFIG, SYSTEM_CONFIG } from "@src/config";
+import { antonymsOf } from "./AntonymLexicon";
 
 /**
  * All first-person pronouns are normalised to their canonical form before scope
@@ -146,6 +147,20 @@ export abstract class BaseAtomizer {
   }
 
   /**
+   * Bind a symbol to an arbitrary scope (step 12 - concept composition). When a
+   * product concept is learned ("steam = fire ⊕ water"), its name is bound to the
+   * COMPOUND scope the composition produced, so `getSymbolScope("steam")` returns
+   * the compound scope and the concept literally IS its composition -
+   * `decomposeScope` then recovers its parents by name. Overrides any prior
+   * binding for the symbol (the composed identity supersedes a primitive one).
+   */
+  public bindSymbolScope(symbol: string, scope: number): void {
+    const s = symbol.toLowerCase().trim();
+    this.symbolMap.set(s, scope);
+    this.reverseMap.set(scope, s);
+  }
+
+  /**
    * Phase 5 - coordinate-source migration. Returns the posX a newly-ingested
    * token should land at, deriving it from the token's *referent* (an existing
    * grounded precept that shares the scope) rather than from GloVe co-occurrence.
@@ -268,6 +283,44 @@ export abstract class BaseAtomizer {
       system.posY[id] = -system.posY[id];
       system.posZ[id] = -system.posZ[id];
     }
+  }
+
+  /**
+   * Lexical-antonym stance (roadmap step 9): the spatial dual of syntactic
+   * negation for opposition that carries no "not" token. When `token` is a
+   * WordNet lexical antonym of a concept already placed in the manifold ("cold"
+   * when "hot" is present, "false" when "true" is), the token is placed at that
+   * concept's X/Y/Z ANTIPODE - exactly the geometry {@link applyContrastStance}
+   * produces for "not X". So opposed concepts sit on opposite manifold halves and
+   * superpose to a cancelling resultant (the WaveResolver's contradiction reading).
+   *
+   * Fires only when the antonym is ALREADY placed (its pole is read from the
+   * highest-mass atom carrying its scope); a lone concept with no opposite present
+   * is left untouched. Reflection is X/Y/Z only - posW (number-line value / age)
+   * is preserved, opposition being a spatial orientation, not a value/time shift.
+   * Returns true when a stance was applied. Gated by
+   * `LEXICAL_ANTONYM_STANCE_ENABLED`; a missing antonym asset makes it inert.
+   */
+  protected applyLexicalAntonymStance(
+    system: Root.ManifoldView,
+    id: number,
+    token: string
+  ): boolean {
+    if (!DOPAT_CONFIG.PHYSICS.LEXICAL_ANTONYM_STANCE_ENABLED) return false;
+    for (const antonym of antonymsOf(token)) {
+      const pole = this.referentPosition(
+        system,
+        this.getSymbolScope(antonym),
+        id
+      );
+      if (pole) {
+        system.posX[id] = -pole[0];
+        system.posY[id] = -pole[1];
+        system.posZ[id] = -pole[2];
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

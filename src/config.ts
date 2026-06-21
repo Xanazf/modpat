@@ -185,6 +185,19 @@ const DOPAT_CONFIG = {
      */
     SURVEY_LOOP_ENABLED: true,
     /**
+     * Roadmap step 9 - lexical antonym stance. When on, a content token that is a
+     * WordNet lexical antonym of an already-placed concept ("cold" after "hot",
+     * "false" after "true") is placed at that concept's X/Y/Z antipode at
+     * ingestion - the same stance geometry syntactic negation ("not X") already
+     * uses, extended to opposition that carries no "not" token. Opposed concepts
+     * then sit on opposite manifold halves (distance >> neutral pairs) and the
+     * WaveResolver reads "hot and cold" as a contradiction. The antonym source is
+     * AntonymLexicon (data/antonyms.json, from en-wordnet). It only fires when
+     * BOTH members of a pair are present in the manifold, so a lone concept is
+     * untouched; number-line W is preserved (opposition is spatial, not temporal).
+     */
+    LEXICAL_ANTONYM_STANCE_ENABLED: true,
+    /**
      * TRAVELER step 1 - Spatial jitter radius (XYZ axes) applied when placing a
      * newly ingested atom at the manifold pole (0, 0, 0, 0).  Small enough that
      * co-ingested atoms are distinguishable by D1 singularity detection, large

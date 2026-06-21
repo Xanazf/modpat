@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import Atomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import {
   compose,
@@ -6,8 +7,12 @@ import {
   decompose,
   decomposeScope,
   isComposed,
+  resolveCompositionQuery,
 } from "@core_i/formula/Composition";
+import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
+import Traveler from "@core_i/Traveler";
+import Store from "@core_s/Memory";
 import { describe, it } from "./utils/harness";
 
 /**
@@ -170,6 +175,91 @@ export async function runCompositionTests() {
         composeScope(dec.parents[0], dec.parents[1]),
         sys.scope[steam],
         "compose(decompose(steam)) === steam.scope"
+      );
+    });
+  });
+
+  // -- Step 12: compose/decompose wired into a query path --------------------
+  await describe("Composition – query path (step 12)", async () => {
+    await it("resolveCompositionQuery: synthesis then decompose round-trip", async () => {
+      const atomizer = new Atomizer();
+      await atomizer.init();
+      const sys = new System();
+
+      // SYNTHESIS: "fire and water make steam" mints a product and names it.
+      const synth = atomizer.ingestSequence("fire and water make steam", sys);
+      const product = resolveCompositionQuery(synth, sys, atomizer);
+      assert.ok(product && product.length === 1, "synthesis returns a product");
+      assert.ok(
+        isComposed(sys.scope[product[0]]),
+        "the product carries a compound scope"
+      );
+      // the name "steam" is now bound to the compound scope (steam IS fire⊕water)
+      assert.equal(atomizer.getSymbolScope("steam"), sys.scope[product[0]]);
+
+      // DECOMPOSE: "what is steam made of" recovers the two parents by name.
+      const q = atomizer.ingestSequence("what is steam made of", sys);
+      const ans = resolveCompositionQuery(q, sys, atomizer);
+      assert.ok(ans, "decompose returns an answer");
+      const decoded = atomizer.decodeSequence(ans, sys).trim();
+      assert.ok(
+        decoded.includes("fire") && decoded.includes("water"),
+        `decompose must name both parents, got "${decoded}"`
+      );
+    });
+
+    await it("a non-composition query returns null (no false fire)", async () => {
+      const atomizer = new Atomizer();
+      await atomizer.init();
+      const sys = new System();
+      const q = atomizer.ingestSequence("the sky is blue |-", sys);
+      assert.equal(resolveCompositionQuery(q, sys, atomizer), null);
+    });
+
+    await it('"what is X made of" for a primitive X yields nothing to decompose', async () => {
+      const atomizer = new Atomizer();
+      await atomizer.init();
+      const sys = new System();
+      const q = atomizer.ingestSequence("what is fire made of", sys);
+      assert.equal(
+        resolveCompositionQuery(q, sys, atomizer),
+        null,
+        "a non-composed concept has no parents to emit"
+      );
+    });
+
+    await it("wired into perceive: provenance is 'composition'", async () => {
+      const system = new System();
+      const atomizer = new Atomizer();
+      await atomizer.init();
+      const store = new Store(system, atomizer, ":memory:");
+      await store.waitForInit();
+      const t = createTestTraveler(
+        system,
+        atomizer,
+        new Traveler(system, atomizer, store),
+        store
+      );
+      t.setGPUEnabled(false);
+
+      const synth = atomizer.ingestSequence(
+        "fire and water make steam",
+        system
+      );
+      await t.perceive(synth);
+      assert.equal(
+        t.lastProvenance,
+        "composition",
+        "synthesis must resolve via the composition channel"
+      );
+
+      const q = atomizer.ingestSequence("what is steam made of", system);
+      const out = await t.perceive(q);
+      const decoded = atomizer.decodeSequence(out, system).trim();
+      assert.equal(t.lastProvenance, "composition");
+      assert.ok(
+        decoded.includes("fire") && decoded.includes("water"),
+        `decompose answer names both parents, got "${decoded}"`
       );
     });
   });

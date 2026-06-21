@@ -141,13 +141,18 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
 
       // Stance: a content token directly preceded by a negation is placed at the
       // antipode of its concept (X/Y/Z reflected, number-line W preserved), so
-      // "X" and "not X" cancel under wave superposition (see BaseAtomizer).
+      // "X" and "not X" cancel under wave superposition (see BaseAtomizer). When
+      // there is no "not", a LEXICAL antonym of an already-placed concept gets the
+      // same antipodal stance ("cold" opposite "hot"); the two are mutually
+      // exclusive so opposition is never applied twice (step 9).
       if (
         !isOperator &&
         i > 0 &&
         classifyOperatorToken(tokens[i - 1]) === OperatorClass.Inversion
       ) {
         this.applyContrastStance(system, id, scope);
+      } else if (!isOperator) {
+        this.applyLexicalAntonymStance(system, id, token);
       }
 
       // Finalize derived properties.

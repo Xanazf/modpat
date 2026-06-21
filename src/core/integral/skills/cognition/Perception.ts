@@ -9,6 +9,7 @@
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
 import { resolveLogicFormula } from "@core_i/formula/E1Formula";
+import { resolveCompositionQuery } from "@core_i/formula/Composition";
 import { resolveWave } from "@core_i/formula/WaveResolver";
 import { OperatorClass, SlotType } from "@core_i/helpers/enums";
 import type Store from "@core_s/Memory";
@@ -187,6 +188,23 @@ export async function observeSettlingGradient(
     }
   }
 
+  // Phase 0d: concept composition (step 12). "A and B make Z" composes the two
+  // parents into a product atom (binding the name Z to its compound scope); "what
+  // is Z made of" decomposes a composed concept back to its two parents. Pure
+  // scope arithmetic over the existing Composition primitive; gated to non-probe
+  // mode because synthesis mints (and names) a product atom.
+  if (!opts.probeMode) {
+    const composed = resolveCompositionQuery(ids, system, atomizer);
+    if (composed && composed.length > 0) {
+      if (store) {
+        await store.crystallizeProof(ids, composed, 1.0);
+        boostAtomMasses(ids);
+        boostAtomMasses(composed);
+      }
+      return { ids: composed, sinkStrength: 1.0, provenance: "composition" };
+    }
+  }
+
   // Phase 0: PartLayer topology walk
   const N = ids.length;
   const lastId = ids[N - 1];
@@ -219,7 +237,8 @@ export async function observeSettlingGradient(
     }
   }
 
-  // Phase E1: fuzzy connective formula resolution
+  // Phase E1: fuzzy connective formula resolution (symbolic; the fast cache).
+  // Its success path crystallizes a proof, so it stays gated to non-probe mode.
   if (!opts.probeMode) {
     const e1Result = resolveLogicFormula(ids, system);
     if (e1Result !== null && e1Result.length > 0) {
@@ -230,13 +249,21 @@ export async function observeSettlingGradient(
       }
       return { ids: e1Result, sinkStrength: 1.0, provenance: "formula" };
     }
+  }
 
-    // Phase E1w: wave interference. E1Formula returns null on a contradiction
-    // (a concept superposed with its negation) and defers; the wave channel
-    // DERIVES the verdict from geometry - the opposing atoms cancel to a
-    // zero-amplitude band, and that flat band IS the conclusion `unknown`. Wave
-    // is the authority for the case the symbolic rules structurally cannot
-    // express; it preempts the noisy cluster/settling fallback below.
+  // Phase E1w: wave interference. E1Formula returns null on a contradiction
+  // (a concept superposed with its negation) and defers; the wave channel
+  // DERIVES the verdict from geometry - the opposing atoms cancel to a
+  // zero-amplitude band, and that flat band IS the conclusion `unknown`. Wave
+  // is the authority for the case the symbolic rules structurally cannot
+  // express; it preempts the noisy cluster/settling fallback below.
+  //
+  // Step 11: this runs in PROBE MODE too. It is pure geometry with no proof
+  // crystallization or mass boosting (only the terminal output is materialized,
+  // as every return path does), and probe mode - used by learnCycle / challenge
+  // for physics-only verification - is exactly where a contradiction settling to
+  // a noisy cluster answer would be wrong. A contradiction is wrong in any mode.
+  {
     const wave = resolveWave(ids, system);
     if (wave?.contradiction) {
       return {
@@ -244,6 +271,22 @@ export async function observeSettlingGradient(
         sinkStrength: 0,
         provenance: "interference",
       };
+    }
+    // Step 10: beyond contradiction, the wave channel also reads a determinate
+    // `¬antecedent` off the geometry (an implication bridge rotated the antecedent
+    // band by π - modus tollens). E1Formula handles the well-formed MT phrasings
+    // as the fast cache and returns above; this fires when its parser missed the
+    // shape, so Wave is the authority for the whole opposition family, and it
+    // carries a graded sink confidence (the band coherence) E1 cannot give.
+    if (wave?.conclusion) {
+      const word = atomizer.resolveScope(wave.conclusion.scope);
+      if (word && word !== "unknown") {
+        return {
+          ids: atomizer.ingestSequence(`not ${word}`, system),
+          sinkStrength: wave.conclusion.confidence,
+          provenance: "interference",
+        };
+      }
     }
   }
 

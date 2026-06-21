@@ -21,6 +21,7 @@ declare namespace Atomic {
     decodeSequence(sequenceIds: Uint32Array, system: Root.ManifoldView): string;
     getSymbolScope(symbol: string, isOperator: boolean): number;
     resolveScope(scope: number): string | undefined;
+    bindSymbolScope(symbol: string, scope: number): void;
     init(): Promise<void>;
   }
 }

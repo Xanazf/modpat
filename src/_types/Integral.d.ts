@@ -211,6 +211,7 @@ declare namespace Mapping {
     | "partlayer"
     | "formula"
     | "interference"
+    | "composition"
     | "synth"
     | "geodesic"
     | "cluster"

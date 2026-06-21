@@ -320,13 +320,18 @@ export default class SemanticAtomizer
 
       // Stance: a content token directly preceded by a negation is placed at the
       // antipode of its concept (X/Y/Z reflected, number-line W preserved), so
-      // "X" and "not X" cancel under wave superposition (see BaseAtomizer).
+      // "X" and "not X" cancel under wave superposition (see BaseAtomizer). When
+      // there is no "not", a LEXICAL antonym of an already-placed concept gets the
+      // same antipodal stance ("cold" opposite "hot"); mutually exclusive so
+      // opposition is never applied twice (step 9).
       if (
         !isOp &&
         i > 0 &&
         classifyOperatorToken(tokens[i - 1].text) === OperatorClass.Inversion
       ) {
         this.applyContrastStance(system, id, scope);
+      } else if (!isOp) {
+        this.applyLexicalAntonymStance(system, id, tokens[i].text);
       }
 
       system.update(id);
