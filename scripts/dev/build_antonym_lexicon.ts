@@ -1,6 +1,7 @@
 /**
  * build_antonym_lexicon.ts - extract WordNet lexical antonym pairs into a compact
- * JSON asset (`data/antonyms.json`) consumed by AntonymLexicon at runtime.
+ * JSON asset (`src/core/structural/atomizers/antonyms.json`) consumed by
+ * AntonymLexicon at runtime.
  *
  * Antonymy in WordNet is a LEXICAL relation (word-to-word, not synset-to-synset),
  * encoded by the `!` pointer in the data.* files. Each such pointer carries a

@@ -192,7 +192,7 @@ const DOPAT_CONFIG = {
      * uses, extended to opposition that carries no "not" token. Opposed concepts
      * then sit on opposite manifold halves (distance >> neutral pairs) and the
      * WaveResolver reads "hot and cold" as a contradiction. The antonym source is
-     * AntonymLexicon (data/antonyms.json, from en-wordnet). It only fires when
+     * AntonymLexicon (atomizers/antonyms.json, from en-wordnet). It only fires when
      * BOTH members of a pair are present in the manifold, so a lone concept is
      * untouched; number-line W is preserved (opposition is spatial, not temporal).
      */

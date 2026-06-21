@@ -1,6 +1,6 @@
 /**
- * AntonymLexicon - lexical opposition pairs from WordNet (`data/antonyms.json`,
- * built by scripts/dev/build_antonym_lexicon.ts).
+ * AntonymLexicon - lexical opposition pairs from WordNet (`antonyms.json`,
+ * co-located here, built by scripts/dev/build_antonym_lexicon.ts).
  *
  * This is the antonym SOURCE for the base atomizer's stance primitive: where
  * syntactic negation ("not X") is triggered by a token, LEXICAL antonyms
@@ -22,11 +22,6 @@ import { fileURLToPath } from "node:url";
 
 const ASSET = join(
   dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "..",
-  "..",
-  "data",
   "antonyms.json"
 );
 
