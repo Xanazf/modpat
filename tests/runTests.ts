@@ -5,7 +5,9 @@ import { executeArithmeticSuite } from "./arithmetic.test";
 import { runAstSeederTests } from "./ast_seeder.test";
 import { executeAtomizerRoundTripSuite } from "./atomizer_roundtrip.test";
 import { executeCodeSynthesisSuite } from "./code_synthesis.test";
+import { runCoherenceCalibrationTests } from "./coherence_calibration.test";
 import { runCoherenceGateTests } from "./coherence_gate.test";
+import { runCompositionTests } from "./composition.test";
 import { executeLogicSuite } from "./dod_resolution_matrix.test";
 import { executeSuite as executeSystemSuite } from "./dod_system.test";
 import { executeEnduranceSuite } from "./endurance.test";
@@ -35,13 +37,12 @@ import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { runStructuralGroundingTests } from "./structural_grounding.test";
 import { runSurveyLoopTests } from "./survey_loop.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
-import { runCompositionTests } from "./composition.test";
 import { runTravelerCorrectionsTests } from "./traveler_corrections.test";
-import { runWaveResolverTests } from "./wave_resolver.test";
 import { executeUMAPSuite } from "./umap_loader.test";
 import { executeUnfolderSuite } from "./unfolder.test";
 import { TestHarness } from "./utils/harness";
 import { runRigorousTraps as executeLogicTrapsSuite } from "./verbose_logic_traps.test";
+import { runWaveResolverTests } from "./wave_resolver.test";
 
 const SUITE_TIMEOUT_MS = 120_000;
 
@@ -133,6 +134,7 @@ async function run() {
     await runWithTimeout("spatial_hash", runSpatialHashTests);
     await runWithTimeout("structural_grounding", runStructuralGroundingTests);
     await runWithTimeout("coherence_gate", runCoherenceGateTests);
+    await runWithTimeout("coherence_calibration", runCoherenceCalibrationTests);
     await runWithTimeout("reduction", runReductionTests);
     await runWithTimeout("survey_loop", runSurveyLoopTests);
 

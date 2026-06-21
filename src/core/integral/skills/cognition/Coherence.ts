@@ -47,20 +47,68 @@ function singularityAt(
   const z = system.posZ[id];
   const w = system.posW[id];
 
-  // Rank-deficient overlap: another atom at the same coordinates (D1 rule).
+  // Rank-deficient overlap: another atom at the same coordinates (D1 rule) -
+  // but a coincidence is collapsed terrain only between logically-INDEPENDENT
+  // concepts. The stance model deliberately co-locates a concept and a negation
+  // that resolves to it: "the cat is not outside" places "¬outside" exactly on
+  // "inside" (outside is reflected to its antipode by the antonym stance, then
+  // back again by "not"), so the coincidence IS the disjunctive syllogism, not
+  // a defect. Its geometric signature: an overlapping atom of a DIFFERENT
+  // concept whose AFFIRMED mention sits at this point's antipode (-x,-y,-z, same
+  // w - stance reflects X/Y/Z and preserves W). When that is present the pile is
+  // a meaningful cancellation; otherwise it is a genuine collapse (e.g. a void
+  // "unknown" answer landing on another "unknown").
+  let overlapped = false;
   for (const j of gridIndex.candidatesInRadius(x, y, z, w, 0.1)) {
     if (j === id || !system.isAllocated(j)) continue;
     const dx = x - system.posX[j];
     const dy = y - system.posY[j];
     const dz = z - system.posZ[j];
     const dw = w - system.posW[j];
-    if (dx * dx + dy * dy + dz * dz + dw * dw < 1e-9) {
-      return OVERLAP_SINGULARITY;
+    if (dx * dx + dy * dy + dz * dz + dw * dw >= 1e-9) continue;
+    overlapped = true;
+    if (
+      system.scope[j] !== system.scope[id] &&
+      hasAffirmedAntipode(system, gridIndex, system.scope[j], x, y, z, w)
+    ) {
+      // id sits at the antipode of concept(j)'s affirmed pole ⇒ id ≡ ¬concept(j):
+      // a meaningful cancellation, not collapse.
+      return (
+        computeCurvature(system, gridIndex, x, y, z, w).gradPhiSq /
+        (1 + computeCurvature(system, gridIndex, x, y, z, w).phi ** 2)
+      );
     }
   }
+  if (overlapped) return OVERLAP_SINGULARITY;
 
   const { phi, gradPhiSq } = computeCurvature(system, gridIndex, x, y, z, w);
   return gradPhiSq / (1 + phi * phi);
+}
+
+/**
+ * True when concept `scope` has an AFFIRMED mention at the antipode of
+ * (x,y,z) with the same W - the geometric signature that an atom of `scope`
+ * sitting at (x,y,z) is a NEGATED mention whose affirmation lies opposite, so a
+ * different concept coinciding with (x,y,z) resolves to its negation.
+ */
+function hasAffirmedAntipode(
+  system: Root.ManifoldView,
+  gridIndex: GridIndex4D,
+  scope: number,
+  x: number,
+  y: number,
+  z: number,
+  w: number
+): boolean {
+  for (const k of gridIndex.candidatesInRadius(-x, -y, -z, w, 0.1)) {
+    if (!system.isAllocated(k) || system.scope[k] !== scope) continue;
+    const dx = -x - system.posX[k];
+    const dy = -y - system.posY[k];
+    const dz = -z - system.posZ[k];
+    const dw = w - system.posW[k];
+    if (dx * dx + dy * dy + dz * dz + dw * dw < 1e-9) return true;
+  }
+  return false;
 }
 
 function gateDefaults(): Required<Cognition.GateOptions> {
@@ -100,21 +148,29 @@ export function gateEmit(
   opts: Cognition.GateOptions = {}
 ): Cognition.GateVerdict {
   const o = { ...gateDefaults(), ...opts };
+
+  // The conclusion is allowed to coincide with its own premises (it should -
+  // that is grounding), so those overlaps don't count toward singularity.
+  const inScopes = new Set<number>();
+  const inputIdSet = new Set<number>();
+  for (let i = 0; i < inputIds.length; i++) {
+    const id = inputIds[i];
+    if (system.isAllocated(id)) {
+      inScopes.add(system.scope[id]);
+      inputIdSet.add(id);
+    }
+  }
+
   const base = pathCoherence(
     outputIds,
     system,
     gridIndex,
     inferentialEffort,
-    o
+    o,
+    inputIdSet
   );
   const empty = { emit: false, reason: "void" as const, base, echoFrac: 0 };
   if (outputIds.length === 0) return empty;
-
-  const inScopes = new Set<number>();
-  for (let i = 0; i < inputIds.length; i++) {
-    const id = inputIds[i];
-    if (system.isAllocated(id)) inScopes.add(system.scope[id]);
-  }
 
   let echo = 0;
   let valid = 0;
@@ -141,7 +197,8 @@ export function pathCoherence(
   system: Root.ManifoldView,
   gridIndex: GridIndex4D,
   inferentialEffort: number,
-  opts: Cognition.CoherenceOptions = {}
+  opts: Cognition.CoherenceOptions = {},
+  ignoreOverlap?: ReadonlySet<number>
 ): Cognition.CoherenceReport {
   const o = { ...defaults(), ...opts };
 
@@ -160,7 +217,7 @@ export function pathCoherence(
       system.posW[id]
     );
     sumCurvature += Math.abs(R);
-    const sing = singularityAt(id, system, gridIndex);
+    const sing = singularityAt(id, system, gridIndex, ignoreOverlap);
     if (sing > maxSingularity) maxSingularity = sing;
     count++;
   }

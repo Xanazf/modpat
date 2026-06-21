@@ -11,20 +11,22 @@
  *
  * Each case runs on a freshly reset manifold with a fresh Traveler, so the
  * inferential-effort signal reflects that query's traversal only.
+ *
+ * `runCalibration()` is also imported by tests/coherence_calibration.test.ts,
+ * which asserts the gate metrics as a regression guard - so this file must have
+ * no import-time side effects (no global config mutation, no self-run). Both are
+ * confined to the direct-execution block at the bottom.
  */
 
 import { gpu_math } from "@_lib/math/TensorMath";
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
+import { pathToFileURL } from "node:url";
 import LogicAtomizer from "@atomics/LogicAtomizer";
-import { DOPAT_CONFIG } from "@config";
 import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import Store from "@core_s/Memory";
 import { gateEmit, pathCoherence } from "@skill_cogi/Coherence";
-
-// CPU-only harness; the GPU device otherwise keeps the process alive past the run.
-(DOPAT_CONFIG as { USE_GPU: boolean }).USE_GPU = false;
 
 interface Case {
   id: string;
@@ -147,7 +149,7 @@ const CASES: Case[] = [
   },
 ];
 
-interface Row {
+export interface Row {
   id: string;
   kind: string;
   correct: boolean;
@@ -162,7 +164,33 @@ interface Row {
   echoFrac: number;
 }
 
-async function run(): Promise<void> {
+export interface CalibrationResult {
+  rows: Row[];
+  /** Balanced accuracy of the coherence SCORE alone at its best in-sample
+   *  threshold (the geometry's own discriminative power). */
+  coherenceBalancedAccuracy: number;
+  bestThreshold: number;
+  /** Balanced accuracy of the live gate (coherence + anti-echo + provenance) -
+   *  this is what perceive() actually emits through. */
+  gateBalancedAccuracy: number;
+  /** Wrong answers the gate let through. Safety violation: must stay empty. */
+  falseEmits: Row[];
+  /** Correct answers the gate suppressed (over-abstention). */
+  overAbstains: Row[];
+}
+
+/**
+ * Run the labelled corpus through the live perceive pipeline and return the
+ * gate metrics. Pure (fresh System/Store, closed at the end); no global state
+ * is mutated, so it is safe to call from the test suite. Pass `{ log: true }`
+ * for the standalone diagnostic dump.
+ */
+export async function runCalibration(
+  opts: { log?: boolean } = {}
+): Promise<CalibrationResult> {
+  const say = (m: string) => {
+    if (opts.log) console.log(m);
+  };
   const system = new System();
   const atomizer = new LogicAtomizer();
   await atomizer.init();
@@ -223,7 +251,7 @@ async function run(): Promise<void> {
       echoFrac: verdict.echoFrac,
     });
 
-    console.log(
+    say(
       `[${c.id.padEnd(8)}] ${correct ? "OK  " : "WRONG"} ` +
         `score=${rep.score.toFixed(3)} eff=${rep.inferentialEffort.toFixed(3)} ` +
         `sing=${rep.maxSingularity.toFixed(2)} ` +
@@ -241,21 +269,22 @@ async function run(): Promise<void> {
   const min = (a: Row[]) => (a.length ? Math.min(...a.map(r => r.score)) : NaN);
   const max = (a: Row[]) => (a.length ? Math.max(...a.map(r => r.score)) : NaN);
 
-  console.log("\n================ CALIBRATION ================");
-  console.log(
+  say("\n================ CALIBRATION ================");
+  say(
     `correct (n=${good.length}): score mean=${mean(good).toFixed(3)} ` +
       `min=${min(good).toFixed(3)} max=${max(good).toFixed(3)}`
   );
-  console.log(
+  say(
     `wrong   (n=${wrong.length}): score mean=${mean(wrong).toFixed(3)} ` +
       `min=${min(wrong).toFixed(3)} max=${max(wrong).toFixed(3)}`
   );
-  console.log(
+  say(
     `traversed (geodesic ran): ${rows.filter(r => r.traversed).length}/${rows.length}` +
       `  (coherence's effort signal is only meaningful for these)`
   );
 
-  // Best separating threshold by balanced accuracy.
+  // Best separating threshold by balanced accuracy. NOTE: fit in-sample on this
+  // same corpus - it measures the score's separability, not held-out accuracy.
   let bestT = 0;
   let bestAcc = -1;
   for (let t = 0; t <= 1.0001; t += 0.02) {
@@ -269,13 +298,13 @@ async function run(): Promise<void> {
       bestT = t;
     }
   }
-  console.log(
+  say(
     `best threshold=${bestT.toFixed(2)} balanced-accuracy=${(bestAcc * 100).toFixed(1)}%`
   );
 
   // The dangerous quadrant: wrong answers that still score "coherent".
   const wrongButCoherent = wrong.filter(r => r.score >= bestT);
-  console.log(
+  say(
     `WRONG-BUT-COHERENT @${bestT.toFixed(2)}: ${wrongButCoherent.length}` +
       (wrongButCoherent.length
         ? ` -> ${wrongButCoherent.map(r => `${r.id}(${r.score.toFixed(2)})`).join(", ")}`
@@ -286,43 +315,54 @@ async function run(): Promise<void> {
   // would actually emit through. Goal: gate-emit ≡ correct.
   const gateTP = good.filter(r => r.gateEmit).length;
   const gateTN = wrong.filter(r => !r.gateEmit).length;
-  const gateFP = wrong.filter(r => r.gateEmit).length;
-  const gateFN = good.filter(r => !r.gateEmit).length;
   const gateBal =
     (good.length ? gateTP / good.length : 1) / 2 +
     (wrong.length ? gateTN / wrong.length : 1) / 2;
-  console.log(
+  const falseEmits = wrong.filter(r => r.gateEmit);
+  const overAbstains = good.filter(r => !r.gateEmit);
+  say(
     `gate: emit-correct=${gateTP}/${good.length}  abstain-wrong=${gateTN}/${wrong.length}  ` +
       `balanced-accuracy=${(gateBal * 100).toFixed(1)}%`
   );
-  if (gateFP > 0) {
-    console.log(
-      `gate FALSE-EMITs (wrong answer escapes the gate): ${
-        wrong
-          .filter(r => r.gateEmit)
-          .map(r => `${r.id}(echo=${r.echoFrac.toFixed(2)})`)
-          .join(", ") || "(none)"
-      }`
+  if (falseEmits.length > 0) {
+    say(
+      `gate FALSE-EMITs (wrong answer escapes the gate): ${falseEmits
+        .map(r => `${r.id}(echo=${r.echoFrac.toFixed(2)})`)
+        .join(", ")}`
     );
   }
-  if (gateFN > 0) {
-    console.log(
-      `gate OVER-ABSTAINs (correct answer gated out): ${
-        good
-          .filter(r => !r.gateEmit)
-          .map(r => `${r.id}(${r.gateReason})`)
-          .join(", ") || "(none)"
-      }`
+  if (overAbstains.length > 0) {
+    say(
+      `gate OVER-ABSTAINs (correct answer gated out): ${overAbstains
+        .map(r => `${r.id}(${r.gateReason})`)
+        .join(", ")}`
     );
   }
+
+  return {
+    rows,
+    coherenceBalancedAccuracy: bestAcc,
+    bestThreshold: bestT,
+    gateBalancedAccuracy: gateBal,
+    falseEmits,
+    overAbstains,
+  };
 }
 
-run()
-  .catch(e => {
-    console.error(e);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    if (gpu_math.dispose) await gpu_math.dispose().catch(() => {});
-    process.exit(process.exitCode ?? 0);
-  });
+// Direct execution only (`tsx tests/benchmarks/coherence_calibration.ts`): dump
+// the full diagnostic and tear down the GPU device. Skipped when imported by the
+// test suite, which calls runCalibration() and manages its own lifecycle.
+const invokedDirectly =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  runCalibration({ log: true })
+    .catch(e => {
+      console.error(e);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      if (gpu_math.dispose) await gpu_math.dispose().catch(() => {});
+      process.exit(process.exitCode ?? 0);
+    });
+}
