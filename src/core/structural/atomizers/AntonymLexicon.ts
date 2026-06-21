@@ -20,10 +20,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ASSET = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "antonyms.json"
-);
+const ASSET = join(dirname(fileURLToPath(import.meta.url)), "antonyms.json");
 
 let table: Map<string, string[]> | null = null;
 
