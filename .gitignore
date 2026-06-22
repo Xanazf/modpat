@@ -23,3 +23,5 @@ scripts/venv
 logs/
 plans/
 graphify-out/
+.claude/
+CLAUDE.md

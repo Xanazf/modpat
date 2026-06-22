@@ -8,8 +8,8 @@
 
 import { GridIndex4D } from "@_lib/soa/GridIndex4D";
 import { DOPAT_CONFIG } from "@config";
-import { resolveLogicFormula } from "@core_i/formula/E1Formula";
 import { resolveCompositionQuery } from "@core_i/formula/Composition";
+import { resolveLogicFormula } from "@core_i/formula/E1Formula";
 import { resolveWave } from "@core_i/formula/WaveResolver";
 import { OperatorClass, SlotType } from "@core_i/helpers/enums";
 import type Store from "@core_s/Memory";

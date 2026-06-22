@@ -5,18 +5,18 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
-"@biomejs/biome@npm:^2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/biome@npm:2.4.15"
+"@biomejs/biome@npm:^2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/biome@npm:2.5.0"
   dependencies:
-    "@biomejs/cli-darwin-arm64": "npm:2.4.15"
-    "@biomejs/cli-darwin-x64": "npm:2.4.15"
-    "@biomejs/cli-linux-arm64": "npm:2.4.15"
-    "@biomejs/cli-linux-arm64-musl": "npm:2.4.15"
-    "@biomejs/cli-linux-x64": "npm:2.4.15"
-    "@biomejs/cli-linux-x64-musl": "npm:2.4.15"
-    "@biomejs/cli-win32-arm64": "npm:2.4.15"
-    "@biomejs/cli-win32-x64": "npm:2.4.15"
+    "@biomejs/cli-darwin-arm64": "npm:2.5.0"
+    "@biomejs/cli-darwin-x64": "npm:2.5.0"
+    "@biomejs/cli-linux-arm64": "npm:2.5.0"
+    "@biomejs/cli-linux-arm64-musl": "npm:2.5.0"
+    "@biomejs/cli-linux-x64": "npm:2.5.0"
+    "@biomejs/cli-linux-x64-musl": "npm:2.5.0"
+    "@biomejs/cli-win32-arm64": "npm:2.5.0"
+    "@biomejs/cli-win32-x64": "npm:2.5.0"
   dependenciesMeta:
     "@biomejs/cli-darwin-arm64":
       optional: true
@@ -36,127 +36,144 @@ __metadata:
       optional: true
   bin:
     biome: bin/biome
-  checksum: 10c0/46ac114b97f00e5fe0d22590337c80c7a2467d2aabf57d7f99b92356fd01cf76bb7d972782508e0f51c34e08a1a7f8e9eefec6fe72aa7b5f53b9161b7fe582e2
+  checksum: 10c0/53ca615db3b8da17ec477df0bdc55e12b986d35211722d223ab08c3ead5d9e518518a2bfc81f6923d1d2c05bdaacdff2ea749e9d12857bd85d7b8fc45cd0215e
   languageName: node
   linkType: hard
 
-"@biomejs/cli-darwin-arm64@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-darwin-arm64@npm:2.4.15"
+"@biomejs/cli-darwin-arm64@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-darwin-arm64@npm:2.5.0"
   conditions: os=darwin & cpu=arm64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-darwin-x64@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-darwin-x64@npm:2.4.15"
+"@biomejs/cli-darwin-x64@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-darwin-x64@npm:2.5.0"
   conditions: os=darwin & cpu=x64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-arm64-musl@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-linux-arm64-musl@npm:2.4.15"
+"@biomejs/cli-linux-arm64-musl@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-linux-arm64-musl@npm:2.5.0"
   conditions: os=linux & cpu=arm64 & libc=musl
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-arm64@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-linux-arm64@npm:2.4.15"
+"@biomejs/cli-linux-arm64@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-linux-arm64@npm:2.5.0"
   conditions: os=linux & cpu=arm64 & libc=glibc
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-x64-musl@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-linux-x64-musl@npm:2.4.15"
+"@biomejs/cli-linux-x64-musl@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-linux-x64-musl@npm:2.5.0"
   conditions: os=linux & cpu=x64 & libc=musl
   languageName: node
   linkType: hard
 
-"@biomejs/cli-linux-x64@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-linux-x64@npm:2.4.15"
+"@biomejs/cli-linux-x64@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-linux-x64@npm:2.5.0"
   conditions: os=linux & cpu=x64 & libc=glibc
   languageName: node
   linkType: hard
 
-"@biomejs/cli-win32-arm64@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-win32-arm64@npm:2.4.15"
+"@biomejs/cli-win32-arm64@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-win32-arm64@npm:2.5.0"
   conditions: os=win32 & cpu=arm64
   languageName: node
   linkType: hard
 
-"@biomejs/cli-win32-x64@npm:2.4.15":
-  version: 2.4.15
-  resolution: "@biomejs/cli-win32-x64@npm:2.4.15"
+"@biomejs/cli-win32-x64@npm:2.5.0":
+  version: 2.5.0
+  resolution: "@biomejs/cli-win32-x64@npm:2.5.0"
   conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
 
-"@duckdb/node-api@npm:^1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-api@npm:1.5.2-r.1"
+"@duckdb/node-api@npm:^1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-api@npm:1.5.4-r.1"
   dependencies:
-    "@duckdb/node-bindings": "npm:1.5.2-r.1"
-  checksum: 10c0/130333a0543b9278493cd8f85eec903bd58fdfd71c2c13f0f574173d814bee716df13cab2f087b408f04131a844e224f566c588f583e3da393d9b783b1450888
+    "@duckdb/node-bindings": "npm:1.5.4-r.1"
+  checksum: 10c0/bda78278c8a099397f5b0ceb7d1bb601c0eefdf1470ad478e5dfa52a01e6ccb23a559c6489222d6fb1fdd83532266d007918a353d4aafde8aa8a5b208856b109
   languageName: node
   linkType: hard
 
-"@duckdb/node-bindings-darwin-arm64@npm:1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-bindings-darwin-arm64@npm:1.5.2-r.1"
+"@duckdb/node-bindings-darwin-arm64@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-darwin-arm64@npm:1.5.4-r.1"
   conditions: os=darwin & cpu=arm64
   languageName: node
   linkType: hard
 
-"@duckdb/node-bindings-darwin-x64@npm:1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-bindings-darwin-x64@npm:1.5.2-r.1"
+"@duckdb/node-bindings-darwin-x64@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-darwin-x64@npm:1.5.4-r.1"
   conditions: os=darwin & cpu=x64
   languageName: node
   linkType: hard
 
-"@duckdb/node-bindings-linux-arm64@npm:1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-bindings-linux-arm64@npm:1.5.2-r.1"
-  conditions: os=linux & cpu=arm64
+"@duckdb/node-bindings-linux-arm64-musl@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-linux-arm64-musl@npm:1.5.4-r.1"
+  conditions: os=linux & cpu=arm64 & libc=musl
   languageName: node
   linkType: hard
 
-"@duckdb/node-bindings-linux-x64@npm:1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-bindings-linux-x64@npm:1.5.2-r.1"
-  conditions: os=linux & cpu=x64
+"@duckdb/node-bindings-linux-arm64@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-linux-arm64@npm:1.5.4-r.1"
+  conditions: os=linux & cpu=arm64 & libc=glibc
   languageName: node
   linkType: hard
 
-"@duckdb/node-bindings-win32-arm64@npm:1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-bindings-win32-arm64@npm:1.5.2-r.1"
+"@duckdb/node-bindings-linux-x64-musl@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-linux-x64-musl@npm:1.5.4-r.1"
+  conditions: os=linux & cpu=x64 & libc=musl
+  languageName: node
+  linkType: hard
+
+"@duckdb/node-bindings-linux-x64@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-linux-x64@npm:1.5.4-r.1"
+  conditions: os=linux & cpu=x64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"@duckdb/node-bindings-win32-arm64@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-win32-arm64@npm:1.5.4-r.1"
   conditions: os=win32 & cpu=arm64
   languageName: node
   linkType: hard
 
-"@duckdb/node-bindings-win32-x64@npm:1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-bindings-win32-x64@npm:1.5.2-r.1"
+"@duckdb/node-bindings-win32-x64@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings-win32-x64@npm:1.5.4-r.1"
   conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
 
-"@duckdb/node-bindings@npm:1.5.2-r.1":
-  version: 1.5.2-r.1
-  resolution: "@duckdb/node-bindings@npm:1.5.2-r.1"
+"@duckdb/node-bindings@npm:1.5.4-r.1":
+  version: 1.5.4-r.1
+  resolution: "@duckdb/node-bindings@npm:1.5.4-r.1"
   dependencies:
-    "@duckdb/node-bindings-darwin-arm64": "npm:1.5.2-r.1"
-    "@duckdb/node-bindings-darwin-x64": "npm:1.5.2-r.1"
-    "@duckdb/node-bindings-linux-arm64": "npm:1.5.2-r.1"
-    "@duckdb/node-bindings-linux-x64": "npm:1.5.2-r.1"
-    "@duckdb/node-bindings-win32-arm64": "npm:1.5.2-r.1"
-    "@duckdb/node-bindings-win32-x64": "npm:1.5.2-r.1"
+    "@duckdb/node-bindings-darwin-arm64": "npm:1.5.4-r.1"
+    "@duckdb/node-bindings-darwin-x64": "npm:1.5.4-r.1"
+    "@duckdb/node-bindings-linux-arm64": "npm:1.5.4-r.1"
+    "@duckdb/node-bindings-linux-arm64-musl": "npm:1.5.4-r.1"
+    "@duckdb/node-bindings-linux-x64": "npm:1.5.4-r.1"
+    "@duckdb/node-bindings-linux-x64-musl": "npm:1.5.4-r.1"
+    "@duckdb/node-bindings-win32-arm64": "npm:1.5.4-r.1"
+    "@duckdb/node-bindings-win32-x64": "npm:1.5.4-r.1"
+    detect-libc: "npm:^2.1.2"
   dependenciesMeta:
     "@duckdb/node-bindings-darwin-arm64":
       optional: true
@@ -164,13 +181,17 @@ __metadata:
       optional: true
     "@duckdb/node-bindings-linux-arm64":
       optional: true
+    "@duckdb/node-bindings-linux-arm64-musl":
+      optional: true
     "@duckdb/node-bindings-linux-x64":
+      optional: true
+    "@duckdb/node-bindings-linux-x64-musl":
       optional: true
     "@duckdb/node-bindings-win32-arm64":
       optional: true
     "@duckdb/node-bindings-win32-x64":
       optional: true
-  checksum: 10c0/abecbadd590d0a2d366640f1b04e0be205a577ca1119ecf3961d7f4229dd481ec80f36ef6d046b9ac7677762530911f0794a47e0a5c61465cf7bb0e11d1d0c04
+  checksum: 10c0/22d9274434aa0934a07b688f12899d0173eb387c6b0f555707ef876b426bd76cc272b08c207307d9eae9127431e187efba0639fa489e0ceb88eb817ec0cd48e8
   languageName: node
   linkType: hard
 
@@ -417,12 +438,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^25.8.0":
-  version: 25.8.0
-  resolution: "@types/node@npm:25.8.0"
+"@types/node@npm:^25.9.4":
+  version: 25.9.4
+  resolution: "@types/node@npm:25.9.4"
   dependencies:
     undici-types: "npm:>=7.24.0 <7.24.7"
-  checksum: 10c0/ff53e5428309d2e6060190ec5e02afd0e4a7369456b16130a7f5898f12a6ad0efd62d752830f2f7355d714ae429bc0acbb2dc0cbf761cadb03e88c4996cdf1dc
+  checksum: 10c0/4b19670ef5dbefa836a2d4a9ed0b5ac6befbc0844bfdd12833234ff8fa68da1f65e6362d2ef87acf7e7da9d6ff649bf81c454d12e802b7e7fa9246a15c0edcf6
   languageName: node
   linkType: hard
 
@@ -592,14 +613,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"compromise@npm:^14.15.0":
-  version: 14.15.0
-  resolution: "compromise@npm:14.15.0"
+"compromise@npm:^14.15.1":
+  version: 14.15.1
+  resolution: "compromise@npm:14.15.1"
   dependencies:
     efrt: "npm:2.7.0"
     grad-school: "npm:0.0.5"
     suffix-thumb: "npm:5.0.2"
-  checksum: 10c0/059cd23221ee8cf21e25ada607d25174f68f170880512acf1e28a5742146ea4287ca0ec7c769ff08ce57205d1dc118a9d50c1960e23faf4672c4b7a3e76fdc2a
+  checksum: 10c0/756aecf97df88b5296488f2ee8fa237ac7ea4dc5b641fa46534c8492939f72711c8155c81adb89466624ff361658f0ebdd354bc6ecbde24ba027bf21531fccb1
   languageName: node
   linkType: hard
 
@@ -674,6 +695,13 @@ __metadata:
   version: 1.0.0
   resolution: "delayed-stream@npm:1.0.0"
   checksum: 10c0/d758899da03392e6712f042bec80aa293bbe9e9ff1b2634baae6a360113e708b91326594c8a486d475c69d6259afb7efacdc3537bfcda1c6c648e390ce601b19
+  languageName: node
+  linkType: hard
+
+"detect-libc@npm:^2.1.2":
+  version: 2.1.2
+  resolution: "detect-libc@npm:2.1.2"
+  checksum: 10c0/acc675c29a5649fa1fb6e255f993b8ee829e510b6b56b0910666949c80c364738833417d0edb5f90e4e46be17228b0f2b66a010513984e18b15deeeac49369c4
   languageName: node
   linkType: hard
 
@@ -1236,21 +1264,21 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "modpat@workspace:."
   dependencies:
-    "@biomejs/biome": "npm:^2.4.15"
-    "@duckdb/node-api": "npm:^1.5.2-r.1"
+    "@biomejs/biome": "npm:^2.5.0"
+    "@duckdb/node-api": "npm:^1.5.4-r.1"
     "@kmamal/gpu": "npm:^0.2.1"
     "@types/d3-force": "npm:^3.0.10"
-    "@types/node": "npm:^25.8.0"
+    "@types/node": "npm:^25.9.4"
     "@webgpu/types": "npm:^0.1.70"
     abstract-syntax-tree: "npm:^2.22.0"
     chalk: "npm:^5.6.2"
     commander: "npm:^14.0.3"
-    compromise: "npm:^14.15.0"
+    compromise: "npm:^14.15.1"
     d3-force-3d: "npm:^3.0.6"
     d3-hexadectree: "npm:^1.0.0"
     en-dictionary: "npm:^2.0.3"
     ring-buffer-ts: "npm:^1.2.0"
-    tsx: "npm:^4.22.0"
+    tsx: "npm:^4.22.4"
     typescript: "npm:^6.0.3"
     wgpu-matrix: "npm:^3.4.2"
     wikipedia: "npm:^2.5.0"
@@ -1471,9 +1499,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tsx@npm:^4.22.0":
-  version: 4.22.0
-  resolution: "tsx@npm:4.22.0"
+"tsx@npm:^4.22.4":
+  version: 4.22.4
+  resolution: "tsx@npm:4.22.4"
   dependencies:
     esbuild: "npm:~0.28.0"
     fsevents: "npm:~2.3.3"
@@ -1482,7 +1510,7 @@ __metadata:
       optional: true
   bin:
     tsx: dist/cli.mjs
-  checksum: 10c0/cc7474ac13eebf6bb4d87ce21bdd79213261a37a6e247a74d7920b3e0ce7b704b42e7642e7978e2f3de5762981b3b74ed0ae14cf60934107aa0b1390f25e46ba
+  checksum: 10c0/3df31eb4929ff501b40b122163705b201ea57a492581e14312ae95d21eb015b33ded46a3fd564f9c89a0e8083186987fc4f10dd38182c4ad6241605974f6c927
   languageName: node
   linkType: hard
 

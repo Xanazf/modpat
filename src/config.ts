@@ -49,6 +49,24 @@ const DOPAT_CONFIG = {
     /** Additive influence boost for Condition-slot precepts during path relaxation. */
     COND_SLOT_ATTRACTION: 60.0,
     /**
+     * Pre-P7 skill election (Traveler.electSkill). Skills are elected by
+     * attractor proximity - each capability precept's mass-weighted Gaussian
+     * pull at the query's manifold locus - but geometry only DECIDES when the
+     * field is unambiguous; otherwise the intent classifier's prior holds, so
+     * the legacy string routing is reproduced exactly. Two gates:
+     *  - SKILL_FIELD_MIN_DEPTH: the winning capability's normalized pull
+     *    e^{-d²/F} ∈ [0,1] must clear this floor - the query must sit SQUARELY
+     *    inside a well (0.5 ⇒ within d² ≤ F·ln2 ≈ 28), not graze its edge.
+     *  - SKILL_FIELD_DOMINANCE: the runner-up's mass-weighted score must be
+     *    ≤ this fraction of the winner's - the well must be UNAMBIGUOUS. This is
+     *    what makes the election defer to intent in production today, where the
+     *    four capability precepts cluster within ~10 posX units (so any query
+     *    near them sees two near-equal pulls and never clears dominance) while
+     *    still activating once capabilities are spatially distinguished.
+     */
+    SKILL_FIELD_MIN_DEPTH: 0.5,
+    SKILL_FIELD_DOMINANCE: 0.5,
+    /**
      * Hard upper bound for φ (local semantic density sum) to prevent numerical
      * blow-up in the conformal factor e^{-2φ} when many atoms overlap.
      * P2 safety gate: increments Mapper.phiClippedCount when triggered.
@@ -78,6 +96,31 @@ const DOPAT_CONFIG = {
      *   Δw = 1.0 → weight ≈ 0.05
      */
     PHI_TEMPORAL_DECAY: 3.0,
+    /**
+     * Pre-P7 directional W-propagation (DirectionalPropagation.ts), the
+     * energetic enforcement of reasoning-vs-rationalization (NOTES.md "The W
+     * Dimension"). A support wave that gathers evidence accumulates amplitude
+     * that decays along W:
+     *  - W_PROPAGATION_DECAY: distance attenuation per unit |Δw|, applied in
+     *    BOTH directions - support far in time is weaker support.
+     *  - W_BACKWARD_PENALTY: the extra attenuation per unit |Δw| paid only when
+     *    the wave travels from a NEWER conclusion back toward OLDER premises
+     *    (rationalization - against the established-knowledge gradient). Forward
+     *    propagation (reasoning: older premises → newer conclusion, with the
+     *    time arrow) pays only the distance decay. This makes the falsifiable
+     *    claim structural: over the SAME support set, backward-gathered
+     *    amplitude is exp(-W_BACKWARD_PENALTY·Σ|Δw|) lower than forward - so
+     *    rationalizations are *measurably* lower-amplitude, an output property
+     *    rather than a post-hoc label.
+     */
+    W_PROPAGATION_DECAY: 0.05,
+    W_BACKWARD_PENALTY: 0.5,
+    /**
+     * Below this backward/forward amplitude ratio an inference reads as
+     * rationalization (the support was meaningfully cheaper to gather forward).
+     * 1.0 ⇒ premises W-coincident with the conclusion (no direction to tell).
+     */
+    W_RATIONALIZATION_RATIO_THRESHOLD: 0.95,
     /**
      * C3 - Discrete Ricci flow: hard cap on the curvature value fed into the
      * Ricci tick update.  Clamps the *input* R, not the resulting density delta,

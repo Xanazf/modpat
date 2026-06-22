@@ -8,6 +8,7 @@ import { executeCodeSynthesisSuite } from "./code_synthesis.test";
 import { runCoherenceCalibrationTests } from "./coherence_calibration.test";
 import { runCoherenceGateTests } from "./coherence_gate.test";
 import { runCompositionTests } from "./composition.test";
+import { runDirectionalPropagationTests } from "./directional_propagation.test";
 import { executeLogicSuite } from "./dod_resolution_matrix.test";
 import { executeSuite as executeSystemSuite } from "./dod_system.test";
 import { executeEnduranceSuite } from "./endurance.test";
@@ -27,11 +28,13 @@ import { runPhiSessionTest } from "./phi_session.test";
 import { runProactivePathTests } from "./proactive_paths.test";
 import { runReductionTests } from "./reduction.test";
 import { runRigorousTests as executeRigorousLogicSuite } from "./rigorous_logic.test";
+import { runSceneGroundingTests } from "./scene_grounding.test";
 import { executeSemanticSuite } from "./semantic_atomizer.test";
 import { executeComplexSemanticSuite } from "./semantic_reasoning_perf.test";
 import { runSessionSheafTests } from "./session_sheaf.test";
 import { executeSignalManagerSuite } from "./signal_and_manager.test";
 import { runSignatureConsistencyTests } from "./signature_consistency.test";
+import { runSkillElectionTests } from "./skill_election.test";
 import { runSpatialHashTests } from "./spatial_hash.test";
 import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { runStructuralGroundingTests } from "./structural_grounding.test";
@@ -137,6 +140,12 @@ async function run() {
     await runWithTimeout("coherence_calibration", runCoherenceCalibrationTests);
     await runWithTimeout("reduction", runReductionTests);
     await runWithTimeout("survey_loop", runSurveyLoopTests);
+    await runWithTimeout("skill_election", runSkillElectionTests);
+    await runWithTimeout(
+      "directional_propagation",
+      runDirectionalPropagationTests
+    );
+    await runWithTimeout("scene_grounding", runSceneGroundingTests);
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");
   } catch (error) {

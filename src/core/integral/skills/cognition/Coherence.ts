@@ -166,8 +166,8 @@ export function gateEmit(
     system,
     gridIndex,
     inferentialEffort,
-    o,
-    inputIdSet
+    o
+    //inputIdSet
   );
   const empty = { emit: false, reason: "void" as const, base, echoFrac: 0 };
   if (outputIds.length === 0) return empty;
@@ -197,8 +197,8 @@ export function pathCoherence(
   system: Root.ManifoldView,
   gridIndex: GridIndex4D,
   inferentialEffort: number,
-  opts: Cognition.CoherenceOptions = {},
-  ignoreOverlap?: ReadonlySet<number>
+  opts: Cognition.CoherenceOptions = {}
+  //ignoreOverlap?: ReadonlySet<number>
 ): Cognition.CoherenceReport {
   const o = { ...defaults(), ...opts };
 
@@ -217,7 +217,7 @@ export function pathCoherence(
       system.posW[id]
     );
     sumCurvature += Math.abs(R);
-    const sing = singularityAt(id, system, gridIndex, ignoreOverlap);
+    const sing = singularityAt(id, system, gridIndex);
     if (sing > maxSingularity) maxSingularity = sing;
     count++;
   }

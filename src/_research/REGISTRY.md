@@ -8,6 +8,10 @@ Machine-readable detail (dependency probes, capability cases) lives in each
 path's manifest.ts. Revival readiness is reported by
 scripts/dev/attic_status.ts.
 
+Findings that are NOT replacements - measured results and dormant-mechanism
+notes that must be on the record under the same review discipline (a built but
+gated-off mechanism must not be graded as a missing one) - live in FINDINGS.md.
+
 Tiers:
 - live-demoted: code still compiles, wired behind a rollback flag.
 - quarantined: code removed from the tree, preserved as a snapshot plus a git

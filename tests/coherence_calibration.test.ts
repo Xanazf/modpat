@@ -3,10 +3,10 @@
  *
  * The "gate = 100% balanced accuracy" figure cited across ROADMAP.md lived only
  * in tests/benchmarks/coherence_calibration.ts, which `yarn test` never ran - so
- * a silent drop went unnoticed (the gate is currently 96.4%: disj2's correct
- * answer is over-abstained). This suite runs the same labelled corpus through the
- * live perceive pipeline and pins the gate's behaviour, so any further drift
- * fails CI instead of rotting in an unrun benchmark.
+ * a silent drop went unnoticed. This suite runs the same labelled corpus through
+ * the live perceive pipeline and pins the gate's behaviour (now back to 100%
+ * balanced accuracy after the antonymic-placement fix resolved disj2), so any
+ * further drift fails CI instead of rotting in an unrun benchmark.
  *
  * What is asserted, strongest first:
  *   1. NO false-emit. A wrong answer escaping the gate is a safety violation
@@ -27,19 +27,21 @@ import {
 import { describe, it } from "./utils/harness";
 
 /**
- * Correct answers the gate currently suppresses. `disj2` ("either inside or
- * outside; not outside; the cat ⊢ inside") derives the right answer via the
- * reduction channel, but the derived conclusion lands on a singular region and
- * pathCoherence scores it 0 (maxSingularity 1000), so the gate abstains. Pinned
- * until the singular-placement root cause is fixed.
+ * Correct answers the gate suppresses. Now EMPTY: `disj2` ("either inside or
+ * outside; not outside; the cat ⊢ inside") used to over-abstain because the
+ * derived conclusion landed on a singular region (pathCoherence 0), but the
+ * antonymic-placement work (commit "didn't account for the new antonymic
+ * placements") resolved the singular placement and disj2 now emits its correct
+ * answer. The gate is back to 100% balanced accuracy; a non-empty set here is a
+ * fresh regression.
  */
-const KNOWN_OVER_ABSTAINS = ["disj2"];
+const KNOWN_OVER_ABSTAINS: string[] = [];
 
 /**
- * Floor for gate balanced accuracy. Currently 96.4% (one over-abstain out of a
- * 17-case corpus). Raise to 1.0 once KNOWN_OVER_ABSTAINS is emptied.
+ * Floor for gate balanced accuracy. Back to 1.0 now that KNOWN_OVER_ABSTAINS is
+ * empty (every correct answer emits; every abstain is genuinely wrong).
  */
-const GATE_BALANCED_ACCURACY_FLOOR = 0.96;
+const GATE_BALANCED_ACCURACY_FLOOR = 1.0;
 
 const ids = (rows: CalibrationResult["rows"]): string[] =>
   rows.map(r => r.id).sort();
@@ -77,7 +79,7 @@ export async function runCoherenceCalibrationTests(): Promise<void> {
       assert.deepEqual(
         ids(result.overAbstains),
         [...KNOWN_OVER_ABSTAINS].sort(),
-        "the set of over-abstained correct answers changed: a new regression, or disj2 was fixed (then empty KNOWN_OVER_ABSTAINS and raise the floor to 1.0)"
+        "the set of over-abstained correct answers changed: KNOWN_OVER_ABSTAINS is empty, so any id here is a fresh regression (a correct answer the gate started suppressing)"
       );
     });
   });

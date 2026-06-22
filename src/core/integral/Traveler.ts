@@ -8,6 +8,12 @@ import { metrics } from "@core_s/Metrics";
 import type { FrameworkId, Matrix4x4 } from "@mutate/FrameworkIndex";
 import type QueryDecomposer from "@mutate/QueryDecomposer";
 import type Unfolder from "@mutate/Unfolder";
+import {
+  classifyInferenceDirection,
+  type InferenceAmplitude,
+  measureInferenceAmplitude,
+  type PropagationMode,
+} from "@skill_cogi/DirectionalPropagation";
 import { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import {
   getMetricForceWithInnerDerivative as _locoGetMetricForceWithInnerDerivative,
@@ -279,9 +285,51 @@ class Traveler implements Mapping.Engine {
   }
 
   /**
-   * Elects the most appropriate skill for a given query sequence.
-   * Finds the capability precept with the strongest gravitational attraction
-   * to the query's manifold position.
+   * Resolves the capability precept the intent classifier points at - the
+   * geometry-silent prior. Mirrors the legacy string routing exactly:
+   * code → SKILL:CODE, assertion → SKILL:ASSERTION, everything else →
+   * SKILL:LANGUAGE (with the first registered skill as the final backstop).
+   */
+  private intentSkillId(intent?: string): number {
+    const want =
+      intent === "code"
+        ? "skill:code"
+        : intent === "assertion"
+          ? "skill:assertion"
+          : "skill:language";
+    for (const id of this.skills.keys()) {
+      if (this.atomizer.resolveScope(id)?.toLowerCase() === want) return id;
+    }
+    // The requested label is not registered (e.g. no language skill wired):
+    // fall back to SKILL:LANGUAGE, then to the first registered skill.
+    if (want !== "skill:language") {
+      for (const id of this.skills.keys()) {
+        if (this.atomizer.resolveScope(id)?.toLowerCase() === "skill:language")
+          return id;
+      }
+    }
+    return this.skills.keys().next().value ?? 0;
+  }
+
+  /**
+   * Elects the most appropriate skill for a given query sequence by
+   * **potential-field proximity**: the capability precept whose Gaussian
+   * attractor exerts the strongest mass-weighted pull at the query's manifold
+   * locus wins - but only when the field is decisive. The query locus is the
+   * mass-weighted centroid of its allocated atoms (the point the settling walk
+   * descends from); the attractor kernel `mass · e^{-d²/F}` is the same
+   * influence the locomotion physics uses, with the manifold's hard influence
+   * cutoff so distant capabilities contribute nothing.
+   *
+   * Geometry only DECIDES when (a) the winner's normalized pull clears
+   * `SKILL_FIELD_MIN_DEPTH` (the query sits squarely inside a well, not at its
+   * edge) and (b) the runner-up's score is ≤ `SKILL_FIELD_DOMINANCE` of the
+   * winner's (the well is unambiguous). Otherwise the intent classifier's prior
+   * decides. This reproduces the legacy string routing exactly in production -
+   * the four capability precepts cluster within ~10 posX units, so any query
+   * near them sees two near-equal pulls, fails dominance, and falls to intent -
+   * while genuinely activating once capabilities are spatially distinguished
+   * (a query settling squarely inside a separated well overrides the prior).
    */
   public electSkill(ids: Uint32Array, intent?: string): number {
     if (this.skills.size === 0) {
@@ -290,33 +338,109 @@ class Traveler implements Mapping.Engine {
     }
     if (ids.length === 0) return 0;
 
-    // TODO: Implement potential field proximity calculation.
-    // For Phase 4, we use a simple heuristic: if any registered skill's
-    // precept ID is in the query or if we have a default.
-    // In the real implementation, this will use spatialIndex lookups.
+    const intentTarget = this.intentSkillId(intent);
+    const sys = this.system;
+    const phys = DOPAT_CONFIG.PHYSICS;
+    const F = phys.INFLUENCE_FALLOFF;
 
-    // Phase 4: Intent-based routing
-    if (intent === "code") {
-      for (const id of this.skills.keys()) {
-        const label = this.atomizer.resolveScope(id);
-        if (label?.toLowerCase() === "skill:code") return id;
+    // Query locus: mass-weighted centroid of the allocated query atoms.
+    let qx = 0,
+      qy = 0,
+      qz = 0,
+      qw = 0,
+      wsum = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (!sys.isAllocated(id)) continue;
+      const m = Math.max(sys.mass[id], 1e-6);
+      qx += sys.posX[id] * m;
+      qy += sys.posY[id] * m;
+      qz += sys.posZ[id] * m;
+      qw += sys.posW[id] * m;
+      wsum += m;
+    }
+    // No grounded query atoms ⇒ no field to read ⇒ the intent prior decides.
+    if (wsum === 0) return intentTarget;
+    qx /= wsum;
+    qy /= wsum;
+    qz /= wsum;
+    qw /= wsum;
+
+    // Rank capabilities by mass-weighted pull; track the winner's well-depth
+    // (normalized pull) and the runner-up's score for the dominance test.
+    let winId = 0;
+    let winScore = -1;
+    let winDepth = 0;
+    let secondScore = 0;
+    for (const sid of this.skills.keys()) {
+      // Only a genuine Capability precept is a field source. A skill is keyed by
+      // its scope id; that id is a meaningful manifold position only when
+      // seedCapabilities has placed a Capability precept there (the Runtime
+      // path). In bare test envs the capabilities are never seeded and their
+      // scope ids get reused for ordinary query tokens - those must NOT be read
+      // as attractor positions, or the field would be pure noise. When no
+      // capability is placed, no skill qualifies, winId stays 0, and the intent
+      // prior decides (reproducing the legacy routing).
+      if (!sys.isAllocated(sid)) continue;
+      if (sys.operatorClass[sid] !== OperatorClass.Capability) continue;
+      const dx = qx - sys.posX[sid];
+      const dy = qy - sys.posY[sid];
+      const dz = qz - sys.posZ[sid];
+      const dw = qw - sys.posW[sid];
+      const d2 = dx * dx + dy * dy + dz * dz + dw * dw;
+      // Beyond the influence radius the pull is ~0 (the physics' hard cutoff).
+      const depth = d2 >= phys.INFLUENCE_RADIUS ? 0 : Math.exp(-d2 / F);
+      const score = sys.mass[sid] * depth;
+      if (score > winScore) {
+        secondScore = winScore < 0 ? 0 : winScore;
+        winScore = score;
+        winId = sid;
+        winDepth = depth;
+      } else if (score > secondScore) {
+        secondScore = score;
       }
     }
 
-    if (intent === "assertion") {
-      for (const id of this.skills.keys()) {
-        const label = this.atomizer.resolveScope(id);
-        if (label?.toLowerCase() === "skill:assertion") return id;
-      }
+    // Geometry decides only on a deep, unambiguous well; else the prior holds.
+    if (
+      winId !== 0 &&
+      winDepth >= phys.SKILL_FIELD_MIN_DEPTH &&
+      secondScore <= phys.SKILL_FIELD_DOMINANCE * winScore
+    ) {
+      return winId;
     }
+    return intentTarget;
+  }
 
-    // Default: SKILL:LANGUAGE
-    for (const id of this.skills.keys()) {
-      const label = this.atomizer.resolveScope(id);
-      if (label?.toLowerCase() === "skill:language") return id;
-    }
+  /**
+   * Support amplitude a conclusion accumulates from its premises, propagated
+   * along W either forward (reasoning) or backward (rationalization). The hook
+   * P7's Reflect step will use to tell a conclusion from its own
+   * rationalization; exposed now so the energetic distinction is callable.
+   */
+  public inferenceAmplitude(
+    conclusionId: number,
+    premiseIds: ArrayLike<number>,
+    mode: PropagationMode
+  ): InferenceAmplitude {
+    return measureInferenceAmplitude(
+      this.system,
+      conclusionId,
+      premiseIds,
+      mode
+    );
+  }
 
-    return this.skills.keys().next().value ?? 0;
+  /**
+   * Classifies an inference by the W-direction that best accounts for its
+   * support: backward/forward amplitude ratio ∈ (0,1], lower ⇒ more the support
+   * leaned on reaching backward in time (rationalization).
+   */
+  public inferenceDirection(
+    conclusionId: number,
+    premiseIds: ArrayLike<number>
+  ): ReturnType<typeof classifyInferenceDirection> {
+    return classifyInferenceDirection(this.system, conclusionId, premiseIds);
   }
 
   /**
