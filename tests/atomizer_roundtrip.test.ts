@@ -10,7 +10,6 @@
 import assert from "node:assert/strict";
 import { DOPAT_CONFIG } from "@config";
 import { OperatorClass } from "@core_i/System";
-import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
 const FIXTURES = [
@@ -52,23 +51,23 @@ export async function executeAtomizerRoundTripSuite() {
             `id ${id} must be allocated after ingest`
           );
           assert.ok(
-            isFinite(env.system.posX[id]),
+            Number.isFinite(env.system.posX[id]),
             `posX must be finite for id ${id}`
           );
           assert.ok(
-            isFinite(env.system.posY[id]),
+            Number.isFinite(env.system.posY[id]),
             `posY must be finite for id ${id}`
           );
           assert.ok(
-            isFinite(env.system.posZ[id]),
+            Number.isFinite(env.system.posZ[id]),
             `posZ must be finite for id ${id}`
           );
           assert.ok(
-            isFinite(env.system.posW[id]),
+            Number.isFinite(env.system.posW[id]),
             `posW must be finite for id ${id}`
           );
           assert.ok(
-            isFinite(env.system.mass[id]),
+            Number.isFinite(env.system.mass[id]),
             `mass must be finite for id ${id}`
           );
         }

@@ -74,7 +74,7 @@ export class DictionaryExpander {
     const norm = word.toLowerCase().trim().replace(/\s+/g, "_");
     if (norm.length < 2) return result;
 
-    let searchResult: Map<string, Map<string, any>>;
+    let searchResult: Map<string, Map<string, import("en-dictionary").Index>>;
     try {
       searchResult = this.dict.searchFor([norm]);
     } catch {
@@ -528,8 +528,8 @@ export default class Unfolder {
       }
 
       return null;
-    } catch (e: any) {
-      if (e?.name === "AbortError") {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === "AbortError") {
         metrics.increment("dream.rejected_timeout");
       } else {
         metrics.increment("dream.context7_error");

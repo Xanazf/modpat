@@ -1,16 +1,10 @@
-import Atomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { OperatorClass, SlotType } from "@core_i/helpers/enums";
 import { classifyOperatorToken } from "@core_i/helpers/functions";
-import type System from "@core_i/System";
 import { SystemRef } from "@core_i/System";
 import { topoSignatureJaccard } from "@core_s/helpers/functions";
 import { metrics } from "@core_s/Metrics";
-import {
-  type DuckDBConnection,
-  DuckDBInstance,
-  listValue,
-} from "@duckdb/node-api";
+import { type DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { scopesInSameSupercluster } from "@mutate/FrameworkIndex";
 
 /**
@@ -611,7 +605,7 @@ export default class Store implements Memory.Vault {
           row => Number(row[3]) < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD
         );
 
-        let chosen = candidates[0];
+        let chosen: (typeof candidates)[number] | null = candidates[0];
         if (topoSignature && candidates.length > 1) {
           // Re-rank: primary key = topo Jaccard (descending), tiebreak = combined_score.
           let bestJaccard = -1;
@@ -646,7 +640,7 @@ export default class Store implements Memory.Vault {
               // Different domain - suppress this factual match entirely.
               metrics.increment("vault.framework_miss");
               targetPattern = null;
-              chosen = null as any;
+              chosen = null;
             }
           }
         }
@@ -705,7 +699,7 @@ export default class Store implements Memory.Vault {
         let opId = this.findOperatorIdBySymbol(inputSequence, token);
         if (opId === -1) {
           // Fallback: Find it globally if not in input
-          const targetScope = (this.atomizer as any).getSymbolScope(token);
+          const targetScope = this.atomizer.getSymbolScope(token);
           for (let i = 0; i < this.system.length; i++) {
             if (
               this.system.scope[i] === targetScope &&
@@ -1194,7 +1188,7 @@ export default class Store implements Memory.Vault {
       `SELECT pos_x, pos_y, pos_z, pos_w, holonomy_json, active_frameworks_json, session_effort
          FROM traveler_sessions WHERE session_id = ?`
     );
-    let rows: any[][] | null = null;
+    let rows: unknown[][] | null = null;
     try {
       stmt.bindVarchar(1, sessionId);
       const res = await stmt.runAndReadAll();
@@ -1213,8 +1207,12 @@ export default class Store implements Memory.Vault {
         Number(row[2]),
         Number(row[3]),
       ],
-      holonomyFrame: new Float64Array(holonomyArr) as any,
-      activeFrameworks: new Set(frameworksArr as any),
+      holonomyFrame: new Float64Array(
+        holonomyArr
+      ) as import("@mutate/FrameworkIndex").Matrix4x4,
+      activeFrameworks: new Set(
+        frameworksArr as import("@mutate/FrameworkIndex").FrameworkId[]
+      ),
       sessionEffort: Number(row[6]),
     };
   }

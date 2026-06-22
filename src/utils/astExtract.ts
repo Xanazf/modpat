@@ -18,7 +18,7 @@
  * Together they produce AstTriple[] that AstSeedWorker crystallizes.
  */
 
-import { find, walk } from "abstract-syntax-tree";
+import { type AstNode, find, walk } from "abstract-syntax-tree";
 import ts from "typescript";
 
 export interface AstTriple {
@@ -197,7 +197,7 @@ function extractViaTypeScript(
           ts.isIdentifier(member.name)
         ) {
           const prop = safeId(member.name.text);
-          const t = typeText((member as any).type, sf);
+          const t = typeText(member.type, sf);
           push(iface, "has", prop, 1.0, 0.0);
           if (t && t !== "any") push(prop, "is", t, 1.0, 0.6);
         }
@@ -300,13 +300,14 @@ function extractViaEsTree(
     },
   }).outputText;
 
-  let tree: any;
+  let tree: AstNode;
   try {
     // abstract-syntax-tree's parse() is CommonJS-imported; use dynamic require
     // to avoid module-format conflicts with tsx's ESM runner.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ast = require("abstract-syntax-tree");
-    tree = (ast.parse ?? ast.default?.parse)(jsSource, { module: true });
+    const parse = ast.parse ?? ast.default?.parse;
+    tree = parse(jsSource, { module: true });
   } catch {
     return; // Non-fatal; Stage A already handled type-bearing constructs.
   }
@@ -343,10 +344,10 @@ function extractViaEsTree(
   // abstract-syntax-tree's walk() is a single-callback visitor (no enter/leave),
   // so we use find() per function body to avoid losing depth context.
   if (opts.includeCallSites) {
-    const fnNodes: Array<{ name: string; node: any }> = [];
+    const fnNodes: Array<{ name: string; node: AstNode }> = [];
 
     // Collect named top-level functions
-    walk(tree, (node: any) => {
+    walk(tree, (node: AstNode) => {
       if (node.type === "FunctionDeclaration" && node.id?.name) {
         fnNodes.push({ name: norm(node.id.name), node });
       }
@@ -356,7 +357,7 @@ function extractViaEsTree(
         (node.init?.type === "ArrowFunctionExpression" ||
           node.init?.type === "FunctionExpression")
       ) {
-        fnNodes.push({ name: norm(node.id.name), node: node.init });
+        fnNodes.push({ name: norm(node.id?.name ?? ""), node: node.init });
       }
     });
 
@@ -364,7 +365,8 @@ function extractViaEsTree(
       const calls = find(fnNode, "CallExpression");
       for (const call of calls) {
         let callee = "";
-        if (call.callee?.type === "Identifier") callee = norm(call.callee.name);
+        if (call.callee?.type === "Identifier")
+          callee = norm(call.callee?.name ?? "");
         else if (call.callee?.type === "MemberExpression")
           callee = norm(call.callee.property?.name ?? "");
         if (callee && callee !== caller) {

@@ -38,11 +38,11 @@ parentPort!.on("message", async (msg: WorkerIPC.WikiRequest) => {
   try {
     const result = await fetchWikipedia(topic);
     parentPort!.postMessage({ id, result });
-  } catch (err: any) {
+  } catch (err: unknown) {
     parentPort!.postMessage({
       id,
       result: null,
-      error: err?.message ?? String(err),
+      error: err instanceof Error ? err.message : String(err),
     });
   }
 });

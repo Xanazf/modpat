@@ -1,8 +1,7 @@
 import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
+import * as assert from "node:assert";
 import { DOPAT_CONFIG } from "@config";
 import { SCHEMA_VERSION, SystemPersistence } from "@core_s/Persistence";
-import logger from "@utils/SpectralLogger";
-import * as assert from "assert";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executePersistenceSuite() {

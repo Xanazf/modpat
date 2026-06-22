@@ -1,7 +1,6 @@
 import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
 import assert from "node:assert/strict";
 import LogicAtomizer from "@atomics/LogicAtomizer";
-import { DOPAT_CONFIG } from "@config";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
@@ -54,10 +53,7 @@ export async function runTravelerCorrectionsTests() {
       driftTargets.set(id2, target2);
 
       // Settle the atoms
-      (traveler as any)["_settleAtoms"](
-        new Uint32Array([id1, id2]),
-        driftTargets
-      );
+      traveler._settleAtoms(new Uint32Array([id1, id2]), driftTargets);
 
       // Verify they have moved significantly from the pole (0,0,0,0) toward target coords
       const dist1 = Math.sqrt(
@@ -105,7 +101,9 @@ export async function runTravelerCorrectionsTests() {
 
       // Build framework index in lifecycle
       const graph = buildNerveGraph(sys, { topK: 50 });
+      // biome-ignore lint/complexity/useLiteralKeys: private field access in test
       lifecycle["_nerveGraph"] = graph;
+      // biome-ignore lint/complexity/useLiteralKeys: private field access in test
       lifecycle["_frameworkIndex"] = buildFrameworkIndex(sys, graph, {
         rSub: 5,
         rCluster: 20,
@@ -117,6 +115,7 @@ export async function runTravelerCorrectionsTests() {
 
       // Execute traversal along a path containing Group A atoms
       const path = new Uint32Array([a1, a2]);
+      // biome-ignore lint/complexity/useLiteralKeys: private method access in test
       traveler["_updateTravelerState"](a2, path);
 
       // activeFrameworks must now contain the supercluster/cluster/subcluster IDs containing Group A atoms
@@ -157,7 +156,9 @@ export async function runTravelerCorrectionsTests() {
 
       // Build framework index in lifecycle
       const graph = buildNerveGraph(sys, { topK: 50 });
+      // biome-ignore lint/complexity/useLiteralKeys: private field access in test
       lifecycle["_nerveGraph"] = graph;
+      // biome-ignore lint/complexity/useLiteralKeys: private field access in test
       lifecycle["_frameworkIndex"] = buildFrameworkIndex(sys, graph, {
         rSub: 10,
         rCluster: 20,

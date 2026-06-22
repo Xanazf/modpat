@@ -248,7 +248,7 @@ async function dispatchElementwise(
   const result = new Float32Array(bufRead.getMappedRange().slice(0));
   bufRead.unmap();
 
-  [bufA, bufC, bufParams, bufRead].forEach(b => b.destroy());
+  for (const b of [bufA, bufC, bufParams, bufRead]) b.destroy();
   if (bufB) bufB.destroy();
 
   return result;
@@ -489,7 +489,7 @@ const gpu_math: PMath.Engine & {
     const res = new Float32Array(bufRead.getMappedRange().slice(0));
     bufRead.unmap();
 
-    [bufA, bufB, bufC, bufParams, bufRead].forEach(b => b.destroy());
+    for (const b of [bufA, bufB, bufC, bufParams, bufRead]) b.destroy();
     return new Float64Array(res);
   },
 
@@ -575,7 +575,7 @@ const gpu_math: PMath.Engine & {
     const res = new Float32Array(bufRead.getMappedRange().slice(0));
     bufRead.unmap();
 
-    [bufA, bufC, bufParams, bufRead].forEach(b => b.destroy());
+    for (const b of [bufA, bufC, bufParams, bufRead]) b.destroy();
     return new Float64Array(res);
   },
 

@@ -13,9 +13,9 @@
  *                    Resolver chains the template without penalising "unknown".
  */
 
+import * as assert from "node:assert";
 import Runtime from "@core_i/Runtime";
 import logger from "@utils/SpectralLogger";
-import * as assert from "assert";
 import { describe, it } from "./utils/harness";
 
 export async function executeNumberLineSuite() {

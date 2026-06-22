@@ -101,7 +101,7 @@ async function run(): Promise<void> {
       }
       const p50 = percentile(samples, 0.5);
       const p95 = percentile(samples, 0.95);
-      const qShort = q.length > 36 ? q.slice(0, 33) + "…" : q;
+      const qShort = q.length > 36 ? `${q.slice(0, 33)}…` : q;
       console.log(
         `${n.toString().padStart(6)}  ${qShort.padStart(38)}  ${p50.toFixed(1).padStart(7)}ms  ${p95.toFixed(1).padStart(7)}ms`
       );

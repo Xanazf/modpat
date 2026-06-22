@@ -142,7 +142,7 @@ declare module "google-it" {
     /** The raw HTML body of the search result page. */
     body: string;
     /** The full response object from the 'request' library. */
-    response: any;
+    response: unknown;
     /** Statistics about the search results. */
     stats: {
       /** The current page number. */
@@ -165,22 +165,51 @@ declare module "google-it" {
 }
 
 declare module "abstract-syntax-tree" {
-  export function parse(source: string, options?: Record<string, any>): any;
-  export function generate(ast: any, options?: Record<string, any>): string;
+  /** Loosely-typed ESTree node. Common fields are surfaced; the rest is open. */
+  export interface AstNode {
+    type: string;
+    name?: string;
+    id?: AstNode;
+    init?: AstNode;
+    callee?: AstNode;
+    property?: AstNode;
+    body?: AstNode[];
+    operator?: string;
+    kind?: string;
+    params?: AstNode[];
+    declarations?: AstNode[];
+    test?: AstNode;
+    expression?: AstNode;
+    [key: string]: unknown;
+  }
+  export function parse(
+    source: string,
+    options?: Record<string, unknown>
+  ): AstNode;
+  export function generate(
+    ast: AstNode,
+    options?: Record<string, unknown>
+  ): string;
   export function walk(
-    ast: any,
-    callback: (node: any, parent?: any) => void
+    ast: AstNode,
+    callback: (node: AstNode, parent?: AstNode) => void
   ): void;
-  export function replace(ast: any, callback: (node: any) => any): void;
-  export function find(ast: any, selector: string | Record<string, any>): any[];
+  export function replace(
+    ast: AstNode,
+    callback: (node: AstNode) => AstNode | undefined
+  ): void;
+  export function find(
+    ast: AstNode,
+    selector: string | Record<string, unknown>
+  ): AstNode[];
   export function has(
-    ast: any,
-    selector: string | Record<string, any>
+    ast: AstNode,
+    selector: string | Record<string, unknown>
   ): boolean;
   export function each(
-    ast: any,
+    ast: AstNode,
     type: string,
-    callback: (node: any) => void
+    callback: (node: AstNode) => void
   ): void;
 }
 
@@ -232,7 +261,7 @@ declare module "d3-hexadectree" {
         y1: number,
         z1: number,
         w1: number
-      ) => boolean | void
+      ) => boolean | undefined
     ): this;
     visitAfter(
       callback: (

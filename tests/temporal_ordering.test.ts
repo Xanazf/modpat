@@ -103,10 +103,13 @@ export async function runTemporalOrderingTests() {
       system.posW[staleBridge] = 0.05;
       system.update(staleBridge);
 
-      const saved = (DOPAT_CONFIG.PHYSICS as any).PHI_TEMPORAL_DECAY;
+      const saved = (DOPAT_CONFIG.PHYSICS as { PHI_TEMPORAL_DECAY: number })
+        .PHI_TEMPORAL_DECAY;
 
       // With normal decay: fresh dominates
-      (DOPAT_CONFIG.PHYSICS as any).PHI_TEMPORAL_DECAY = 3.0;
+      (
+        DOPAT_CONFIG.PHYSICS as { PHI_TEMPORAL_DECAY: number }
+      ).PHI_TEMPORAL_DECAY = 3.0;
       const t1 = new Traveler(system);
       t1.setGPUEnabled(false);
       const pathNormal = await t1.traverse(src, tgt, {
@@ -121,7 +124,9 @@ export async function runTemporalOrderingTests() {
       }
 
       // With decay=0: no temporal suppression - expect stale to regain influence
-      (DOPAT_CONFIG.PHYSICS as any).PHI_TEMPORAL_DECAY = 0;
+      (
+        DOPAT_CONFIG.PHYSICS as { PHI_TEMPORAL_DECAY: number }
+      ).PHI_TEMPORAL_DECAY = 0;
       const t2 = new Traveler(system);
       t2.setGPUEnabled(false);
       const pathFlat = await t2.traverse(src, tgt, {
@@ -135,7 +140,9 @@ export async function runTemporalOrderingTests() {
         if (system.posW[id] <= 0.1) staleF++;
       }
 
-      (DOPAT_CONFIG.PHYSICS as any).PHI_TEMPORAL_DECAY = saved;
+      (
+        DOPAT_CONFIG.PHYSICS as { PHI_TEMPORAL_DECAY: number }
+      ).PHI_TEMPORAL_DECAY = saved;
 
       // The fresh advantage (freshCount - staleCount) must shrink when decay is removed.
       const advantageNormal = freshN - staleN;

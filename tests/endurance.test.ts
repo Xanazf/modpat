@@ -113,7 +113,11 @@ class CorpusUnfolder extends Unfolder {
   private corpus: string[];
   private idx = 0;
 
-  constructor(system: any, atomizer: any, corpus: string[]) {
+  constructor(
+    system: ConstructorParameters<typeof Unfolder>[0],
+    atomizer: ConstructorParameters<typeof Unfolder>[1],
+    corpus: string[]
+  ) {
     super(system, atomizer);
     this.corpus = corpus;
   }
@@ -339,11 +343,11 @@ export async function executeEnduranceSuite() {
       for (let i = 0; i < env.system.length; i++) {
         if (!env.system.isAllocated(i)) continue;
         if (
-          !isFinite(env.system.posX[i]) ||
-          !isFinite(env.system.posY[i]) ||
-          !isFinite(env.system.posZ[i]) ||
-          !isFinite(env.system.posW[i]) ||
-          !isFinite(env.system.mass[i])
+          !Number.isFinite(env.system.posX[i]) ||
+          !Number.isFinite(env.system.posY[i]) ||
+          !Number.isFinite(env.system.posZ[i]) ||
+          !Number.isFinite(env.system.posW[i]) ||
+          !Number.isFinite(env.system.mass[i])
         ) {
           infiniteCount++;
         }

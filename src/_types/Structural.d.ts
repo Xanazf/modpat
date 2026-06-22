@@ -19,7 +19,7 @@ declare namespace Atomic {
       system: Root.ManifoldView
     ): Uint32Array;
     decodeSequence(sequenceIds: Uint32Array, system: Root.ManifoldView): string;
-    getSymbolScope(symbol: string, isOperator: boolean): number;
+    getSymbolScope(symbol: string, isOperator?: boolean): number;
     resolveScope(scope: number): string | undefined;
     bindSymbolScope(symbol: string, scope: number): void;
     init(): Promise<void>;
@@ -798,7 +798,7 @@ declare namespace Memory {
      */
     hasGeneralizationSignal: boolean;
     /** The diagnostics from the coherent result. */
-    diagnostics: any;
+    diagnostics: Mapping.PerceptionDiagnostics | null;
     /** The input probe ids. */
     probeIds: Uint32Array;
   }
@@ -864,7 +864,7 @@ declare namespace Memory {
      * validated against the current domain topology.  Call after each
      * ManifoldLifecycle.consolidateAround() invocation.
      */
-    setFrameworkIndex(index: any): void;
+    setFrameworkIndex(index: Mutation.FrameworkIndex | null): void;
 
     flush(): Promise<void>;
     close?(): Promise<void>;

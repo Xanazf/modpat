@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { DOPAT_CONFIG } from "@config";
 import System from "@core_i/System";
 import { buildNerveGraph } from "@core_s/TopologyMapper";
 import {

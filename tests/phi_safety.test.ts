@@ -45,7 +45,7 @@ export async function runPhiSafetyTests() {
 
       // No NaN in the returned path IDs
       for (const id of path) {
-        assert.ok(!isNaN(id), `NaN in traversal output path`);
+        assert.ok(!Number.isNaN(id), `NaN in traversal output path`);
       }
 
       // The dense region must have triggered at least one phi clamp
@@ -55,8 +55,8 @@ export async function runPhiSafetyTests() {
       );
 
       // Confirm PHI_MAX is respected: clipped count stops growing if we set PHI_MAX high
-      const savedMax = (DOPAT_CONFIG.PHYSICS as any).PHI_MAX;
-      (DOPAT_CONFIG.PHYSICS as any).PHI_MAX = Infinity;
+      const savedMax = (DOPAT_CONFIG.PHYSICS as { PHI_MAX: number }).PHI_MAX;
+      (DOPAT_CONFIG.PHYSICS as { PHI_MAX: number }).PHI_MAX = Infinity;
       traveler.phiClippedCount = 0;
       const traveler2 = new Traveler(system);
       traveler2.setGPUEnabled(false);
@@ -66,7 +66,7 @@ export async function runPhiSafetyTests() {
         0,
         "phiClippedCount should be 0 when PHI_MAX is Infinity"
       );
-      (DOPAT_CONFIG.PHYSICS as any).PHI_MAX = savedMax;
+      (DOPAT_CONFIG.PHYSICS as { PHI_MAX: number }).PHI_MAX = savedMax;
     });
   });
 }

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { DOPAT_CONFIG } from "@config";
-import { metrics } from "@core_s/Metrics";
 import Unfolder, { UnfolderTimeoutError } from "@mutate/Unfolder";
 import { describe, it, TestHarness } from "./utils/harness";
 

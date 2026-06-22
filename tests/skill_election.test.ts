@@ -16,9 +16,9 @@
  *      another - the documented attractor-proximity behaviour.
  */
 
+import * as assert from "node:assert";
 import { OperatorClass } from "@core_i/helpers/enums";
 import Runtime from "@core_i/Runtime";
-import * as assert from "assert";
 import { describe, it } from "./utils/harness";
 
 export async function runSkillElectionTests() {

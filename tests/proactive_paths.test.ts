@@ -12,7 +12,6 @@
 import assert from "node:assert/strict";
 import Runtime from "@core_i/Runtime";
 import { OperatorClass } from "@core_i/System";
-import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
 import { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import { IntentTag, spawnIntent } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
@@ -180,7 +179,9 @@ export async function runProactivePathTests() {
 
     await it("DREAM_ZONES_PER_CYCLE config is > 1", async () => {
       const { DOPAT_CONFIG } = await import("@config");
-      const zones = (DOPAT_CONFIG.structural as any).DREAM_ZONES_PER_CYCLE ?? 1;
+      const zones =
+        (DOPAT_CONFIG.structural as { DREAM_ZONES_PER_CYCLE?: number })
+          .DREAM_ZONES_PER_CYCLE ?? 1;
       assert.ok(zones > 1, `DREAM_ZONES_PER_CYCLE should be > 1, got ${zones}`);
     });
 
@@ -236,7 +237,8 @@ export async function runProactivePathTests() {
     await it("monitorThreats uses cursor-based batching", async () => {
       const { ManifoldLifecycle } = await import("@core_s/ManifoldLifecycle");
       // Verify the batch constant exists and is sensible
-      const batch = (ManifoldLifecycle as any).THREAT_BATCH;
+      const batch = (ManifoldLifecycle as unknown as { THREAT_BATCH: number })
+        .THREAT_BATCH;
       assert.ok(
         typeof batch === "number" && batch > 0,
         `THREAT_BATCH should be positive number, got ${batch}`

@@ -9,7 +9,6 @@
 import {
   computeChristoffelForce,
   computeHolonomy as computeHolonomyMath,
-  distance4DPoints,
   gpu_math,
   regularizeChristoffels as regularizeChristoffelsMath,
   updateChristoffels,
@@ -124,7 +123,7 @@ export function getMetricForce(
   py: number,
   pz: number,
   pw: number,
-  pens: any[],
+  pens: Cognition.PenaltyWell[],
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
@@ -168,7 +167,7 @@ function forceFromCandidates(
   py: number,
   pz: number,
   pw: number,
-  pens: any[],
+  pens: Cognition.PenaltyWell[],
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
@@ -301,17 +300,20 @@ export function getMetricForceWithInnerDerivative(
   py: number,
   pz: number,
   pw: number,
-  pens: any[],
+  pens: Cognition.PenaltyWell[],
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
   state: Cognition.LocomotionState
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {
-  const phys = DOPAT_CONFIG.PHYSICS;
+  const phys = DOPAT_CONFIG.PHYSICS as {
+    A_B_FULL_GRADIENT: boolean;
+    CONFORMAL_ENABLED: boolean;
+  };
   const oldGradient = phys.A_B_FULL_GRADIENT,
     oldConformal = phys.CONFORMAL_ENABLED;
-  (phys as any).A_B_FULL_GRADIENT = true;
-  (phys as any).CONFORMAL_ENABLED = true;
+  phys.A_B_FULL_GRADIENT = true;
+  phys.CONFORMAL_ENABLED = true;
   try {
     return getMetricForce(
       px,
@@ -325,8 +327,8 @@ export function getMetricForceWithInnerDerivative(
       state
     );
   } finally {
-    (phys as any).A_B_FULL_GRADIENT = oldGradient;
-    (phys as any).CONFORMAL_ENABLED = oldConformal;
+    phys.A_B_FULL_GRADIENT = oldGradient;
+    phys.CONFORMAL_ENABLED = oldConformal;
   }
 }
 
@@ -341,7 +343,7 @@ export function relaxPath(
   maxIterations: number,
   lr: number,
   boost: Set<number> | undefined,
-  penalties: any[],
+  penalties: Cognition.PenaltyWell[],
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
   state: Cognition.LocomotionState
@@ -442,7 +444,7 @@ export async function relaxPathGPU(
   maxIterations: number,
   learningRate: number,
   boostScopes: Set<number> | undefined,
-  penalties: any[],
+  penalties: Cognition.PenaltyWell[],
   system: Root.ManifoldView,
   state: Cognition.LocomotionState
 ): Promise<void> {
@@ -479,7 +481,11 @@ export async function relaxPathGPU(
     sysPosData[j * 4 + 2] = system.posZ[j];
     sysPosData[j * 4 + 3] = system.posW[j];
   }
-  const cb = (data: any, size: number, usage: number) => {
+  const cb = (
+    data: ArrayBufferView | ArrayBuffer | null | undefined,
+    size: number,
+    usage: number
+  ) => {
     const b = device.createBuffer({ size, usage });
     if (data) device.queue.writeBuffer(b, 0, data);
     return b;
@@ -565,9 +571,8 @@ export async function relaxPathGPU(
     pe[i] = res[i * 4 + 2];
     pa[i] = res[i * 4 + 3];
   }
-  [bPath, bSysPos, bSysInfl, bSysST, bPen, bParams, bRead].forEach(b =>
-    b.destroy()
-  );
+  for (const b of [bPath, bSysPos, bSysInfl, bSysST, bPen, bParams, bRead])
+    b.destroy();
 }
 
 async function _initGPUPipeline(
@@ -735,7 +740,7 @@ function _getPotentialAndNearest(
   y: number,
   z: number,
   w: number,
-  pens: any[],
+  pens: Cognition.PenaltyWell[],
   boost: Set<number> | undefined,
   activeAtoms: Set<number> | undefined,
   system: Root.ManifoldView,
@@ -1226,7 +1231,7 @@ export async function travel(
       system.posW[sourceId] +
       t * (system.posW[targetId] - system.posW[sourceId]);
   }
-  const penalties: any[] = [];
+  const penalties: Cognition.PenaltyWell[] = [];
   let finalIds: Uint32Array | null = null;
 
   for (let attempt = 0; attempt < 10; attempt++) {

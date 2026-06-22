@@ -52,7 +52,7 @@ import type { SkillHandler } from "./skills";
  */
 function _registerDefaultSkills(
   mapper: Traveler,
-  language: Language,
+  _language: Language,
   store: Store,
   atomizer: Atomic.Engine
 ): void {
@@ -293,8 +293,8 @@ export class Runtime {
         try {
           await sem.init();
           atomizer = sem;
-        } catch (e: any) {
-          opts.onFallback?.(e.message);
+        } catch (e: unknown) {
+          opts.onFallback?.(e instanceof Error ? e.message : String(e));
           atomizerMode = "base";
           const log = new LogicAtomizer();
           await log.init();

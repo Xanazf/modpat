@@ -9,6 +9,7 @@
  * pipeline, just the `SceneGraph` parser and the `SceneAtomizer` object↔word map.
  */
 
+import * as assert from "node:assert";
 import SceneAtomizer from "@atomics/SceneAtomizer";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
@@ -19,7 +20,6 @@ import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
 import { EdgeKind } from "@core_s/helpers/enums";
 import logger from "@utils/SpectralLogger";
 import { random, seedRandom } from "@utils/seededRandom";
-import * as assert from "assert";
 import { describe, it } from "./utils/harness";
 
 const SCENE = [

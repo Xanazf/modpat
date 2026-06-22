@@ -1,6 +1,6 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { DOPAT_CONFIG } from "@config";
-import { appendFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
 
 export type MetricType = "counter" | "histogram" | "gauge";
 
@@ -8,6 +8,8 @@ class Metrics {
   private static _instance: Metrics | null = null;
   private readonly data: Map<string, Memory.MetricEntry> = new Map();
   private tickCount = 0;
+
+  public readonly _data: Map<string, Memory.MetricEntry> = this.data;
 
   static get(): Metrics {
     if (!Metrics._instance) Metrics._instance = new Metrics();
@@ -56,6 +58,7 @@ class Metrics {
   /** Reset all metrics (useful for isolated tests). */
   reset(): void {
     this.data.clear();
+    this._data.clear();
     this.tickCount = 0;
   }
 
@@ -65,7 +68,7 @@ class Metrics {
       mkdirSync(dirname(path), { recursive: true });
       appendFileSync(
         path,
-        JSON.stringify({ ts: Date.now(), metrics: this.getSnapshot() }) + "\n"
+        `${JSON.stringify({ ts: Date.now(), metrics: this.getSnapshot() })}\n`
       );
     } catch {
       // Fire-and-forget; log failure must not crash the engine
@@ -77,6 +80,7 @@ class Metrics {
     if (!e) {
       e = { type, value: 0, count: 0, sum: 0, min: Infinity, max: -Infinity };
       this.data.set(name, e);
+      this._data.set(name, e);
     }
     return e;
   }

@@ -29,7 +29,7 @@ export class WorkerPool {
   private seedWorker: Worker;
   private astWorker: Worker;
 
-  private manifoldPending = new Map<number, Resolver<any>>();
+  private manifoldPending = new Map<number, Resolver<unknown>>();
   private wikiPending = new Map<number, Resolver<string | null>>();
   private seedPending = new Map<
     number,
@@ -56,7 +56,7 @@ export class WorkerPool {
     this.manifoldWorker.unref();
     this.manifoldWorker.on(
       "message",
-      (msg: { id: number; result?: any; error?: string }) => {
+      (msg: { id: number; result?: unknown; error?: string }) => {
         const pending = this.manifoldPending.get(msg.id);
         if (!pending) return;
         this.manifoldPending.delete(msg.id);
@@ -88,38 +88,56 @@ export class WorkerPool {
       execArgv: TSX_EXECARGV,
     });
     this.astWorker.unref();
-    this.astWorker.on("message", (msg: any) => {
-      if (msg.ready) {
-        this.astReady = true;
-        for (const fn of this.astQueue) fn();
-        this.astQueue = [];
-        return;
+    this.astWorker.on(
+      "message",
+      (msg: {
+        ready?: boolean;
+        id?: number;
+        error?: string;
+        triples?: import("@utils/astExtract").AstTriple[];
+      }) => {
+        if (msg.ready) {
+          this.astReady = true;
+          for (const fn of this.astQueue) fn();
+          this.astQueue = [];
+          return;
+        }
+        if (msg.id === undefined) return;
+        const pending = this.astPending.get(msg.id);
+        if (!pending) return;
+        this.astPending.delete(msg.id);
+        if (msg.error) pending.reject(new Error(msg.error));
+        else pending.resolve({ triples: msg.triples ?? [], filePath: "" });
       }
-      const pending = this.astPending.get(msg.id);
-      if (!pending) return;
-      this.astPending.delete(msg.id);
-      if (msg.error) pending.reject(new Error(msg.error));
-      else pending.resolve({ triples: msg.triples ?? [], filePath: "" });
-    });
+    );
     this.astWorker.on("error", err => this._rejectAll(this.astPending, err));
 
     this.seedWorker = new Worker(workerPath("seed.worker.ts"), {
       execArgv: TSX_EXECARGV,
     });
     this.seedWorker.unref();
-    this.seedWorker.on("message", (msg: any) => {
-      if (msg.ready) {
-        this.seedReady = true;
-        for (const fn of this.seedQueue) fn();
-        this.seedQueue = [];
-        return;
+    this.seedWorker.on(
+      "message",
+      (msg: {
+        ready?: boolean;
+        id?: number;
+        error?: string;
+        result?: Mutation.DictionaryExpansion;
+      }) => {
+        if (msg.ready) {
+          this.seedReady = true;
+          for (const fn of this.seedQueue) fn();
+          this.seedQueue = [];
+          return;
+        }
+        if (msg.id === undefined) return;
+        const pending = this.seedPending.get(msg.id);
+        if (!pending) return;
+        this.seedPending.delete(msg.id);
+        if (msg.error) pending.reject(new Error(msg.error));
+        else if (msg.result) pending.resolve(msg.result);
       }
-      const pending = this.seedPending.get(msg.id);
-      if (!pending) return;
-      this.seedPending.delete(msg.id);
-      if (msg.error) pending.reject(new Error(msg.error));
-      else pending.resolve(msg.result);
-    });
+    );
     this.seedWorker.on("error", err => this._rejectAll(this.seedPending, err));
   }
 
@@ -138,7 +156,7 @@ export class WorkerPool {
   computeConstellations(length: number): Promise<Memory.Constellation[]> {
     const id = this._id();
     return new Promise((resolve, reject) => {
-      this.manifoldPending.set(id, { resolve, reject });
+      this.manifoldPending.set(id, { resolve, reject } as Resolver<unknown>);
       this.manifoldWorker.postMessage({ id, type: "constellations", length });
     });
   }
@@ -149,7 +167,7 @@ export class WorkerPool {
   ): Promise<WorkerIPC.RawGap[]> {
     const id = this._id();
     return new Promise((resolve, reject) => {
-      this.manifoldPending.set(id, { resolve, reject });
+      this.manifoldPending.set(id, { resolve, reject } as Resolver<unknown>);
       this.manifoldWorker.postMessage({ id, type: "gaps", length, consts });
     });
   }
@@ -157,7 +175,7 @@ export class WorkerPool {
   computeOrbital(length: number): Promise<WorkerIPC.OrbitalEntry[]> {
     const id = this._id();
     return new Promise((resolve, reject) => {
-      this.manifoldPending.set(id, { resolve, reject });
+      this.manifoldPending.set(id, { resolve, reject } as Resolver<unknown>);
       this.manifoldWorker.postMessage({ id, type: "orbital", length });
     });
   }

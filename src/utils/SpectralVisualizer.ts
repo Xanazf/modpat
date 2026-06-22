@@ -1,5 +1,3 @@
-import type System from "@core_i/System";
-
 /**
  * Maps Logical vs Semantic output to the RGB space.
  */
@@ -166,7 +164,7 @@ export class SpectralVisualizer {
           ids[i],
           char.repeat(tokenWidth)
         );
-        row += styledBar + " ";
+        row += `${styledBar} `;
       }
       rows.push(row);
     }

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import logger from "@utils/SpectralLogger";
-import nlp from "compromise";
 import { describe, it, TestHarness } from "./utils/harness";
 
 export async function executeLogicSuite() {

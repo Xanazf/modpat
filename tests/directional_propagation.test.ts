@@ -8,12 +8,12 @@
  * conclusion, with the time arrow). See `DirectionalPropagation.ts`.
  */
 
+import * as assert from "node:assert";
 import Runtime from "@core_i/Runtime";
 import {
   classifyInferenceDirection,
   measureInferenceAmplitude,
 } from "@core_i/skills/cognition/DirectionalPropagation";
-import * as assert from "assert";
 import { describe, it } from "./utils/harness";
 
 export async function runDirectionalPropagationTests() {

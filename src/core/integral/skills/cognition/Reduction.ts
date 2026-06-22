@@ -119,13 +119,15 @@ export function parseIsFacts(text: string): Cognition.IsRelation[] {
   for (const raw of text.split(/[.;]/)) {
     const s = raw.toLowerCase().trim();
     if (!s) continue;
-    let m: RegExpMatchArray | null;
-    if ((m = s.match(/^(?:all|every)\s+(.+?)\s+(?:are|is)\s+(.+)$/))) {
-      out.push(relation(m[1], m[2], true));
-    } else if ((m = s.match(/^(.+?)\s+are\s+(.+)$/))) {
-      out.push(relation(m[1], m[2], true));
-    } else if ((m = s.match(/^(.+?)\s+is\s+(.+)$/))) {
-      out.push(relation(m[1], m[2], false));
+    const mAll = s.match(/^(?:all|every)\s+(.+?)\s+(?:are|is)\s+(.+)$/);
+    const mAre = mAll ?? s.match(/^(.+?)\s+are\s+(.+)$/);
+    if (mAll) {
+      out.push(relation(mAll[1], mAll[2], true));
+    } else if (mAre) {
+      out.push(relation(mAre[1], mAre[2], true));
+    } else {
+      const mIs = s.match(/^(.+?)\s+is\s+(.+)$/);
+      if (mIs) out.push(relation(mIs[1], mIs[2], false));
     }
   }
   return out;
@@ -251,30 +253,36 @@ export function parseStatements(text: string): Cognition.LogicFacts {
   for (const raw of text.split(/[.;]|&&/)) {
     const s = raw.toLowerCase().trim();
     if (!s || s.includes("|-")) continue;
-    let m: RegExpMatchArray | null;
-    if ((m = s.match(/^if\s+(.+?)\s*,?\s*then\s+(.+)$/))) {
-      const a = parseClause(m[1]);
-      const c = parseClause(m[2]);
+    const mIf = s.match(/^if\s+(.+?)\s*,?\s*then\s+(.+)$/);
+    if (mIf) {
+      const a = parseClause(mIf[1]);
+      const c = parseClause(mIf[2]);
       if (a && c) facts.implications.push({ antecedent: a, consequent: c });
       continue;
     }
-    if ((m = s.match(/^either\s+(.+?)\s+or\s+(.+)$/))) {
-      const l = parseClause(m[1]);
-      const r = parseClause(m[2]);
+    const mOr = s.match(/^either\s+(.+?)\s+or\s+(.+)$/);
+    if (mOr) {
+      const l = parseClause(mOr[1]);
+      const r = parseClause(mOr[2]);
       if (l && r) facts.disjunctions.push({ left: l, right: r });
       continue;
     }
-    if ((m = s.match(/^(?:all|every)\s+(.+?)\s+(?:are|is)\s+(.+)$/))) {
-      facts.relations.push(relation(m[1], m[2], true));
-    } else if ((m = s.match(/^(.+?)\s+are\s+(.+)$/))) {
-      facts.relations.push(relation(m[1], m[2], true));
-    } else if ((m = s.match(/^(.+?)\s+is\s+(.+)$/))) {
-      facts.relations.push(relation(m[1], m[2], false));
+    const mAll = s.match(/^(?:all|every)\s+(.+?)\s+(?:are|is)\s+(.+)$/);
+    const mAre = mAll ?? s.match(/^(.+?)\s+are\s+(.+)$/);
+    if (mAll) {
+      facts.relations.push(relation(mAll[1], mAll[2], true));
+    } else if (mAre) {
+      facts.relations.push(relation(mAre[1], mAre[2], true));
     } else {
-      const key = clauseKey(s);
-      if (key) {
-        if (/\bnot\b/.test(s)) facts.negAtoms.add(key);
-        else facts.atoms.add(key);
+      const mIs = s.match(/^(.+?)\s+is\s+(.+)$/);
+      if (mIs) {
+        facts.relations.push(relation(mIs[1], mIs[2], false));
+      } else {
+        const key = clauseKey(s);
+        if (key) {
+          if (/\bnot\b/.test(s)) facts.negAtoms.add(key);
+          else facts.atoms.add(key);
+        }
       }
     }
   }

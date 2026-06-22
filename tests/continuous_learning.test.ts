@@ -1,4 +1,7 @@
 import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
+import * as assert from "node:assert";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { DOPAT_CONFIG } from "@config";
 import { createTestTraveler } from "@core_i/Runtime";
@@ -8,9 +11,6 @@ import { ManifoldLifecycle } from "@core_s/ManifoldLifecycle";
 import Store from "@core_s/Memory";
 import { SystemPersistence } from "@core_s/Persistence";
 import Unfolder from "@mutate/Unfolder";
-import * as assert from "assert";
-import * as fs from "fs";
-import * as path from "path";
 import { describe, it } from "./utils/harness";
 
 export async function executeContinuousLearningSuite() {

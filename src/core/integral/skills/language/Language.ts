@@ -107,10 +107,10 @@ function isCodeInput(text: string): boolean {
   }
   try {
     const { parse } = require("abstract-syntax-tree");
-    const ast = parse(text, { module: false });
-    return (ast as any).body.some((node: any) =>
-      CODE_NODE_TYPES.has(node.type)
-    );
+    const ast: import("abstract-syntax-tree").AstNode = parse(text, {
+      module: false,
+    });
+    return (ast.body ?? []).some(node => CODE_NODE_TYPES.has(node.type));
   } catch {
     return false;
   }

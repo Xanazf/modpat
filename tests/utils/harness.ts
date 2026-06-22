@@ -15,28 +15,27 @@ export interface TestEnvironment<A extends Atomic.Engine = Atomic.Engine> {
   resolver: Traveler;
 }
 
-export class TestHarness {
-  private static sharedEnvs: Map<AtomizerType, TestEnvironment<Atomic.Engine>> =
-    new Map();
-  private static useSharedEnv = false;
+const sharedEnvs: Map<AtomizerType, TestEnvironment<Atomic.Engine>> = new Map();
+let useSharedEnv = false;
 
+export const TestHarness = {
   /**
    * Configures whether tests should share the same System and Atomizer instances.
    */
-  static setSharedEnv(enabled: boolean) {
-    TestHarness.useSharedEnv = enabled;
-  }
+  setSharedEnv(enabled: boolean) {
+    useSharedEnv = enabled;
+  },
 
   /**
    * Retrieves a test environment. If shared mode is enabled, it returns a persistent instance.
    * Otherwise, it returns a fresh instance.
    */
-  static async getEnvironment<A extends Atomic.Engine = Atomic.Engine>(
+  async getEnvironment<A extends Atomic.Engine = Atomic.Engine>(
     type: AtomizerType = "base",
     dbPath?: string
   ): Promise<TestEnvironment<A>> {
-    if (TestHarness.useSharedEnv && TestHarness.sharedEnvs.has(type)) {
-      return TestHarness.sharedEnvs.get(type)! as unknown as TestEnvironment<A>;
+    if (useSharedEnv && sharedEnvs.has(type)) {
+      return sharedEnvs.get(type)! as unknown as TestEnvironment<A>;
     }
 
     const system = new System();
@@ -57,32 +56,32 @@ export class TestHarness {
     const resolver = new Traveler(system, atomizer, store);
 
     const env = { system, atomizer, store, resolver };
-    if (TestHarness.useSharedEnv) {
-      TestHarness.sharedEnvs.set(type, env);
+    if (useSharedEnv) {
+      sharedEnvs.set(type, env);
     }
     return env as unknown as TestEnvironment<A>;
-  }
+  },
 
   /**
    * Disposes of a test environment if it's not being shared.
    */
-  static async disposeEnvironment(env: TestEnvironment<Atomic.Engine>) {
-    if (TestHarness.useSharedEnv) return;
+  async disposeEnvironment(env: TestEnvironment<Atomic.Engine>) {
+    if (useSharedEnv) return;
     await env.resolver.dispose();
     await env.store.close();
-  }
+  },
 
   /**
    * Disposes of all shared environments.
    */
-  static async disposeAll() {
-    for (const env of TestHarness.sharedEnvs.values()) {
+  async disposeAll() {
+    for (const env of sharedEnvs.values()) {
       await env.resolver.dispose();
       await env.store.close();
     }
-    TestHarness.sharedEnvs.clear();
-  }
-}
+    sharedEnvs.clear();
+  },
+};
 
 /**
  * Standardized 'describe' block for test suites.

@@ -1,5 +1,4 @@
 import { SYSTEM_CONFIG } from "@config";
-import type System from "@core_i/System";
 import { SpectralVisualizer } from "./SpectralVisualizer";
 
 const visualizer = new SpectralVisualizer();
@@ -144,7 +143,7 @@ export const logger = {
       if (pos) styledPos = visualizer.render({ type: "numeral" }, pos[0]);
     }
     const styled = msg.replace(
-      `${separator} ${heading}@${pos && pos[0]}`,
+      `${separator} ${heading}@${pos?.[0]}`,
       `${styledSeparator} ${styledHeading}${styledAt}${styledPos}`
     );
     console.log(styled, ...args);
@@ -249,10 +248,10 @@ export const logger = {
       console.log(
         waveForm
           .split("\n")
-          .map(line => "    " + line)
+          .map(line => `    ${line}`)
           .join("\n")
       );
-      console.log("    " + styledSequence + "\n");
+      console.log(`    ${styledSequence}\n`);
     });
   },
 

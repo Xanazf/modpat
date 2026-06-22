@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { createTestTraveler } from "@core_i/Runtime";
 import Traveler from "@core_i/Traveler";
 import { metrics } from "@core_s/Metrics";
 import QueryDecomposer from "@mutate/QueryDecomposer";
+import type Unfolder from "@mutate/Unfolder";
 import logger from "@utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
@@ -220,7 +220,7 @@ export async function executeLiveInferenceSuite() {
           // and always calls expand (rather than short-circuiting on a cached hit).
           return false;
         },
-      } as any;
+      } as Unfolder;
 
       const freshTraveler = createTestTraveler(
         env.system,
@@ -261,7 +261,7 @@ export async function executeLiveInferenceSuite() {
           if (topic) expandedTopics.push(topic);
           return false;
         },
-      } as any;
+      } as Unfolder;
 
       const freshTraveler = createTestTraveler(
         env.system,

@@ -1,7 +1,6 @@
 import { DOPAT_CONFIG, SYNTAX_ATTRACTORS } from "@config";
 import { OperatorClass, SlotType } from "@core_i/helpers/enums";
 import { classifyOperatorToken } from "@core_i/helpers/functions";
-import type System from "@core_i/System";
 import nlp from "compromise";
 import { BaseAtomizer, COOCCURRENCE_STOPWORDS } from "./BaseAtomizer";
 
@@ -110,7 +109,7 @@ export default class SemanticAtomizer
       const isKeyword = SYNTAX_ATTRACTORS.KEYWORDS.has(normal);
 
       const term = termsByIndex[ti] ?? {};
-      const tags: string[] = (term as any).tags ?? [];
+      const tags: string[] = term.tags ?? [];
       // A gerund following a determiner (e.g. "the running dog") may be tagged
       // Adjective in context rather than Verb; treat both as verb-like so the
       // gerund-disambiguation branch in the materialization loop still fires.

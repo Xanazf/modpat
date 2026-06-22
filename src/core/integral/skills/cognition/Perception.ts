@@ -116,7 +116,7 @@ export async function perceiveCoherent(
   },
   deps: Cognition.PerceptionDeps,
   cache: Cognition.PerceptionCache,
-  maxLen: number
+  _maxLen: number
 ): Promise<CoherentResult> {
   const r = await observeSettlingGradient(
     ids,

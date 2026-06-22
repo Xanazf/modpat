@@ -6,10 +6,9 @@
  */
 
 import { SlotType } from "@core_i/helpers/enums";
-import type { SystemRef } from "@core_i/System";
 import type Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
-import { generate, parse, walk } from "abstract-syntax-tree";
+import { type AstNode, generate, parse, walk } from "abstract-syntax-tree";
 import nlp from "compromise";
 import type { SkillHandler } from "../index";
 
@@ -54,13 +53,14 @@ export class Synthesizer {
     inner: string
   ): string {
     const varPattern = /VAR_(\d+)/gi;
-    let match: RegExpExecArray | null;
-    while ((match = varPattern.exec(outer)) !== null) {
+    let match = varPattern.exec(outer);
+    while (match !== null) {
       const st = this.slotTypeFor(parseInt(match[1], 10), slotFlags);
       if (st & SlotType.Body || st & SlotType.Condition) {
         const escaped = match[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         return outer.replace(new RegExp(escaped, "g"), inner);
       }
+      match = varPattern.exec(outer);
     }
     const lastBrace = outer.lastIndexOf("}");
     return lastBrace !== -1
@@ -119,7 +119,7 @@ const OPERATOR_INTENT: Record<string, string> = {
   "??": "nullish coalescing",
 };
 
-function deriveIntent(node: any): string {
+function deriveIntent(node: AstNode): string {
   switch (node.type) {
     case "FunctionDeclaration":
     case "FunctionExpression": {
@@ -132,9 +132,10 @@ function deriveIntent(node: any): string {
     }
     case "ArrowFunctionExpression": {
       const ops: string[] = [];
-      walk(node, (n: any) => {
-        if (n.type === "BinaryExpression" && OPERATOR_INTENT[n.operator]) {
-          ops.push(OPERATOR_INTENT[n.operator]);
+      walk(node, (n: AstNode) => {
+        if (n.type === "BinaryExpression" && n.operator) {
+          const intent = OPERATOR_INTENT[n.operator];
+          if (intent) ops.push(intent);
         }
       });
       return (
@@ -143,7 +144,9 @@ function deriveIntent(node: any): string {
       );
     }
     case "BinaryExpression":
-      return OPERATOR_INTENT[node.operator] ?? `binary ${node.operator}`;
+      return node.operator
+        ? (OPERATOR_INTENT[node.operator] ?? `binary ${node.operator}`)
+        : "binary expression";
     case "IfStatement":
       return "conditional branch";
     case "ReturnStatement":
@@ -164,7 +167,7 @@ function deriveIntent(node: any): string {
   }
 }
 
-function extractPatternFromNode(node: any): {
+function extractPatternFromNode(node: AstNode): {
   pattern: string;
   slotTypes: Map<number, SlotType>;
   varNames: string[];
@@ -205,8 +208,9 @@ function extractPatternFromNode(node: any): {
           body: [{ type: "ExpressionStatement", expression: node.test }],
           sourceType: "module",
         },
-        (n: any) => {
-          if (n.type === "Identifier") register(n.name, SlotType.Condition);
+        (n: AstNode) => {
+          if (n.type === "Identifier" && n.name)
+            register(n.name, SlotType.Condition);
         }
       );
     }
@@ -222,8 +226,8 @@ function extractPatternFromNode(node: any): {
       ],
       sourceType: "module",
     },
-    (n: any) => {
-      if (n.type === "Identifier" && !nameToVar.has(n.name))
+    (n: AstNode) => {
+      if (n.type === "Identifier" && n.name && !nameToVar.has(n.name))
         register(n.name, SlotType.Leaf);
     }
   );
@@ -278,10 +282,12 @@ export async function processCode(
     if (rhs) {
       try {
         const innerAst = parse(rhs, { module: false });
+        const first = innerAst.body?.[0];
+        if (!first) return "[processCode] Empty RHS for |-";
         const node =
-          innerAst.body[0]?.type === "ExpressionStatement"
-            ? innerAst.body[0].expression
-            : innerAst.body[0];
+          first.type === "ExpressionStatement"
+            ? (first.expression ?? first)
+            : first;
         const extracted = extractPatternFromNode(node);
         if (extracted) {
           const intentQuanta = atomizer.ingestSequence(lhs, system);
@@ -301,18 +307,20 @@ export async function processCode(
           respond(msg);
           return msg;
         }
-      } catch (e: any) {
-        return `[processCode] Parse error in RHS: ${e.message}`;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return `[processCode] Parse error in RHS: ${msg}`;
       }
     }
     return "[processCode] Missing RHS for |-";
   }
 
-  let ast: any;
+  let ast: AstNode;
   try {
     ast = parse(source, { module: false });
-  } catch (e: any) {
-    return `[processCode] Parse error: ${e.message}`;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return `[processCode] Parse error: ${msg}`;
   }
 
   const VISITED_TYPES = new Set([
@@ -332,7 +340,7 @@ export async function processCode(
   }[] = [];
   const seen = new Set<string>();
 
-  walk(ast, (node: any) => {
+  walk(ast, (node: AstNode) => {
     if (!VISITED_TYPES.has(node.type)) return;
     const extracted = extractPatternFromNode(node);
     if (!extracted) return;
@@ -358,8 +366,9 @@ export async function processCode(
       logger.debug(
         `[processCode] +pattern: "${intentPhrase}" → "${extracted.pattern}"`
       );
-    } catch (e: any) {
-      logger.error("[processCode] Failed to crystallize pattern:", e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.error("[processCode] Failed to crystallize pattern:", msg);
     }
   }
 
@@ -369,7 +378,7 @@ export async function processCode(
 }
 
 export function createCoderSkill(
-  atomizer: Atomic.Engine,
+  _atomizer: Atomic.Engine,
   store: Store,
   preceptId: number
 ): Skills.SkillRegistration {

@@ -330,7 +330,7 @@ declare namespace Mapping {
 
   interface Engine {
     setGPU(gpu: PMath.Engine | null): void;
-    setUnfolder(unfolder: any): void;
+    setUnfolder(unfolder: import("@mutate/Unfolder").default | null): void;
     route(
       sourceId: number,
       targetId: number,
@@ -344,27 +344,44 @@ declare namespace Mapping {
     ): Promise<Uint32Array>;
 
     // Perception (was Resolution.Engine) - optional until Mapper absorbs Resolver everywhere
-    perceive?(ids: Uint32Array, opts?: any): Promise<Uint32Array>;
-    perceiveCapturing?(ids: Uint32Array, opts?: any): Promise<any>;
-    perceiveCoherent?(ids: Uint32Array, opts?: any): Promise<any>;
+    perceive?(ids: Uint32Array, opts?: PerceptionOptions): Promise<Uint32Array>;
+    perceiveCapturing?(
+      ids: Uint32Array,
+      opts?: PerceptionOptions
+    ): Promise<PerceptionCapture>;
+    perceiveCoherent?(
+      ids: Uint32Array,
+      opts?: {
+        probeMode?: boolean;
+        maxIterations?: number;
+        contextScopes?: Set<number>;
+      }
+    ): Promise<CoherentResult>;
     probe?(ids: Uint32Array): Promise<Uint32Array>;
 
     // Skills
-    registerSkill?(preceptId: number, handler: any): void;
+    registerSkill?(
+      preceptId: number,
+      handler: (ctx: Skills.SkillContext) => Promise<Skills.SkillResult>
+    ): void;
     electSkill?(ids: Uint32Array): number;
     process?(text: string): Promise<string>;
 
     // Learning
-    learnCycle?(n?: number): Promise<Memory.ValidationReport | void>;
+    learnCycle?(n?: number): Promise<Memory.ValidationReport | undefined>;
 
     // Motivation
-    spawnIntent?(topic: string, energy?: number, tag?: any): number | null;
+    spawnIntent?(
+      topic: string,
+      energy?: number,
+      tag?: import("@utils/intentPrecept").IntentTag
+    ): number | null;
     startAutonomy?(): void;
     stopAutonomy?(): void;
 
     // Inquiry
     enqueueInquiry?(topic: string, query: string): void;
-    drainInquiries?(n: number): Promise<Memory.InquiryItem[] | void>;
+    drainInquiries?(n: number): Promise<Memory.InquiryItem[] | undefined>;
     onUnknown?: (topic: string) => void;
   }
 }
@@ -394,6 +411,15 @@ declare namespace Resolution {
  * Reduction, Coherence, Locomotion, InquiryQueue).
  */
 declare namespace Cognition {
+  /** A repulsive Gaussian well in the manifold used to steer locomotion. */
+  interface PenaltyWell {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    strength: number;
+  }
+
   /** Everything perception needs from the Traveler. */
   interface PerceptionDeps {
     readonly system: Root.ManifoldView;
@@ -414,7 +440,7 @@ declare namespace Cognition {
       py: number,
       pz: number,
       pw: number,
-      pens: any[],
+      pens: Cognition.PenaltyWell[],
       boost: Set<number> | undefined,
       activeAtoms?: Set<number>
     ): [V: number, fx: number, fy: number, fz: number, fw: number];

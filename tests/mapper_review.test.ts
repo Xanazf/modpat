@@ -54,7 +54,7 @@ export async function runTravelerReviewTest() {
       env.system.posW[betaId] = 5.0;
 
       const mapper = new Traveler(env.system);
-      (mapper as any).buildGridIndex();
+      mapper.buildGridIndex();
 
       const steps = 16;
       const px = new Float64Array(steps + 1);
@@ -88,7 +88,7 @@ export async function runTravelerReviewTest() {
           action += dx * dx + dy * dy + de * de + da * da;
         }
         for (let i = 1; i < steps; i++) {
-          const [V] = (mapper as any).getMetricForce(
+          const [V] = mapper.getMetricForce(
             px[i],
             py[i],
             pe[i],
@@ -108,7 +108,7 @@ export async function runTravelerReviewTest() {
         actions.push(calculateDiscreteAction());
 
         for (let i = 1; i < steps; i++) {
-          const [, fx, fy, fz, fw] = (mapper as any).getMetricForce(
+          const [, fx, fy, fz, fw] = mapper.getMetricForce(
             px[i],
             py[i],
             pe[i],

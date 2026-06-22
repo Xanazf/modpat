@@ -16,11 +16,11 @@ parentPort!.on("message", (msg: WorkerIPC.AstRequest) => {
     const sourceText = fs.readFileSync(filePath, "utf8");
     const triples = extractAstTriples(sourceText, filePath, opts);
     parentPort!.postMessage({ id, triples } satisfies WorkerIPC.AstResponse);
-  } catch (err: any) {
+  } catch (err: unknown) {
     parentPort!.postMessage({
       id,
       triples: [],
-      error: err?.message ?? String(err),
+      error: err instanceof Error ? err.message : String(err),
     } satisfies WorkerIPC.AstResponse);
   }
 });

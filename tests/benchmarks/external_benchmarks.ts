@@ -298,7 +298,8 @@ async function run(): Promise<void> {
 
   for (const pair of allPairs) {
     system.reset();
-    (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = true;
+    (DOPAT_CONFIG.PHYSICS as { CONFORMAL_ENABLED: boolean }).CONFORMAL_ENABLED =
+      true;
     const { answer } = await runQuery(pair.source, traveler, atomizer, system);
     answers.set(pair.id, answer);
     console.log(

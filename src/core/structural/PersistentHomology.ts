@@ -231,7 +231,7 @@ function xorSortedInPlace(target: number[], other: number[]): void {
 function computeH1(
   atoms: number[],
   edges: Topology.PHEdge[],
-  system: Root.ManifoldView
+  _system: Root.ManifoldView
 ): Topology.PersistenceBar[] {
   const n = atoms.length;
 

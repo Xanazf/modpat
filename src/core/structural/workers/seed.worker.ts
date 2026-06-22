@@ -22,7 +22,7 @@ async function init(): Promise<void> {
   try {
     const { default: Dictionary } = await import("en-dictionary");
     dict = new Dictionary(resolveWordNetPath());
-    await (dict as any).init();
+    await dict.init();
   } catch {
     dict = null;
   }
@@ -40,9 +40,9 @@ function lookup(word: string): WorkerIPC.SeedResult {
   const norm = word.toLowerCase().trim().replace(/\s+/g, "_");
   if (norm.length < 2) return result;
 
-  let searchResult: Map<string, Map<string, any>>;
+  let searchResult: Map<string, Map<string, import("en-dictionary").Index>>;
   try {
-    searchResult = (dict as any).searchFor([norm]);
+    searchResult = dict.searchFor([norm]);
   } catch {
     return result;
   }
@@ -84,11 +84,11 @@ init().then(() => {
     try {
       const result = lookup(word);
       parentPort!.postMessage({ id, result });
-    } catch (err: any) {
+    } catch (err: unknown) {
       parentPort!.postMessage({
         id,
         result: { found: false, word, definitions: [], synonyms: [] },
-        error: err?.message ?? String(err),
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   });

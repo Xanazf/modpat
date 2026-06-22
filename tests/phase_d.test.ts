@@ -156,7 +156,7 @@ export async function runPhaseDTests() {
       const lengthBefore = sys.length;
 
       // Call private runSingularityTick via type cast (unit-testing the internal path).
-      (lifecycle as any).runSingularityTick();
+      lifecycle.testSingularityTick();
 
       // At least one new atom should have been allocated.
       assert.ok(
@@ -182,11 +182,9 @@ export async function runPhaseDTests() {
       for (let i = 0; i < 25; i++) addAtom(sys, 0.001 * (i - 12), 0, 0, 0.5);
       addAtom(sys, 5, 0, 0, 0.5);
 
-      const before =
-        (metrics as any)._data?.get?.("singularity.remediated")?.value ?? 0;
-      (lifecycle as any).runSingularityTick();
-      const after =
-        (metrics as any)._data?.get?.("singularity.remediated")?.value ?? 0;
+      const before = metrics._data?.get?.("singularity.remediated")?.value ?? 0;
+      lifecycle.testSingularityTick();
+      const after = metrics._data?.get?.("singularity.remediated")?.value ?? 0;
 
       // The counter may not be directly inspectable through the public API,
       // so we verify indirectly: a new atom exists (split happened).
@@ -237,7 +235,7 @@ export async function runPhaseDTests() {
         pa[i] = 0.5;
       }
 
-      (traveler as any)._computeHolonomy(px, py, pe, pa, steps);
+      traveler._computeHolonomy(px, py, pe, pa, steps);
 
       assert.ok(
         traveler.lastInferentialEffort < 0.001,
@@ -263,7 +261,7 @@ export async function runPhaseDTests() {
         pa[i] = 0.5;
       }
 
-      (traveler as any)._computeHolonomy(px, py, pe, pa, steps);
+      traveler._computeHolonomy(px, py, pe, pa, steps);
 
       assert.ok(
         traveler.lastInferentialEffort > 0.1,
@@ -291,7 +289,7 @@ export async function runPhaseDTests() {
       };
 
       const straight = mkPath(t => [t * 10, 0]);
-      (traveler as any)._computeHolonomy(
+      traveler._computeHolonomy(
         straight.px,
         straight.py,
         straight.pe,
@@ -302,7 +300,7 @@ export async function runPhaseDTests() {
 
       // S-curve: tangent direction oscillates.
       const scurve = mkPath(t => [t * 10 - 5, 3 * Math.sin(Math.PI * t)]);
-      (traveler as any)._computeHolonomy(
+      traveler._computeHolonomy(
         scurve.px,
         scurve.py,
         scurve.pe,
@@ -336,7 +334,7 @@ export async function runPhaseDTests() {
         pa[i] = 0.5 + t * 0.1;
       }
 
-      (traveler as any)._computeHolonomy(px, py, pe, pa, steps);
+      traveler._computeHolonomy(px, py, pe, pa, steps);
 
       const err = orthogonalityError(traveler.lastHolonomy);
       assert.ok(
@@ -520,8 +518,8 @@ export async function runPhaseDTests() {
       const lifecycle = new ManifoldLifecycle(primary, makeSystem(), pers);
 
       // Patch TOPO_TICK_INTERVAL to 1 so every tick fires a topology analysis.
-      const saved = (ManifoldLifecycle as any).TOPO_TICK_INTERVAL;
-      (ManifoldLifecycle as any).TOPO_TICK_INTERVAL = 1;
+      const saved = ManifoldLifecycle.getTickTesting();
+      ManifoldLifecycle.patchTickTesting(1);
 
       try {
         // Fire 3 ticks → up to 3 topology analyses → up to 3 cobordism records.
@@ -542,7 +540,7 @@ export async function runPhaseDTests() {
           );
         }
       } finally {
-        (ManifoldLifecycle as any).TOPO_TICK_INTERVAL = saved;
+        ManifoldLifecycle.patchTickTesting(saved);
       }
     });
 
@@ -561,8 +559,8 @@ export async function runPhaseDTests() {
       }
       const lifecycle = new ManifoldLifecycle(primary, makeSystem(), pers);
 
-      const saved = (ManifoldLifecycle as any).TOPO_TICK_INTERVAL;
-      (ManifoldLifecycle as any).TOPO_TICK_INTERVAL = 1;
+      const saved = ManifoldLifecycle.getTickTesting();
+      ManifoldLifecycle.patchTickTesting(1);
       try {
         // Two ticks → two records over an identical manifold → should be cobordant.
         for (let i = 0; i < 2; i++) lifecycle.tick(16);
@@ -583,7 +581,7 @@ export async function runPhaseDTests() {
           "getCobordantEpisodes must not return the query episode itself"
         );
       } finally {
-        (ManifoldLifecycle as any).TOPO_TICK_INTERVAL = saved;
+        ManifoldLifecycle.patchTickTesting(saved);
       }
     });
 
@@ -595,8 +593,8 @@ export async function runPhaseDTests() {
       }
       const lifecycle = new ManifoldLifecycle(primary, makeSystem(), pers);
 
-      const saved = (ManifoldLifecycle as any).TOPO_TICK_INTERVAL;
-      (ManifoldLifecycle as any).TOPO_TICK_INTERVAL = 1;
+      const saved = ManifoldLifecycle.getTickTesting();
+      ManifoldLifecycle.patchTickTesting(1);
       try {
         lifecycle.tick(16);
         await new Promise(r => setTimeout(r, 100));
@@ -617,7 +615,7 @@ export async function runPhaseDTests() {
           `totalH1Persistence must be finite and non-negative, got ${rec.totalH1Persistence}`
         );
       } finally {
-        (ManifoldLifecycle as any).TOPO_TICK_INTERVAL = saved;
+        ManifoldLifecycle.patchTickTesting(saved);
       }
     });
 

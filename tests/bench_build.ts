@@ -22,7 +22,7 @@ function buildFixture(n: number): System {
 }
 
 async function run() {
-  (DOPAT_CONFIG as any).MAX_PRECEPTS = 1_100_000;
+  (DOPAT_CONFIG as { MAX_PRECEPTS: number }).MAX_PRECEPTS = 1_100_000;
   seedRandom(DOPAT_CONFIG.SEED);
 
   console.log("Building system of 1,000,000 atoms...");

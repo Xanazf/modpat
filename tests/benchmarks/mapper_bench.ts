@@ -43,8 +43,8 @@ function randomQuery(system: System): [number, number] {
 }
 
 async function run(): Promise<void> {
-  (DOPAT_CONFIG as any).MAX_PRECEPTS = 1_100_000;
-  (DOPAT_CONFIG as any).USE_GPU = false;
+  (DOPAT_CONFIG as { MAX_PRECEPTS: number }).MAX_PRECEPTS = 1_100_000;
+  (DOPAT_CONFIG as { USE_GPU: boolean }).USE_GPU = false;
   seedRandom(DOPAT_CONFIG.SEED);
   console.log("Traveler benchmark, CPU path\n");
   console.log(

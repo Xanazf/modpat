@@ -1,6 +1,5 @@
 import { ComplexArray } from "@_lib/geometry/Waves";
 import { OperatorClass, type SlotType } from "@core_i/helpers/enums";
-import type System from "@core_i/System";
 import { BaseAtomizer } from "./BaseAtomizer";
 
 /**
@@ -26,7 +25,10 @@ export default class SpectralAtomizer
    * Ingests a logical sequence (Compatibility method).
    * SpectralAtomizer primarily deals with raw signal data rather than text.
    */
-  public ingestSequence(text: string, system: Root.ManifoldView): Uint32Array {
+  public ingestSequence(
+    _text: string,
+    _system: Root.ManifoldView
+  ): Uint32Array {
     throw new Error(
       "SpectralAtomizer requires raw signal or telemetry ingestion."
     );
@@ -47,8 +49,8 @@ export default class SpectralAtomizer
    * Decodes a manifold sequence (Compatibility method).
    */
   public decodeSequence(
-    sequenceIds: Uint32Array,
-    system: Root.ManifoldView
+    _sequenceIds: Uint32Array,
+    _system: Root.ManifoldView
   ): string {
     return "Spectral Data";
   }

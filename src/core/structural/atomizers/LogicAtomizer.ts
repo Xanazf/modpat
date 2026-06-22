@@ -1,7 +1,6 @@
 import { DOPAT_CONFIG } from "@config";
 import { OperatorClass, type SlotType } from "@core_i/helpers/enums";
 import { classifyOperatorToken } from "@core_i/helpers/functions";
-import type System from "@core_i/System";
 import { NUMBER_LINE_SCALE } from "@skill_cogi/Reduction";
 import { BaseAtomizer, COOCCURRENCE_STOPWORDS } from "./BaseAtomizer";
 
@@ -40,7 +39,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
    */
   public getSymbolScope(symbol: string, isOperator?: boolean): number {
     const flag =
-      isOperator ?? classifyOperatorToken(symbol) != OperatorClass.None;
+      isOperator ?? classifyOperatorToken(symbol) !== OperatorClass.None;
     return super.getSymbolScope(symbol, flag);
   }
 
@@ -78,7 +77,7 @@ export default class Atomizer extends BaseAtomizer implements Atomic.Engine {
 
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
-      const isOperator = classifyOperatorToken(token) != OperatorClass.None;
+      const isOperator = classifyOperatorToken(token) !== OperatorClass.None;
 
       // 1. Calculate Logical Mass (m = E/c^2).
       // Operators are massive attractors that define the "gravitational" field of the statement.

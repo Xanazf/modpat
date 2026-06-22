@@ -187,7 +187,7 @@ async function run() {
     const testItem = CORPUS[0];
     const ids = atomizer.ingestSequence(testItem.source, system);
     if (ids.length > 0) {
-      (traveler as any).buildGridIndex();
+      traveler.buildGridIndex();
       const firstId = ids[0];
       const px = system.posX[firstId];
       const py = system.posY[firstId];
@@ -195,15 +195,10 @@ async function run() {
       const pw = system.posW[firstId];
 
       // Simplified force (A_B_FULL_GRADIENT = false)
-      (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
-      const simplified = (traveler as any).getMetricForce(
-        px,
-        py,
-        pz,
-        pw,
-        [],
-        undefined
-      );
+      (
+        DOPAT_CONFIG.PHYSICS as { A_B_FULL_GRADIENT: boolean }
+      ).A_B_FULL_GRADIENT = false;
+      const simplified = traveler.getMetricForce(px, py, pz, pw, [], undefined);
 
       // Inner derivative force (A_B_FULL_GRADIENT = true, computed via public function)
       const fullGradForce = getMetricForceWithInnerDerivative(
@@ -237,27 +232,35 @@ async function run() {
     system.reset();
 
     // --- conformal ON ---
-    (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = true;
-    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
+    (DOPAT_CONFIG.PHYSICS as { CONFORMAL_ENABLED: boolean }).CONFORMAL_ENABLED =
+      true;
+    (DOPAT_CONFIG.PHYSICS as { A_B_FULL_GRADIENT: boolean }).A_B_FULL_GRADIENT =
+      false;
     const on = await runQuery(item.source, traveler, atomizer, system);
 
     system.reset();
 
     // --- conformal OFF ---
-    (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = false;
-    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
+    (DOPAT_CONFIG.PHYSICS as { CONFORMAL_ENABLED: boolean }).CONFORMAL_ENABLED =
+      false;
+    (DOPAT_CONFIG.PHYSICS as { A_B_FULL_GRADIENT: boolean }).A_B_FULL_GRADIENT =
+      false;
     const off = await runQuery(item.source, traveler, atomizer, system);
 
     system.reset();
 
     // --- conformal FULL GRADIENT ---
-    (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = true;
-    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = true;
+    (DOPAT_CONFIG.PHYSICS as { CONFORMAL_ENABLED: boolean }).CONFORMAL_ENABLED =
+      true;
+    (DOPAT_CONFIG.PHYSICS as { A_B_FULL_GRADIENT: boolean }).A_B_FULL_GRADIENT =
+      true;
     const fullGrad = await runQuery(item.source, traveler, atomizer, system);
 
     // restore defaults
-    (DOPAT_CONFIG.PHYSICS as any).CONFORMAL_ENABLED = true;
-    (DOPAT_CONFIG.PHYSICS as any).A_B_FULL_GRADIENT = false;
+    (DOPAT_CONFIG.PHYSICS as { CONFORMAL_ENABLED: boolean }).CONFORMAL_ENABLED =
+      true;
+    (DOPAT_CONFIG.PHYSICS as { A_B_FULL_GRADIENT: boolean }).A_B_FULL_GRADIENT =
+      false;
 
     const match = on.answer === off.answer;
     const expectedMet =

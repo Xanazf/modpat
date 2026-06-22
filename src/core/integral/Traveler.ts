@@ -39,14 +39,12 @@ import {
 import type { Language } from "@skill_lang/Language";
 import type { WorkingMemory } from "@skill_lang/WorkingMemory";
 import {
-  boostIntent,
   decayIntent,
   IntentTag,
   spawnIntent as spawnIntentPrecept,
 } from "@utils/intentPrecept";
 import logger from "@utils/SpectralLogger";
 import { extractTopic } from "@utils/topicExtraction";
-import nlp from "compromise";
 import { resolveLogicFormula } from "./formula/E1Formula";
 import { OperatorClass } from "./helpers/enums";
 import { classifyOperatorToken } from "./helpers/functions";
@@ -209,7 +207,7 @@ class Traveler implements Mapping.Engine {
     // locomotion. Cast through `any` here so the type stays non-null for
     // perception code paths while still allowing the legacy single-arg form
     // (Mapper(system)) used internally by older tests.
-    this.atomizer = atomizer as any;
+    this.atomizer = atomizer as Atomic.Engine;
     this.store = store;
     this.gpu = gpu;
     this.unfolder = unfolder;
@@ -470,7 +468,7 @@ class Traveler implements Mapping.Engine {
   }
 
   public async dispose(): Promise<void> {
-    if (this.gpu && this.gpu.dispose) {
+    if (this.gpu?.dispose) {
       await this.gpu.dispose();
       this.gpu = null;
     }
@@ -702,7 +700,7 @@ class Traveler implements Mapping.Engine {
     py: number,
     pz: number,
     pw: number,
-    pens: any[],
+    pens: Cognition.PenaltyWell[],
     boost: Set<number> | undefined,
     activeAtoms?: Set<number>
   ): [V: number, fx: number, fy: number, fz: number, fw: number] {
@@ -725,7 +723,7 @@ class Traveler implements Mapping.Engine {
     py: number,
     pz: number,
     pw: number,
-    pens: any[],
+    pens: Cognition.PenaltyWell[],
     boost: Set<number> | undefined,
     activeAtoms?: Set<number>
   ): [V: number, fx: number, fy: number, fz: number, fw: number] {
@@ -746,8 +744,8 @@ class Traveler implements Mapping.Engine {
     regularizeChristoffels(this._loco);
   }
 
-  // Private shims kept for test access via `(traveler as any)._settleAtoms(...)` etc.
-  private _settleAtoms(
+  // shims kept for test access via `(traveler as any)._settleAtoms(...)` etc.
+  _settleAtoms(
     ids: Uint32Array,
     driftTargets: Map<number, readonly [number, number, number, number]>,
     boost?: Set<number>,
@@ -757,7 +755,7 @@ class Traveler implements Mapping.Engine {
   }
 
   // Private shim kept for test access via `(traveler as any)._computeHolonomy(...)`.
-  private _computeHolonomy(
+  public _computeHolonomy(
     px: Float64Array,
     py: Float64Array,
     pe: Float64Array,
@@ -964,7 +962,7 @@ class Traveler implements Mapping.Engine {
       .filter(t => t.length > 0);
     if (tokens.length < 2) return null;
     tokens.pop();
-    return tokens.join(" ") + " |-";
+    return `${tokens.join(" ")} |-`;
   }
 
   private _normaliseLearned(s: string): string {
@@ -1061,7 +1059,7 @@ class Traveler implements Mapping.Engine {
 
   private async _crystallizeLearnedPath(
     candidate: Memory.ChallengeCandidate,
-    diagnostics: any,
+    diagnostics: Mapping.PerceptionDiagnostics | null,
     probeIds: Uint32Array,
     energy: number = 1.5
   ): Promise<void> {
@@ -1349,7 +1347,8 @@ class Traveler implements Mapping.Engine {
   ): void {
     const cogTick =
       opts.intervalMs ??
-      (DOPAT_CONFIG.observability as any).COGNITIVE_TICK_MS ??
+      (DOPAT_CONFIG.observability as { COGNITIVE_TICK_MS?: number })
+        .COGNITIVE_TICK_MS ??
       5_000;
     const learnerMs = opts.learnerIntervalMs ?? 10_000;
 
@@ -1802,7 +1801,7 @@ class Traveler implements Mapping.Engine {
 
   /** @deprecated Access language.workingMemory directly. */
   getWorkingMemory(): WorkingMemory | null {
-    return (this.language as any)?.workingMemory ?? null;
+    return this.language?.workingMemory ?? null;
   }
 }
 
@@ -1816,7 +1815,7 @@ export function getMetricForceWithInnerDerivative(
   py: number,
   pz: number,
   pw: number,
-  pens: any[],
+  pens: Cognition.PenaltyWell[],
   boost: Set<number> | undefined,
   activeAtoms?: Set<number>
 ): [V: number, fx: number, fy: number, fz: number, fw: number] {

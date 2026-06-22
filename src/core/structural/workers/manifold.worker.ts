@@ -21,6 +21,9 @@ const { buffer, layout } = workerData as WorkerIPC.WorkerInit;
 
 // Cached reader - reused for every task; length is patched per-message.
 const reader = new ManifoldReader(buffer, layout, 0);
+// The metric/constellation helpers accept the full Root.ManifoldView surface;
+// ManifoldReader implements the read-only subset they touch.
+const readerView = reader as unknown as Root.ManifoldView;
 
 // Cached spatial index - rebuilt when length changes significantly (≥5% growth).
 let cachedIndex: GridIndex4D | null = null;
@@ -57,9 +60,9 @@ function computeRawGaps(
       for (let j = i + 1; j < heavy.length; j++) {
         const a = heavy[i],
           b = heavy[j];
-        const dist = distance4D(a, b, reader as any);
-        const rA = orbitRadius(a, reader as any);
-        const rB = orbitRadius(b, reader as any);
+        const dist = distance4D(a, b, readerView);
+        const rA = orbitRadius(a, readerView);
+        const rB = orbitRadius(b, readerView);
         const combined = rA + rB;
         if (combined === 0) continue;
         const tension = dist / combined;
@@ -91,7 +94,7 @@ parentPort!.on("message", (msg: WorkerIPC.ManifoldRequest) => {
   try {
     if (type === "constellations") {
       const index = getIndex(length);
-      const result = constellations(reader as any, { index });
+      const result = constellations(readerView, { index });
       parentPort!.postMessage({ id, result });
     } else if (type === "gaps") {
       const consts = msg.consts ?? [];
@@ -111,9 +114,9 @@ parentPort!.on("message", (msg: WorkerIPC.ManifoldRequest) => {
 
       for (let i = 1; i < length; i++) {
         if (reader.allocated[i] !== 1) continue;
-        const parentId = orbitalParent(i, reader as any, index);
-        const radius = orbitRadius(i, reader as any);
-        const sats = satellites(i, reader as any, index);
+        const parentId = orbitalParent(i, readerView, index);
+        const radius = orbitRadius(i, readerView);
+        const sats = satellites(i, readerView, index);
         if (parentId !== null || sats.length > 0) {
           results.push({
             id: i,
@@ -125,7 +128,8 @@ parentPort!.on("message", (msg: WorkerIPC.ManifoldRequest) => {
       }
       parentPort!.postMessage({ id, result: results });
     }
-  } catch (err: any) {
-    parentPort!.postMessage({ id, error: err?.message ?? String(err) });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    parentPort!.postMessage({ id, error: message });
   }
 });

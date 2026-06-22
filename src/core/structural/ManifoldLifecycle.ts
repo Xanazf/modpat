@@ -190,7 +190,7 @@ export class ManifoldLifecycle {
       const newSystem = new System();
       const newAllocator = new TMRFreeList(name => metrics.increment(name));
       newSystem.setAllocator(newAllocator);
-      newAllocator.setInterruptHandler((reason, values) => {
+      newAllocator.setInterruptHandler((reason, _values) => {
         this.triggerInterrupt(`TMR quarantine [self-healed]: ${reason}`).catch(
           err => {
             console.error(`[ManifoldLifecycle] TMR interrupt error:`, err);
@@ -442,9 +442,7 @@ export class ManifoldLifecycle {
       for (const ev of events) {
         if (ev.type === "component_birth" && ev.persistence > MIN_PERSISTENCE) {
           const scope = sys.scope[ev.atomId];
-          const label = (this.unfolder as any)?.resolveScope(scope) as
-            | string
-            | undefined;
+          const label = this.unfolder?.resolveScope(scope);
           if (label && label.length > 2) {
             this._inquiryQueue.enqueue(
               label,
@@ -607,6 +605,9 @@ export class ManifoldLifecycle {
     }
 
     if (remediated > 0) metrics.increment("singularity.remediated", remediated);
+  }
+  public testSingularityTick() {
+    return this.runSingularityTick();
   }
 
   /**
@@ -1036,6 +1037,16 @@ export class ManifoldLifecycle {
     if (this.stabilityPromise) {
       await this.stabilityPromise;
     }
+  }
+
+  // INFO: for test
+  public static getTickTesting(): number {
+    return ManifoldLifecycle.TOPO_TICK_INTERVAL;
+  }
+  public static patchTickTesting(new_interval: number): void {
+    (
+      ManifoldLifecycle as unknown as { TOPO_TICK_INTERVAL: number }
+    ).TOPO_TICK_INTERVAL = new_interval;
   }
 
   /**
