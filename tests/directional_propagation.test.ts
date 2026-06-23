@@ -132,6 +132,14 @@ export async function runDirectionalPropagationTests() {
         const dir = mapper.inferenceDirection(c, premises);
         assert.ok(dir.backward < dir.forward);
       });
+
+      await it("exposes lastInferenceDirection, populated by live crystallization", async () => {
+        // Wiring guard: the live learner records the W-direction signature of
+        // each crystallized conclusion here (Traveler._crystallizeLearnedPath),
+        // so the reasoning-vs-rationalization measurement is an output property
+        // of the pipeline, not a callable-only hook. Defaults null pre-cycle.
+        assert.strictEqual(mapper.lastInferenceDirection, null);
+      });
     });
   });
 }

@@ -13,6 +13,7 @@
 
 import { DatabaseContext } from "@_lib/persistence/DatabaseContext";
 import LogicAtomizer from "@atomics/LogicAtomizer";
+import SceneAtomizer from "@atomics/SceneAtomizer";
 import SemanticAtomizer from "@atomics/SemanticAtomizer";
 import SpectralAtomizer from "@atomics/SpectralAtomizer";
 import { DOPAT_CONFIG } from "@config";
@@ -173,7 +174,7 @@ export function createTestTraveler(
 // Runtime
 // ---------------------------------------------------------------------------
 
-export type AtomizerMode = "semantic" | "base" | "spectral";
+export type AtomizerMode = "semantic" | "base" | "spectral" | "scene";
 
 export class Runtime {
   public readonly system: System;
@@ -306,6 +307,15 @@ export class Runtime {
         const spec = new SpectralAtomizer();
         await spec.init();
         atomizer = spec;
+        break;
+      }
+      case "scene": {
+        // Vision channel: the clean object↔word map (no operator attractors).
+        // Scenes ground through the SAME GroundGraph machinery as logic/code, so
+        // booting in this mode makes the vision domain reachable end-to-end.
+        const scene = new SceneAtomizer();
+        await scene.init();
+        atomizer = scene;
         break;
       }
       default: {

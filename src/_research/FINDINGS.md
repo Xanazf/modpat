@@ -123,3 +123,118 @@ embedded instruction (`KNOWN_OVER_ABSTAINS = []`, floor raised to 1.0). The
 benchmark-not-run-by-CI blind spot caused the earlier silent 100%→66.7%
 regression - the calibration guard now runs in the suite, so a real drop will
 fail CI rather than rot.
+
+
+## Repair operator: measured zero payoff on every gate-abstain case (2026-06-12)
+
+`scripts/dev/repair_operator_diag.ts` measured three candidate repairs
+(probe-mode re-traverse, reinforce-input-masses + retry, plain re-perceive) on
+every gate-abstain case of the calibration corpus.
+
+**The finding: payoff = 0 for all three.** Every abstain is a true negative
+(disj1 / broken1 / broken2 are genuinely unanswerable), and the gate correctly
+re-catches the same candidate after each repair, with zero wrong-flips.
+
+**Why a naive HEAD read gets it wrong:** the Phase 2 roadmap describes
+"repair-then-abstain" as a key gate behaviour. A reader concludes the repair step
+is unbuilt. It WAS measured — three candidates, all zero payoff — and the
+repair stays unwired per its own deferral condition ("wire the one that pays" —
+none pays). The abstain cases are genuine negatives, not repair opportunities.
+Graded abstention (definitive → hedged → silent) is the surface for the
+failed-repair case.
+
+
+## Conformal metric / Ricci flow: dead end for faithfulness on grounded manifolds (2026-06-12)
+
+`scripts/dev/faithfulness_dynamics_diag.ts` drove the geometry self-correction
+against the traversal-fidelity objective. Three falsifiable findings:
+
+1. **φ fully saturates** on a grounded manifold — meanφ = 50.00 = `PHI_MAX`
+   (≈21 neighbours × infl≥5), so the conformal factor `e^{−2φ} ≈ 3.7e-44 ≈ 0`.
+2. **C3 Ricci flow is therefore inert** — `R = −6 e^{−2φ}(…) ≈ 0`, mean|R| = 0;
+   traversal fidelity is flat across 200 Ricci steps. The driving signal has
+   vanished, so it cannot self-correct toward (or away from) faithfulness.
+3. **The conformal metric force *hurts* faithfulness in dense regions**: disabling
+   it raised onPath 0.714→0.745, monotonic 0.844→0.908, reach 0.60→0.65 — because
+   `e^{−2φ}` multiplies the attractor force by ~0 in dense zones, so geodesics
+   bypass the central hubs faithful inference should route through.
+
+**The deeper result** (`scripts/dev/newtonian_relax_proto.ts`): stabilization and
+muting are the **same mechanism**. With `CONFORMAL_ENABLED=false` the relaxation
+action diverges (8.1→22 on a dense cluster). Every attempt to keep the force
+un-muted while restoring monotonic descent failed: per-point adaptive step
+(monotonic only when inert), `CONFORMAL_PHI_SCALE` sweep (no sweet spot),
+backtracking line-search (backtracks to ~0 step — the conformal-OFF action is
+ill-conditioned). The fidelity-0.745 number came from a non-converged,
+overshooting relaxation, not a principled geodesic.
+
+**Real conclusion: the metric/force formulation (`g=e^{2φ}δ`) does not pose a
+well-conditioned faithful-geodesic problem.** The action landscape is flat
+(conformal on) or ill-conditioned (off). This was resolved by changing the
+dynamics entirely — from the boundary-value relaxation to a Lyapunov
+damped-particle settling (see REGISTRY.md, "Settling replaces relaxPath"), not by
+re-deriving the conformal metric. C3 Ricci flow and C4 Christoffel learning are
+both dead ends for faithfulness under the conformal model.
+
+**Why a naive HEAD read gets it wrong:** the conformal factor, Ricci flow, and
+Christoffel code are all still in the tree. A reader assumes they are functional
+mechanisms awaiting integration. They are measured dead ends — the signal they
+rely on (scalar curvature via φ) vanishes on any manifold dense enough to be
+useful. The settling arc bypassed the problem entirely.
+
+
+## d3-force-3d / d3-hexadectree: evaluated and rejected (2026-06-12)
+
+`scripts/dev/hexadectree_radius_proto.ts` and `settling_verlet_proto.ts`
+evaluated both libraries against `GridIndex4D` for the traversal hot path.
+
+**The finding: all negative.**
+
+- **d3-hexadectree** is the proper 4D tree but loses **~20×** to `GridIndex4D`
+  on clustered radius queries (it allocates a result array + per-node accessor
+  closures + a wrapper per visited node, vs the grid's flat sorted-bucket scan).
+  Results are identical.
+- **Barnes-Hut multipole approximation is inapplicable**: the metric force is a
+  Gaussian kernel with a hard radius cutoff, so far bodies contribute exactly 0
+  and near bodies can't be lumped into a distant multipole — Barnes-Hut only pays
+  for long-range 1/r forces.
+- **d3-force-3d** is 3D-capped (drops the W axis); its alpha-cooling sacrifices
+  faithfulness.
+
+**Why a naive HEAD read gets it wrong:** the Phase 4 roadmap originally listed
+"Barnes-Hut / grid / framework indices" as the DOD navigation layer. A reader
+expects a tree-based acceleration structure. The grid already dominates; neither
+library improves the hot path. The "Barnes-Hut" item is closed as
+not-applicable.
+
+
+## Grid-backed candidate set for _extractIds: no speedup (2026-06-12)
+
+Tried replacing `_extractIds`'s W-sorted scan with a grid-backed candidate set.
+
+**The finding: no speedup** (heavy load 1410→1420 ms) and it is an approximation
+(shuffled traversal-onPath drifted 0.09→0.11). The extraction metric is
+W-*dominated* (`tot = distSq + dw²·1e6`), so the right index is W-first; the
+grid is XYZ-first with coarse W cells (size 40 ≫ the ~0.1 W scale). The
+W-sorted scan already prunes hard (`dw²·1e6 ≥ minDiff` cuts it short once a
+near-W atom is found), and the grid query's cell-walk + Map lookups cost what
+they save. Also, the synthetic benchmark uses artificially tight W (clusters
+overlap in W), inflating the W-band; real grounded W is the spread-out number
+line where the scan discriminates well. The W-sorted scan stays.
+
+
+## Pole-ingestion measured and REJECTED — gated off (2026-06-12)
+
+`POLE_INGESTION_ENABLED` is **kept false**. Reproducing the real pole path on
+referent-seeded atoms (record the grounded position as the drift target, jitter
+to the pole, then run `Perception.settleAtoms`) **destroys** the validated
+placement: pearson collapses 0.225 → **−0.012**, mean |Δposx| 0.000 → 0.694 —
+the `POLE_JITTER_XYZ=0.05` displacement throws away the hundreds-of-units
+grounded X-layout and 20-tick settling cannot reconstruct it.
+
+**Why a naive HEAD read gets it wrong:** the ROADMAP's Phase 5 says
+"pole-ingestion + settling becomes the standard path, seeded by structure." A
+reader expects the pole flag to be on. Direct referent-seeding IS "seeded by
+structure" and **subsumes** the pole-jitter mechanism — it places exactly what
+pole-ingestion would approximately re-settle. The roadmap goal is met by the
+simpler channel; the pole flag stays off as a measured dead end.

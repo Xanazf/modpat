@@ -11,6 +11,7 @@
 
 import * as assert from "node:assert";
 import SceneAtomizer from "@atomics/SceneAtomizer";
+import Runtime from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import { groundGraphIntoSystem } from "@core_s/grounding/AstGrounding";
@@ -89,6 +90,25 @@ export async function runSceneGroundingTests() {
       // logic/language atomizers that would rewrite it to "+".
       const plus = atom.getSymbolScope("plus");
       assert.strictEqual(atom.resolveScope(plus), "plus");
+    });
+
+    await it("Runtime boots the scene atomizer mode end-to-end", async () => {
+      // Wiring guard: the vision channel must be reachable as a bootable mode,
+      // not only constructable by hand in tests.
+      const rt = await Runtime.boot({
+        atomizer: "scene",
+        db: ":memory:",
+        noTick: true,
+        noLifecycle: true,
+        skipIdentity: true,
+        noWorkers: true,
+      });
+      await rt.ready;
+      assert.strictEqual(rt.atomizerMode, "scene", "boot honours scene mode");
+      assert.ok(
+        rt.atomizer instanceof SceneAtomizer,
+        "scene mode wires a SceneAtomizer"
+      );
     });
 
     await it("scene grounding is faithful (map + traversal), beating a shuffled null", async () => {

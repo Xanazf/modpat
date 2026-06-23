@@ -129,6 +129,17 @@ class Traveler implements Mapping.Engine {
   public lastGateCandidate: Uint32Array | null = null;
   /** Always null in the gradient pipeline; kept for API compat. */
   public lastDiagnostics: PerceptionDiagnostics | null = null;
+  /**
+   * W-direction signature of the most recently crystallized conclusion (pre-P7):
+   * whether its support was gathered forward along W (reasoning) or backward
+   * (rationalization). Set every time a learned path is crystallized, so the
+   * reasoning-vs-rationalization distinction is a measurable output property of
+   * the live pipeline rather than a callable-only hook. See
+   * `DirectionalPropagation.ts` and NOTES.md "The W Dimension".
+   */
+  public lastInferenceDirection: ReturnType<
+    typeof classifyInferenceDirection
+  > | null = null;
   /** P2 clamp counter (proxied from _loco). */
   public get phiClippedCount(): number {
     return this._loco.phiClippedCount;
@@ -1073,6 +1084,23 @@ class Traveler implements Mapping.Engine {
     const inputIds = probeIds;
     const best = diag.sinkCandidates[0];
     const outputIds = new Uint32Array([best.id]);
+
+    // Record the W-direction signature of this conclusion's support before it
+    // sets: premises (probe) → conclusion (sink). The learner reproduces a
+    // conclusion FORWARD from its premises, so this is a measurement, not a
+    // gate - it exposes how W-spread (and thus how backward-sensitive) the
+    // support is as a live, inspectable property (NOTES.md "The W Dimension"),
+    // without disturbing the forward learner's crystallization energy.
+    this.lastInferenceDirection =
+      best.id > 0 && this.system.isAllocated(best.id) && inputIds.length > 0
+        ? classifyInferenceDirection(this.system, best.id, inputIds)
+        : null;
+    if (this.lastInferenceDirection?.isRationalization) {
+      logger.debug(
+        `[LEARNER] backward-sensitive support (ratio ` +
+          `${this.lastInferenceDirection.ratio.toFixed(2)}) for "${candidate.factText}"`
+      );
+    }
 
     await this.store.crystallizeProof(inputIds, outputIds, energy);
     await this.store.updateKnowledgeState(

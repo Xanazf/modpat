@@ -16,6 +16,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { DOPAT_CONFIG, SYSTEM_CONFIG } from "@config";
 import Runtime from "@core_i/Runtime";
+import type { AtomizerMode } from "@core_i/Runtime";
 import type System from "@core_i/System";
 import { OperatorClass } from "@core_i/System";
 import type Traveler from "@core_i/Traveler";
@@ -108,7 +109,7 @@ let seeder: VocabSeedWorker | null = null;
 let astSeeder: AstSeedWorker | null = null;
 
 let verbose = false;
-let atomMode: "semantic" | "base" | "spectral" = "semantic";
+let atomMode: AtomizerMode = "semantic";
 let dbPath = "./data/repl.db";
 
 let sessionIngested = 0;
@@ -121,6 +122,7 @@ async function init(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.includes("--base")) atomMode = "base";
   if (args.includes("--spectral")) atomMode = "spectral";
+  if (args.includes("--scene")) atomMode = "scene";
   const dbArg = args.find(a => a.startsWith("--db="));
   if (dbArg) dbPath = dbArg.slice(5);
 
