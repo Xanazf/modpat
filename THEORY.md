@@ -107,3 +107,112 @@ The difference is in that an LLM's constraints are implicit and statistical, whi
 The architecture that _ought to be_: a system where inference aligns with conceptual topology the same way memory access aligns with cache lines. Not rules, not weights, but geometry and physics.
 
 The coherence of a conclusion is a physical property of how the wave propagated, not a post-hoc logical check.
+
+***
+
+## Potentially better System documentation
+
+> [!NOTE]
+> Not to be confused with AoS.
+> The System stays SoA, this is only a more readable description.
+
+4 dimensions - x,y,z,w, where W is time, stays. Each dimension should be orthogonal, forming the navigation space.
+
+```ts
+interface NavigationSpace {
+  x: Float64Array;
+  y: Float64Array;
+  z: Float64Array;
+  w: Float64Array;
+}
+```
+
+***
+
+5th dimension - structurally a `type` dimension, all the ways an item at `[x,y,z,w]` can be, i.e. the parameter space of the item at those coordinates.
+
+```ts
+// indexes within NavigationSpace
+interface SpaceTimeColumn {
+  x: number; // Uint32
+  y: number; // Uint32
+  z: number; // Uint32
+  w: number; // Uint32
+}
+interface ParameterSpace {
+  coord: SpaceTimeColumn;
+
+  // any parameters necessary to eval an Atom
+  [key: string]?: Float64Array;
+}
+type Atom = ParameterSpace;
+```
+
+***
+
+6th dimension - structurally a `namespace` dimension, i.e. the parameter space of every prior dimension. Has to be self-generating/lazy-loaded capability.
+
+While it is orthogonal, it should follow the shape of the navigation space (e.g. like a tesseract extruded from 3D).
+
+```ts
+namespace Dimension6 {
+  interface PotentialSpace {
+    existing_coords: Float64Array;
+
+    // Float64 for additional parametrics described below
+    // the [key: string] should only be indicative of:
+    // "any new parameter is possible to attribute, but it should logically follow"
+    [key: string]?: Float64Array;
+  }
+
+  // ---
+
+  interface PosX extends PotentialSpace {
+    // mass/charge follow from X as X is a beam, a line that has a beginning but no end
+    // therefore: it accumulates (in general terms)
+    mass: Float64Array;
+    charge?: Float64Array;
+  }
+
+  interface PosY extends PotentialSpace {
+    // scope/kind follow from Y as Y is orthogonal to X
+    // with Y it's possible to form a coordinate and quantify mass
+    scope: Float64Array;
+    kind?: Float64Array;
+  }
+
+  // ---
+
+  // The first possible coordinate (index of the coordinate)
+  type FlatSpaceColumn = Omit<SpaceTimeColumn, "z"|"w">;
+
+  // ---
+
+  interface PosZ extends PotentialSpace {
+    // depth/energy follow from Z as Z is orthogonal to both X and Y
+    // with Z it's possible to qualify the type of influence and quantify its effect
+    depth: Float64Array;
+    energy?: Float64Array;
+  }
+
+  // ---
+
+  // The second possible coordinate (index of the coordinate)
+  type DeepSpaceColumn = Omit<SpaceTimeColumn, "w">;
+
+  // ---
+
+  interface PosW extends PotentialSpace {
+    // age/timestamp follow from W as W is orthogonal to all 3 prior dimensions
+    // makes possible a qualitatively different form of analysis:
+    //  - when did/will the Atom at xyz start influencing;
+    //  - when did/will it stop influencing;
+    //  - how long has it been influencing, if applicable;
+
+    // formation of System-bound timeline needed to construct before 1970
+    // Int32 (signed integers) is to form "before" (-int) and "after" (+int)
+    timestamp: Int32Array; // Int32 of Unix-like time
+    age?: Float64Array;
+  }
+}
+```
