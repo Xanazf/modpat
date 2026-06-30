@@ -66,6 +66,16 @@ declare namespace Root {
     posZ: Float64Array;
     posW: Float64Array;
 
+    // Bitemporal timeline (read/write). Unlike posW (volatile freshness,
+    // re-anchored on every vault hit), these are stable timeline coordinates -
+    // written once at allocation, never re-anchored, never decayed.
+    /** Transaction time: the systemAge at which the precept was learned. */
+    wBirth: Float64Array;
+    /** Valid-from: when the precept's influence begins. */
+    wStart: Float64Array;
+    /** Valid-to: when influence ends (opens to `maxilon`). */
+    wStop: Float64Array;
+
     // Reactive combinations
     // NOTE: ideally, extended on the fly
     // via combining the 4 basic physical properties
@@ -113,6 +123,16 @@ declare namespace Root {
 
     // Check if a location is currently allocated
     isAllocated(id: number): boolean;
+
+    // Valid-time predicates over the bitemporal interval vs. systemAge.
+    /** wStart <= systemAge < wStop. */
+    isInfluencing(id: number): boolean;
+    /** wStart > systemAge (influence not begun - a prediction / the "will" case). */
+    isFuture(id: number): boolean;
+    /** wStop <= systemAge (influence lapsed). */
+    isExpired(id: number): boolean;
+    /** min(systemAge, wStop) − wStart. */
+    duration(id: number): number;
 
     // Temporal freshness
     /** Re-anchors posW to systemAge for every precept that carries this scope. */

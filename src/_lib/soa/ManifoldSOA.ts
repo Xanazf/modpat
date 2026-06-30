@@ -25,6 +25,9 @@ export interface ManifoldLayout {
     intensity: number;
     decayRate: number;
     checksum: number;
+    wBirth: number;
+    wStart: number;
+    wStop: number;
     PartLayer: number;
     ComplexLayer: number;
     operatorClass: number;
@@ -43,11 +46,11 @@ export function computeManifoldLayout(
   const bF64 = maxPrecepts * 8;
   const bU32 = maxPrecepts * 4;
   const bU8 = maxPrecepts * 1;
-  const base14 = bF64 * 14;
-  const base2U32 = base14 + bU32 * 2;
+  const base17 = bF64 * 17;
+  const base2U32 = base17 + bU32 * 2;
   return {
     maxPrecepts,
-    byteLength: base14 + bU32 * 2 + bU8 * 3,
+    byteLength: base17 + bU32 * 2 + bU8 * 3,
     c,
     epsilon,
     maxilon,
@@ -66,8 +69,11 @@ export function computeManifoldLayout(
       intensity: 11 * bF64,
       decayRate: 12 * bF64,
       checksum: 13 * bF64,
-      PartLayer: base14,
-      ComplexLayer: base14 + bU32,
+      wBirth: 14 * bF64,
+      wStart: 15 * bF64,
+      wStop: 16 * bF64,
+      PartLayer: base17,
+      ComplexLayer: base17 + bU32,
       operatorClass: base2U32,
       allocated: base2U32 + bU8,
       slotType: base2U32 + 2 * bU8,
@@ -98,6 +104,15 @@ export class ManifoldSOA {
   public readonly decayRate: Float64Array;
   public readonly checksum: Float64Array;
 
+  /** Transaction time: when the system learned the precept. Written once at
+   *  allocation, never re-anchored, never decayed. (F64) */
+  public readonly wBirth: Float64Array;
+  /** Valid-from: when the precept's influence begins. May be < wBirth for
+   *  historical facts; > systemAge for predictions / the "will" case. (F64) */
+  public readonly wStart: Float64Array;
+  /** Valid-to: when influence ends. Opens to `maxilon` (still influencing). (F64) */
+  public readonly wStop: Float64Array;
+
   public readonly PartLayer: Uint32Array;
   public readonly ComplexLayer: Uint32Array;
 
@@ -116,7 +131,7 @@ export class ManifoldSOA {
 
     // Calculate total buffer size required for all views.
     const totalBytes =
-      blockF64 * 14 + // mass, scope, depth, time, posX, posY, posZ, posW, density, entropyRate, potency, intensity, decayRate, checksum
+      blockF64 * 17 + // mass, scope, depth, time, posX, posY, posZ, posW, density, entropyRate, potency, intensity, decayRate, checksum, wBirth, wStart, wStop
       blockU32 * 2 + // PartLayer, ComplexLayer
       blockU8 * 3; // operatorClass, allocated, slotType
 
@@ -152,6 +167,12 @@ export class ManifoldSOA {
     this.decayRate = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
     this.checksum = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.wBirth = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.wStart = new Float64Array(this.buffer, offset, maxP);
+    offset += blockF64;
+    this.wStop = new Float64Array(this.buffer, offset, maxP);
     offset += blockF64;
 
     // Map 32-bit structural layers into the buffer.

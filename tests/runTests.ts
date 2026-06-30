@@ -40,6 +40,7 @@ import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { runStructuralGroundingTests } from "./structural_grounding.test";
 import { runSurveyLoopTests } from "./survey_loop.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
+import { runTimelineBuffersTests } from "./timeline_buffers.test";
 import { runTravelerCorrectionsTests } from "./traveler_corrections.test";
 import { executeUMAPSuite } from "./umap_loader.test";
 import { executeUnfolderSuite } from "./unfolder.test";
@@ -122,6 +123,7 @@ async function run() {
     await runWithTimeout("proactive_paths", runProactivePathTests);
     await runWithTimeout("phi_safety", runPhiSafetyTests);
     await runWithTimeout("temporal_ordering", runTemporalOrderingTests);
+    await runWithTimeout("timeline_buffers", runTimelineBuffersTests);
     await runWithTimeout("arithmetic", executeArithmeticSuite);
     await runWithTimeout("number_line", executeNumberLineSuite);
     await runWithTimeout("endurance", executeEnduranceSuite);

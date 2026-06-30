@@ -152,6 +152,27 @@ class System implements Root.ManifoldView {
     return this.soa.posW;
   }
 
+  /**
+   * Transaction time: the manifold clock value when each precept was learned.
+   * Written once at allocation, never re-anchored, never decayed - the stable
+   * authoring timeline THEORY.md's reasoning-vs-rationalization claim needs
+   * (posW is volatile freshness and is re-anchored on every vault hit). (F64)
+   */
+  public get wBirth(): Float64Array {
+    return this.soa.wBirth;
+  }
+
+  /** Valid-from: when each precept's influence begins. May precede wBirth
+   *  (historical fact) or exceed systemAge (a prediction / the "will" case). (F64) */
+  public get wStart(): Float64Array {
+    return this.soa.wStart;
+  }
+
+  /** Valid-to: when influence ends. Opens to `maxilon` (still influencing). (F64) */
+  public get wStop(): Float64Array {
+    return this.soa.wStop;
+  }
+
   /** Buffer view for 'density': mass / scope. (F64) */
   public get density(): Float64Array {
     return this.soa.density;
@@ -394,6 +415,14 @@ class System implements Root.ManifoldView {
     this.scope[id] = initialScope;
     this.decayRate[id] = 0.01; // Default decay rate.
 
+    // Bitemporal timeline: stamp transaction time (when learned) and open the
+    // valid interval at "now". The ingest layer overrides wStart/wStop for
+    // historical facts (wStart < now) or predictions (wStart > now). wBirth is
+    // never overwritten - it is the immutable authoring coordinate.
+    this.wBirth[id] = this.systemAge;
+    this.wStart[id] = this.systemAge;
+    this.wStop[id] = this.maxilon;
+
     // Track structural-channel provenance (delete-then-maybe-add so a reused
     // free-list slot never inherits a previous occupant's grounded status).
     if (from === "ast-ground") this.groundedPrecepts.add(id);
@@ -436,6 +465,27 @@ class System implements Root.ManifoldView {
     return this.allocated[id] === 1;
   }
 
+  /** Valid-time test: the precept's influence interval covers the current clock. */
+  public isInfluencing(id: number): boolean {
+    return this.wStart[id] <= this.systemAge && this.systemAge < this.wStop[id];
+  }
+
+  /** Valid-time test: influence has not begun yet (a prediction / the "will" case). */
+  public isFuture(id: number): boolean {
+    return this.wStart[id] > this.systemAge;
+  }
+
+  /** Valid-time test: influence has lapsed (wStop is in the past). */
+  public isExpired(id: number): boolean {
+    return this.wStop[id] <= this.systemAge;
+  }
+
+  /** How long the precept has been influencing: min(now, wStop) − wStart.
+   *  Distinct from the `time` buffer, which is friction-weighted accumulated age. */
+  public duration(id: number): number {
+    return Math.min(this.systemAge, this.wStop[id]) - this.wStart[id];
+  }
+
   /**
    * Returns a location to the free list and clears its physical state.
    *
@@ -469,6 +519,9 @@ class System implements Root.ManifoldView {
     this.intensity[id] = 0;
     this.decayRate[id] = 0;
     this.checksum[id] = 0;
+    this.wBirth[id] = 0;
+    this.wStart[id] = 0;
+    this.wStop[id] = 0;
     this.operatorClass[id] = OperatorClass.None;
     this.slotType[id] = SlotType.None;
     this.PartLayer[id] = 0;
@@ -634,6 +687,9 @@ class System implements Root.ManifoldView {
     this.systemAge += dtSec;
 
     // posW freshness decay factor for non-eternal precepts.
+    // NOTE: wBirth/wStart/wStop are intentionally NOT touched here. They are
+    // timeline coordinates, not state - fading them would destroy the authoring
+    // order and valid-time intervals they exist to preserve.
     const ageFactor = Math.exp(-DOPAT_CONFIG.PHYSICS.AGE_DECAY_RATE * dtSec);
 
     for (let i = 0; i < this.length; i++) {

@@ -31,12 +31,15 @@ export async function runDirectionalPropagationTests() {
     const mapper = rt.mapper;
 
     // Place scratch precepts past the live frontier with controlled W / charge.
+    // W is written to wBirth (the stable authoring timeline the model now reads),
+    // NOT posW (volatile freshness). posW is left at 0 on purpose: it must not
+    // affect the measurement.
     let next = sys.length + 16;
     const place = (w: number, density: number, intensity: number): number => {
       const id = next++;
       sys.allocated[id] = 1;
       if (id >= sys.length) sys.length = id + 1;
-      sys.posW[id] = w;
+      sys.wBirth[id] = w;
       sys.density[id] = density;
       sys.intensity[id] = intensity;
       sys.mass[id] = 1;
@@ -110,6 +113,58 @@ export async function runDirectionalPropagationTests() {
         const d = classifyInferenceDirection(sys, c, premises);
         assert.ok(Math.abs(d.ratio - 1) < 1e-9, "coincident ratio must be 1");
         assert.ok(!d.isRationalization, "coincident must not be flagged");
+      });
+    });
+
+    await describe("Payoff: measurement reads wBirth, not posW", async () => {
+      await it("classification is unchanged after a posW re-anchor corrupts freshness order", async () => {
+        const c = place(100, 3, 3);
+        const premises = [place(30, 3, 3), place(20, 3, 3)];
+
+        const before = classifyInferenceDirection(sys, c, premises);
+        assert.ok(
+          before.isRationalization,
+          "older premises read as backward support"
+        );
+
+        // Simulate a vault hit on the premises: posW is re-anchored to systemAge,
+        // which (if the model read posW) would collapse Δw and flip the verdict.
+        // Set posW on conclusion + premises to the SAME value to maximise the trap.
+        sys.posW[c] = sys.systemAge;
+        for (const p of premises) sys.posW[p] = sys.systemAge;
+
+        const after = classifyInferenceDirection(sys, c, premises);
+        assert.equal(
+          after.ratio,
+          before.ratio,
+          "wBirth-based ratio must be identical before and after the posW re-anchor"
+        );
+        assert.ok(
+          after.isRationalization,
+          "verdict must survive the re-anchor (posW wiring would have cleared it)"
+        );
+      });
+
+      await it("posW carries no signal: varying it does not move the amplitude", async () => {
+        const c = place(100, 3, 3);
+        const premises = [place(40, 3, 3)];
+        const base = measureInferenceAmplitude(
+          sys,
+          c,
+          premises,
+          "reasoning"
+        ).amplitude;
+
+        sys.posW[c] = 999;
+        sys.posW[premises[0]] = -999;
+        const after = measureInferenceAmplitude(
+          sys,
+          c,
+          premises,
+          "reasoning"
+        ).amplitude;
+
+        assert.equal(after, base, "amplitude must not depend on posW");
       });
     });
 

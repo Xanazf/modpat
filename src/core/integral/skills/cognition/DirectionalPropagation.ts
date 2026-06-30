@@ -36,7 +36,7 @@ export interface SupportContribution {
   /** Field charge of the premise (the locomotion influence kernel, sans the
    *  spatial Gaussian - this is the source strength, not a distance term). */
   charge: number;
-  /** |posW(conclusion) − posW(premise)|: the W-distance the wave travelled. */
+  /** |wBirth(conclusion) − wBirth(premise)|: the W-distance the wave travelled. */
   dw: number;
   /** This premise's amplitude after directional decay. */
   amplitude: number;
@@ -73,14 +73,19 @@ export function measureInferenceAmplitude(
   mode: PropagationMode
 ): InferenceAmplitude {
   const phys = DOPAT_CONFIG.PHYSICS;
-  const wc = system.posW[conclusionId];
+  // Read the W-distance off wBirth (transaction time), NOT posW. posW is the
+  // volatile freshness coordinate, re-anchored to systemAge on every vault hit
+  // (System.refreshConceptAge*); using it here lets a single recall collapse the
+  // measured Δw to ~0 and silently erase the reasoning-vs-rationalization signal.
+  // wBirth is the stable authoring timeline this measurement requires.
+  const wc = system.wBirth[conclusionId];
   const contributions: SupportContribution[] = [];
   let total = 0;
 
   for (let i = 0; i < premiseIds.length; i++) {
     const p = premiseIds[i];
     if (!system.isAllocated(p)) continue;
-    const dw = Math.abs(wc - system.posW[p]);
+    const dw = Math.abs(wc - system.wBirth[p]);
     const charge = fieldCharge(system, p);
     // Distance attenuation along W, paid in both directions.
     let amp = charge * Math.exp(-phys.W_PROPAGATION_DECAY * dw);
