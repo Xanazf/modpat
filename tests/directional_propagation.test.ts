@@ -12,7 +12,9 @@ import * as assert from "node:assert";
 import Runtime from "@core_i/Runtime";
 import {
   classifyInferenceDirection,
+  inferPropagationMode,
   measureInferenceAmplitude,
+  resolveReferents,
 } from "@core_i/skills/cognition/DirectionalPropagation";
 import { describe, it } from "./utils/harness";
 
@@ -31,15 +33,21 @@ export async function runDirectionalPropagationTests() {
     const mapper = rt.mapper;
 
     // Place scratch precepts past the live frontier with controlled W / charge.
-    // W is written to wBirth (the stable authoring timeline the model now reads),
-    // NOT posW (volatile freshness). posW is left at 0 on purpose: it must not
-    // affect the measurement.
+    // `w` is written to wBirth (stable born-position: the distance term). `fresh`
+    // is written to posW (firing recency: the origin/direction term). They are
+    // deliberately separable so the two roles can be exercised independently.
     let next = sys.length + 16;
-    const place = (w: number, density: number, intensity: number): number => {
+    const place = (
+      w: number,
+      density: number,
+      intensity: number,
+      fresh = 0
+    ): number => {
       const id = next++;
       sys.allocated[id] = 1;
       if (id >= sys.length) sys.length = id + 1;
       sys.wBirth[id] = w;
+      sys.posW[id] = fresh;
       sys.density[id] = density;
       sys.intensity[id] = intensity;
       sys.mass[id] = 1;
@@ -100,9 +108,12 @@ export async function runDirectionalPropagationTests() {
 
     await describe("Direction classification", async () => {
       await it("flags a backward-leaning inference as rationalization", async () => {
-        const c = place(100, 3, 3);
-        const premises = [place(30, 3, 3), place(20, 3, 3)];
+        // Conclusion fired last (freshest) AND its premises are older-born:
+        // both signals agree it is reaching back to justify itself.
+        const c = place(100, 3, 3, /* fresh */ 1);
+        const premises = [place(30, 3, 3, 0), place(20, 3, 3, 0)];
         const d = classifyInferenceDirection(sys, c, premises);
+        assert.equal(d.derivedMode, "rationalization");
         assert.ok(d.ratio < 1, "ratio must be < 1 for older premises");
         assert.ok(d.isRationalization, "should flag as rationalization");
       });
@@ -114,40 +125,90 @@ export async function runDirectionalPropagationTests() {
         assert.ok(Math.abs(d.ratio - 1) < 1e-9, "coincident ratio must be 1");
         assert.ok(!d.isRationalization, "coincident must not be flagged");
       });
+
+      await it("does NOT flag when the premises fired last (forward reproduction)", async () => {
+        // Same older-born premises, but a premise is the freshest node: the wave
+        // originates there and feeds the conclusion forward. The spread is real
+        // (ratio < 1) but the derived origin says reasoning, so no flag.
+        const c = place(100, 3, 3, /* fresh */ 0);
+        const premises = [place(30, 3, 3, 1), place(20, 3, 3, 1)];
+        const d = classifyInferenceDirection(sys, c, premises);
+        assert.equal(d.derivedMode, "reasoning");
+        assert.ok(d.ratio < 1, "spread still produces a sub-1 ratio");
+        assert.ok(
+          !d.isRationalization,
+          "must not flag: the premises, not the conclusion, fired first"
+        );
+      });
     });
 
-    await describe("Payoff: measurement reads wBirth, not posW", async () => {
-      await it("classification is unchanged after a posW re-anchor corrupts freshness order", async () => {
-        const c = place(100, 3, 3);
-        const premises = [place(30, 3, 3), place(20, 3, 3)];
-
-        const before = classifyInferenceDirection(sys, c, premises);
-        assert.ok(
-          before.isRationalization,
-          "older premises read as backward support"
-        );
-
-        // Simulate a vault hit on the premises: posW is re-anchored to systemAge,
-        // which (if the model read posW) would collapse Δw and flip the verdict.
-        // Set posW on conclusion + premises to the SAME value to maximise the trap.
-        sys.posW[c] = sys.systemAge;
-        for (const p of premises) sys.posW[p] = sys.systemAge;
-
-        const after = classifyInferenceDirection(sys, c, premises);
-        assert.equal(
-          after.ratio,
-          before.ratio,
-          "wBirth-based ratio must be identical before and after the posW re-anchor"
+    await describe("Signed Δw", async () => {
+      await it("newer-born premises incur no backward penalty (δ < 0)", async () => {
+        // Premises born AFTER the conclusion: reaching them is not a descent into
+        // older knowledge, so max(0, δ) = 0 and backward == forward.
+        const c = place(50, 3, 3, 1);
+        const premises = [place(80, 3, 3, 0), place(90, 3, 3, 0)];
+        const fwd = measureInferenceAmplitude(sys, c, premises, "reasoning");
+        const bwd = measureInferenceAmplitude(
+          sys,
+          c,
+          premises,
+          "rationalization"
         );
         assert.ok(
-          after.isRationalization,
-          "verdict must survive the re-anchor (posW wiring would have cleared it)"
+          Math.abs(fwd.amplitude - bwd.amplitude) < 1e-9,
+          "no descending reach ⇒ no penalty ⇒ fwd == bwd"
+        );
+        const d = classifyInferenceDirection(sys, c, premises);
+        assert.ok(
+          !d.isRationalization,
+          "leaning on newer-born support is not rationalization"
         );
       });
 
-      await it("posW carries no signal: varying it does not move the amplitude", async () => {
-        const c = place(100, 3, 3);
-        const premises = [place(40, 3, 3)];
+      await it("older-born premises are penalized proportionally to descent", async () => {
+        const c = place(100, 3, 3, 1);
+        const near = place(80, 3, 3, 0); // δ = 20
+        const far = place(10, 3, 3, 0); // δ = 90
+        const bwd = measureInferenceAmplitude(
+          sys,
+          c,
+          [near, far],
+          "rationalization"
+        );
+        const nearAmp = bwd.contributions.find(x => x.id === near)!;
+        const farAmp = bwd.contributions.find(x => x.id === far)!;
+        assert.ok(
+          farAmp.amplitude < nearAmp.amplitude,
+          "deeper descent into older knowledge attenuates more"
+        );
+      });
+    });
+
+    await describe("Direction is derived from the dual age geometry", async () => {
+      await it("conclusion freshest ⇒ rationalization; a premise freshest ⇒ reasoning", async () => {
+        const c = place(100, 3, 3, /* fresh */ 5);
+        const premises = [place(30, 3, 3, 1), place(20, 3, 3, 1)];
+        assert.equal(
+          inferPropagationMode(sys, c, premises),
+          "rationalization",
+          "conclusion fired last"
+        );
+
+        // Re-fire a premise so IT is now the freshest node: origin flips, and so
+        // must the derived mode - re-anchoring posW SHOULD move this (unlike the
+        // wBirth-based amplitude, which must not).
+        sys.posW[premises[0]] = 9;
+        assert.equal(
+          inferPropagationMode(sys, c, premises),
+          "reasoning",
+          "a premise now fired last"
+        );
+      });
+
+      await it("amplitude (given a fixed mode) is independent of posW", async () => {
+        const c = place(100, 3, 3, 1);
+        const premises = [place(40, 3, 3, 0)];
         const base = measureInferenceAmplitude(
           sys,
           c,
@@ -163,8 +224,39 @@ export async function runDirectionalPropagationTests() {
           premises,
           "reasoning"
         ).amplitude;
+        assert.equal(after, base, "the distance term reads wBirth only");
+      });
+    });
 
-        assert.equal(after, base, "amplitude must not depend on posW");
+    await describe("Referent-age remap (probe atoms → established concepts)", async () => {
+      await it("resolves a fresh probe atom to the oldest prior precept of its scope", async () => {
+        const scope = 987654;
+        const established = sys.createLocation(1, scope); // born at T0
+        sys.decay(5000); // advance the clock
+        const probe = sys.createLocation(1, scope); // born later (throwaway)
+
+        assert.ok(
+          sys.wBirth[established] < sys.wBirth[probe],
+          "established concept is older-born than the fresh probe atom"
+        );
+
+        const referents = resolveReferents(sys, [probe]);
+        assert.equal(
+          referents[0],
+          established,
+          "probe atom must remap to the established referent"
+        );
+      });
+
+      await it("a novel scope with no prior instance falls back to the probe atom", async () => {
+        sys.decay(1000);
+        const probe = sys.createLocation(1, 123987);
+        const referents = resolveReferents(sys, [probe]);
+        assert.equal(
+          referents[0],
+          probe,
+          "no established referent ⇒ keep the fresh atom (wBirth = now is correct)"
+        );
       });
     });
 

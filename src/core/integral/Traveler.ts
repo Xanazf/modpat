@@ -13,6 +13,7 @@ import {
   type InferenceAmplitude,
   measureInferenceAmplitude,
   type PropagationMode,
+  resolveReferents,
 } from "@skill_cogi/DirectionalPropagation";
 import { InquiryQueue } from "@skill_cogi/InquiryQueue";
 import {
@@ -1086,14 +1087,15 @@ class Traveler implements Mapping.Engine {
     const outputIds = new Uint32Array([best.id]);
 
     // Record the W-direction signature of this conclusion's support before it
-    // sets: premises (probe) → conclusion (sink). The learner reproduces a
-    // conclusion FORWARD from its premises, so this is a measurement, not a
-    // gate - it exposes how W-spread (and thus how backward-sensitive) the
-    // support is as a live, inspectable property (NOTES.md "The W Dimension"),
-    // without disturbing the forward learner's crystallization energy.
+    // sets: premises → conclusion (sink). The probe atoms in inputIds are
+    // throwaway (minted fresh at probe time, wBirth = now); the inference lives
+    // among the established CONCEPTS they refer to, so remap to those referents
+    // first - otherwise every premise looks newer-born than the resident sink
+    // and the direction signal collapses (see DirectionalPropagation.resolveReferents).
+    const referentIds = resolveReferents(this.system, inputIds);
     this.lastInferenceDirection =
-      best.id > 0 && this.system.isAllocated(best.id) && inputIds.length > 0
-        ? classifyInferenceDirection(this.system, best.id, inputIds)
+      best.id > 0 && this.system.isAllocated(best.id) && referentIds.length > 0
+        ? classifyInferenceDirection(this.system, best.id, referentIds)
         : null;
     if (this.lastInferenceDirection?.isRationalization) {
       logger.debug(
