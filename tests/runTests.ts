@@ -9,6 +9,7 @@ import { runCoherenceCalibrationTests } from "./coherence_calibration.test";
 import { runCoherenceGateTests } from "./coherence_gate.test";
 import { runCompositionTests } from "./composition.test";
 import { runDirectionalCorpusTests } from "./directional_corpus.test";
+import { runDirectionalOrganicTests } from "./directional_organic.test";
 import { runDirectionalPropagationTests } from "./directional_propagation.test";
 import { executeLogicSuite } from "./dod_resolution_matrix.test";
 import { executeSuite as executeSystemSuite } from "./dod_system.test";
@@ -149,6 +150,7 @@ async function run() {
       runDirectionalPropagationTests
     );
     await runWithTimeout("directional_corpus", runDirectionalCorpusTests);
+    await runWithTimeout("directional_organic", runDirectionalOrganicTests);
     await runWithTimeout("scene_grounding", runSceneGroundingTests);
 
     logger.log("\nALL SUITES COMPLETED SUCCESSFULLY.");

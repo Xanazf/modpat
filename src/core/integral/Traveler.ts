@@ -454,6 +454,86 @@ class Traveler implements Mapping.Engine {
   }
 
   /**
+   * Forward (reasoning) mechanism. The premises were just PRESENTED (their probe
+   * atoms in `probeIds`), so they fire; their established referents support a
+   * conclusion reached forward along W. Firing the referents is what makes this
+   * read as reasoning organically - it is the activation, not a label. The
+   * backward counterpart is justifyIntent(). Records lastInferenceDirection.
+   */
+  public assessForwardSupport(
+    conclusionId: number,
+    probeIds: ArrayLike<number>
+  ): ReturnType<typeof classifyInferenceDirection> | null {
+    if (!this.system.isAllocated(conclusionId)) return null;
+    // Map throwaway probe atoms (wBirth = now) to the established concepts they
+    // refer to, so the support carries its real born-age.
+    const referents = resolveReferents(this.system, probeIds);
+    if (referents.length === 0) return null;
+    // Presenting the premises activates them: they are the firing origin.
+    this.system.refreshConceptAgeForIds(referents);
+    const dir = classifyInferenceDirection(
+      this.system,
+      conclusionId,
+      referents
+    );
+    this.lastInferenceDirection = dir;
+    return dir;
+  }
+
+  /**
+   * Backward (rationalization) mechanism, the organic counterpart to the forward
+   * learner (THEORY.md "Backward propagation"): an intent fires, then reaches
+   * BACK along W to the established memory that justifies it. The intent fires
+   * (refreshed) but its supports do NOT - so the dual-age geometry reads this as
+   * rationalization on its own: the intent is the freshest node, and the memory
+   * it leans on predates it. The firing order is a property of which mechanism
+   * ran, not a per-case label. Records lastInferenceDirection.
+   */
+  public async justifyIntent(
+    intentId: number
+  ): Promise<ReturnType<typeof classifyInferenceDirection> | null> {
+    if (!this.atomizer || !this.system.isAllocated(intentId)) return null;
+    const topic = this.atomizer.resolveScope(this.system.scope[intentId]) ?? "";
+    if (!topic) return null;
+
+    // The intent fires NOW (activation = firing recency).
+    this.system.refreshConceptAgeForIds([intentId]);
+
+    // Perceive the topic; the established concepts the wave reaches are the
+    // memory the intent leans on. Keep only those that predate the intent - the
+    // support it genuinely reached BACK to (newer or coincident nodes are not a
+    // backward reach).
+    const probeIds = this.atomizer.ingestSequence(topic, this.system);
+    const res = await this.perceiveCoherent(probeIds, {
+      probeMode: true,
+      maxIterations: 3,
+    });
+
+    const seen = new Set<number>();
+    const supports: number[] = [];
+    const consider = (id: number): void => {
+      if (id === intentId || seen.has(id) || !this.system.isAllocated(id))
+        return;
+      if (this.system.operatorClass[id] === OperatorClass.Intent) return;
+      if (this.system.wBirth[id] >= this.system.wBirth[intentId]) return;
+      seen.add(id);
+      supports.push(id);
+    };
+    // The topic's own established memory (always available), the concepts the
+    // perception wave reached, and its sink attractors - all as candidate support.
+    for (const id of resolveReferents(this.system, probeIds)) consider(id);
+    for (const id of resolveReferents(this.system, res.ids)) consider(id);
+    if (res.diagnostics) {
+      for (const s of res.diagnostics.sinkCandidates) consider(s.id);
+    }
+    if (supports.length === 0) return null;
+
+    const dir = classifyInferenceDirection(this.system, intentId, supports);
+    this.lastInferenceDirection = dir;
+    return dir;
+  }
+
+  /**
    * Vault-hit reinforcement: boost atom masses and refresh concept ages on
    * both input and output sides of a successful cache lookup.
    */
@@ -1086,16 +1166,14 @@ class Traveler implements Mapping.Engine {
     const best = diag.sinkCandidates[0];
     const outputIds = new Uint32Array([best.id]);
 
-    // Record the W-direction signature of this conclusion's support before it
-    // sets: premises → conclusion (sink). The probe atoms in inputIds are
-    // throwaway (minted fresh at probe time, wBirth = now); the inference lives
-    // among the established CONCEPTS they refer to, so remap to those referents
-    // first - otherwise every premise looks newer-born than the resident sink
-    // and the direction signal collapses (see DirectionalPropagation.resolveReferents).
-    const referentIds = resolveReferents(this.system, inputIds);
+    // Record the W-direction signature of this conclusion's support. The learner
+    // reproduces FORWARD: the probe PRESENTS the premises, so they fire and feed
+    // the conclusion. assessForwardSupport captures that organically (it fires
+    // the premises' referents), so the direction is a property of the mechanism,
+    // not a label - the backward counterpart is justifyIntent().
     this.lastInferenceDirection =
-      best.id > 0 && this.system.isAllocated(best.id) && referentIds.length > 0
-        ? classifyInferenceDirection(this.system, best.id, referentIds)
+      best.id > 0 && this.system.isAllocated(best.id) && inputIds.length > 0
+        ? this.assessForwardSupport(best.id, inputIds)
         : null;
     if (this.lastInferenceDirection?.isRationalization) {
       logger.debug(

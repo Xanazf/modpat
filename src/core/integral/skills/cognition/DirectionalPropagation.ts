@@ -136,7 +136,10 @@ export function inferPropagationMode(
   }
   // No allocated premises ⇒ no backward reach to speak of.
   if (wPrem === Number.NEGATIVE_INFINITY) return "reasoning";
-  return wConc >= wPrem ? "rationalization" : "reasoning";
+  // STRICT: only call it rationalization when the conclusion fired strictly
+  // LATER than every premise. A tie (premise and conclusion fired together) is
+  // not evidence of reaching back, so it defaults to the benign forward reading.
+  return wConc > wPrem ? "rationalization" : "reasoning";
 }
 
 /**
