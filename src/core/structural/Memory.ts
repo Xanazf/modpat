@@ -996,8 +996,33 @@ export default class Store implements Memory.Vault {
     }
   }
 
-  /** Persists the full InquiryQueue state, replacing any prior rows. */
+  /** Set by close(); guards fire-and-forget writers off the dead connection. */
+  private _closed = false;
+  /** In-flight fire-and-forget writes; close() drains these before teardown. */
+  private readonly _pendingWrites = new Set<Promise<void>>();
+
+  /**
+   * Persists the full InquiryQueue state, replacing any prior rows.
+   *
+   * Callers (InquiryQueue._persist) fire this without awaiting, so the write
+   * is registered in `_pendingWrites` and close() drains it - otherwise the
+   * native connection is torn down under the insert (bad_weak_ptr / segfault).
+   */
   public async saveInquiryQueue(items: Memory.InquiryItem[]): Promise<void> {
+    if (this._closed) return;
+    const write = this._saveInquiryQueueInner(items);
+    const tracked = write.catch(() => {});
+    this._pendingWrites.add(tracked);
+    try {
+      await write;
+    } finally {
+      this._pendingWrites.delete(tracked);
+    }
+  }
+
+  private async _saveInquiryQueueInner(
+    items: Memory.InquiryItem[]
+  ): Promise<void> {
     await this._connection.run("DELETE FROM inquiries");
     for (const item of items) {
       const stmt = await this._connection.prepare(
@@ -1221,6 +1246,10 @@ export default class Store implements Memory.Vault {
    * Closes the vault connection and releases DuckDB resources.
    */
   public async close(): Promise<void> {
+    this._closed = true;
+    if (this._pendingWrites.size > 0) {
+      await Promise.allSettled([...this._pendingWrites]);
+    }
     if (this._connection) {
       this._connection.disconnectSync();
     }

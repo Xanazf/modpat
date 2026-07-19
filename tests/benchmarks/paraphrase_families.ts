@@ -301,7 +301,7 @@ async function run(): Promise<void> {
 
   if (!only) {
     baseline.paraphrase = results;
-    writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
     console.log(`Baseline updated: ${BASELINE_PATH}`);
   } else {
     console.log("\n--family run - baseline NOT updated.");

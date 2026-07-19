@@ -235,12 +235,13 @@ const DOPAT_CONFIG = {
      * X/Y/Z scale for an ALL-FRESH text fact-set (no pinned anchors to
      * inherit a frame from). SMACOF layout units are ~1 per hop; the live
      * manifold's operative distances sit at INFLUENCE_RADIUS scale, so fresh
-     * terrain may need spreading. Default 1.0 until the text_corpus_sweep
-     * distance distribution justifies a different value (measured, not
-     * guessed). When anchors exist the frame is inherited from them and this
-     * knob is ignored.
+     * terrain may need spreading. 60.0 from the text_corpus_sweep distance
+     * distribution (2026-07-19: raw pairwise p50 1.8-2.8, p90 2.7-4.7 =>
+     * scaled p50 ~110-170, p90 ~160-280, inside INFLUENCE_RADIUS=400 but no
+     * longer collapsed to a point at manifold scale). When anchors exist the
+     * frame is inherited from them and this knob is ignored.
      */
-    TEXT_GRAPH_SPATIAL_SCALE: 1.0,
+    TEXT_GRAPH_SPATIAL_SCALE: 60.0,
     /**
      * Phase 4.5 - the survey loop, wired into learnCycle. When on, each
      * learnCycle ends with a territory-correction tick: every registered

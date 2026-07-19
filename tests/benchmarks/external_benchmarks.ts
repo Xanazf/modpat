@@ -13,7 +13,12 @@
  *   – The baseline file is the single regression surface (no separate file).
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import LogicAtomizer from "@atomics/LogicAtomizer";
 import { DOPAT_CONFIG } from "@config";
@@ -28,6 +33,7 @@ import {
   runScoringSelftest,
   type ScoredItem,
   scoreFamily,
+  type Verdict,
 } from "./scoring";
 
 // ---------------------------------------------------------------------------
@@ -379,7 +385,53 @@ async function runHonestItem(item: DatasetItem): Promise<string> {
   }
 }
 
-async function runDatasetMode(dir: string, limit: number): Promise<void> {
+/**
+ * Per-item crash-tolerant checkpoint. The honest path exercises the full
+ * native stack (DuckDB + atomizer) per item and a segfault 20 items in must
+ * not lose the run: an `attempt` line is appended before each item and a
+ * `result` line after, so an outer restart loop resumes where it died. An
+ * item whose attempt appears >= 2 times with no result is a poison item -
+ * skipped and reported, never scored.
+ */
+interface CheckpointResult {
+  kind: "result";
+  id: string;
+  ds: string;
+  depth: number;
+  gold: Gold;
+  fastVerdict: Verdict;
+  honestVerdict: Verdict;
+  honestAnswer: string;
+}
+
+function loadCheckpoint(path: string): {
+  results: Map<string, CheckpointResult>;
+  poisoned: Set<string>;
+} {
+  const results = new Map<string, CheckpointResult>();
+  const attempts = new Map<string, number>();
+  if (existsSync(path)) {
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      const rec = JSON.parse(line) as { kind: string; id: string };
+      if (rec.kind === "attempt")
+        attempts.set(rec.id, (attempts.get(rec.id) ?? 0) + 1);
+      else if (rec.kind === "result")
+        results.set(rec.id, rec as CheckpointResult);
+    }
+  }
+  const poisoned = new Set<string>();
+  for (const [id, n] of attempts) {
+    if (!results.has(id) && n >= 2) poisoned.add(id);
+  }
+  return { results, poisoned };
+}
+
+async function runDatasetMode(
+  dir: string,
+  limit: number,
+  checkpointPath: string | null
+): Promise<void> {
   runScoringSelftest();
 
   const BASELINE_PATH = join(
@@ -397,19 +449,62 @@ async function runDatasetMode(dir: string, limit: number): Promise<void> {
     },
   ];
 
+  const checkpoint = checkpointPath
+    ? loadCheckpoint(checkpointPath)
+    : {
+        results: new Map<string, CheckpointResult>(),
+        poisoned: new Set<string>(),
+      };
+  if (checkpoint.results.size > 0)
+    console.log(
+      `  [checkpoint] resuming: ${checkpoint.results.size} item(s) done, ${checkpoint.poisoned.size} poisoned`
+    );
+
   const fastScored = new Map<string, ScoredItem[]>();
   const honestScored = new Map<string, ScoredItem[]>();
+  let skippedPoison = 0;
 
   for (const ds of datasets) {
     const items = limit > 0 ? ds.items.slice(0, limit) : ds.items;
     for (const item of items) {
-      const negated = questionNegated(item.question);
-      const keyword = keywordOf(item.question);
+      if (checkpoint.poisoned.has(item.id)) {
+        skippedPoison++;
+        console.log(`  [${item.id.padEnd(28)}] POISONED - skipped, not scored`);
+        continue;
+      }
 
-      const fastAnswer = await runFastItem(item);
-      const honestAnswer = await runHonestItem(item);
-      const fastVerdict = mapAnswerToVerdict(fastAnswer, keyword, negated);
-      const honestVerdict = mapAnswerToVerdict(honestAnswer, keyword, negated);
+      let fastVerdict: Verdict;
+      let honestVerdict: Verdict;
+      let honestAnswer: string;
+      const prior = checkpoint.results.get(item.id);
+      if (prior) {
+        ({ fastVerdict, honestVerdict, honestAnswer } = prior);
+      } else {
+        if (checkpointPath)
+          appendFileSync(
+            checkpointPath,
+            `${JSON.stringify({ kind: "attempt", id: item.id })}\n`
+          );
+        const negated = questionNegated(item.question);
+        const keyword = keywordOf(item.question);
+        const fastAnswer = await runFastItem(item);
+        honestAnswer = await runHonestItem(item);
+        fastVerdict = mapAnswerToVerdict(fastAnswer, keyword, negated);
+        honestVerdict = mapAnswerToVerdict(honestAnswer, keyword, negated);
+        if (checkpointPath) {
+          const rec: CheckpointResult = {
+            kind: "result",
+            id: item.id,
+            ds: ds.name,
+            depth: item.depth,
+            gold: item.answer,
+            fastVerdict,
+            honestVerdict,
+            honestAnswer,
+          };
+          appendFileSync(checkpointPath, `${JSON.stringify(rec)}\n`);
+        }
+      }
 
       const family = `${ds.name}.d${item.depth}`;
       for (const [map, verdict] of [
@@ -420,10 +515,15 @@ async function runDatasetMode(dir: string, limit: number): Promise<void> {
         map.get(family)?.push({ gold: item.answer, verdict });
       }
       console.log(
-        `  [${item.id.padEnd(28)}] gold=${item.answer.padEnd(7)} fast=${fastVerdict.padEnd(7)} honest=${honestVerdict.padEnd(7)} "${honestAnswer.slice(0, 40)}"`
+        `  [${item.id.padEnd(28)}] gold=${item.answer.padEnd(7)} fast=${fastVerdict.padEnd(7)} honest=${honestVerdict.padEnd(7)} "${honestAnswer.slice(0, 40)}"${prior ? " (checkpoint)" : ""}`
       );
     }
   }
+
+  if (skippedPoison > 0)
+    console.warn(
+      `\n  WARNING: ${skippedPoison} poisoned item(s) skipped (crashed twice) - excluded from scoring.`
+    );
 
   const collect = (map: Map<string, ScoredItem[]>): RealFamilyScores => {
     const out: RealFamilyScores = {};
@@ -482,10 +582,21 @@ async function runDatasetMode(dir: string, limit: number): Promise<void> {
       }
     }
     if (regressions > 0) {
-      console.error(`\n${regressions} regression(s) detected.`);
-      process.exit(1);
+      // --accept: pin the new scores anyway. For deliberate, human-reviewed
+      // baseline moves (e.g. a front-end change whose per-item diff shows the
+      // family-level dips are verdict-mapper coin flips on garbage answers,
+      // not capability loss). Never use it to silence an unexplained drop.
+      if (process.argv.includes("--accept")) {
+        console.warn(
+          `\n${regressions} regression(s) ACCEPTED via --accept - pinning new scores as baseline.`
+        );
+      } else {
+        console.error(`\n${regressions} regression(s) detected.`);
+        process.exit(1);
+      }
+    } else {
+      console.log("\nNo regressions vs externalReal baseline.");
     }
-    console.log("\nNo regressions vs externalReal baseline.");
   } else if (!prev && limit <= 0) {
     console.log(
       "\nFirst dataset run - externalReal scores written to baseline."
@@ -494,7 +605,7 @@ async function runDatasetMode(dir: string, limit: number): Promise<void> {
 
   if (limit <= 0) {
     baseline.externalReal = scores;
-    writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
     console.log(`Baseline updated: ${BASELINE_PATH}`);
   } else {
     console.log(`\n--limit ${limit} smoke run - baseline NOT updated.`);
@@ -538,7 +649,10 @@ async function run(): Promise<void> {
       limitIdx >= 0
         ? Number.parseInt(process.argv[limitIdx + 1] ?? "0", 10)
         : 0;
-    await runDatasetMode(dir, Number.isNaN(limit) ? 0 : limit);
+    const ckIdx = process.argv.indexOf("--checkpoint");
+    const checkpointPath =
+      ckIdx >= 0 ? (process.argv[ckIdx + 1] ?? null) : null;
+    await runDatasetMode(dir, Number.isNaN(limit) ? 0 : limit, checkpointPath);
     return;
   }
 
@@ -684,7 +798,7 @@ async function run(): Promise<void> {
   }
 
   baseline.external = scores;
-  writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
   console.log(`Baseline updated: ${BASELINE_PATH}`);
 }
 

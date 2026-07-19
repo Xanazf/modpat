@@ -19,15 +19,15 @@ import { DOPAT_CONFIG } from "@config";
 import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
-import Store from "@core_s/Memory";
 import { groundGraphIntoSystem } from "@core_s/grounding/AstGrounding";
 import { buildGraphFromLogic } from "@core_s/grounding/LogicGraph";
 import { mapFidelity } from "@core_s/grounding/MapFidelity";
 import { buildGraphFromText } from "@core_s/grounding/TextGraph";
 import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
 import { EdgeKind, NodeKind } from "@core_s/helpers/enums";
-import { random, seedRandom } from "@utils/seededRandom";
+import Store from "@core_s/Memory";
 import logger from "@utils/SpectralLogger";
+import { random, seedRandom } from "@utils/seededRandom";
 import { CORPORA } from "../scripts/dev/logic_math_corpus_sweep";
 import { describe, it } from "./utils/harness";
 

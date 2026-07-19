@@ -337,7 +337,7 @@ async function run() {
   };
 
   if (!existsSync(BASELINE_PATH)) {
-    writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
     console.log(`\nBaseline written to ${BASELINE_PATH}`);
   } else {
     const prev: Baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8"));
@@ -365,7 +365,7 @@ async function run() {
       process.exit(1);
     }
     console.log("\nNo regressions vs baseline.");
-    writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
   }
 }
 
