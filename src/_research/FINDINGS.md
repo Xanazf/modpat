@@ -65,6 +65,25 @@ load-bearing and the dominance/min-depth gates keep co-located near-ties
 deferring to it. (`src/core/integral/Runtime.ts` seedCapabilities;
 `Traveler.electSkill`; ROADMAP intermediate step #6.)
 
+**RESOLVED 2026-07-05.** Root cause was a scope/id conflation: `seed()` used
+the SKILL:* symbol SCOPE as a manifold id and tried to claim the slot at that
+numeric index, but `createLocation` hands out sequential ids from an
+independent counter, so by seed time that slot belonged to an unrelated
+boot-ingested precept and the `isAllocated` guard skipped every seed. Fix:
+`seedCapabilities` now allocates a real precept via `createLocation(c²·10,
+scope)` (idempotent on the Capability tag under that scope), and `electSkill`
+resolves each skills-map key (a scope) to its Capability-tagged precept via
+`getIdsByScope` before reading geometry. Measured post-fix
+(`scripts/dev/capability_seed_probe.ts`, semantic Runtime.boot): all four
+wells at the intended separated coordinates (posX 25/15/60/5), opClass 12
+(Capability), mass 2777.9 (= c²·10), decayRate 0, each on its own precept id
+distinct from its scope. Cause (2)'s safety is preserved: query tokens sharing
+a SKILL scope are never Capability-class, so they still cannot be read as
+wells. Queries whose locus grounds far from the wells still fall to the intent
+prior (the validated routing); geometry now genuinely decides when a query
+settles inside a separated well. Guarded in `tests/skill_election.test.ts`
+("seedCapabilities places real capability precepts").
+
 
 ## Backward-W propagation: the directional asymmetry already lived in the force (2026-06-22)
 

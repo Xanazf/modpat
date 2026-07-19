@@ -335,11 +335,10 @@ class Traveler implements Mapping.Engine {
    * `SKILL_FIELD_MIN_DEPTH` (the query sits squarely inside a well, not at its
    * edge) and (b) the runner-up's score is ≤ `SKILL_FIELD_DOMINANCE` of the
    * winner's (the well is unambiguous). Otherwise the intent classifier's prior
-   * decides. This reproduces the legacy string routing exactly in production -
-   * the four capability precepts cluster within ~10 posX units, so any query
-   * near them sees two near-equal pulls, fails dominance, and falls to intent -
-   * while genuinely activating once capabilities are spatially distinguished
-   * (a query settling squarely inside a separated well overrides the prior).
+   * decides. Queries whose locus lands outside every capability well (the
+   * common case - content grounds far from the seeded wells) fall to intent,
+   * reproducing the legacy string routing; a query settling squarely inside a
+   * separated well overrides the prior.
    */
   public electSkill(ids: Uint32Array, intent?: string): number {
     if (this.skills.size === 0) {
@@ -382,17 +381,27 @@ class Traveler implements Mapping.Engine {
     let winScore = -1;
     let winDepth = 0;
     let secondScore = 0;
-    for (const sid of this.skills.keys()) {
-      // Only a genuine Capability precept is a field source. A skill is keyed by
-      // its scope id; that id is a meaningful manifold position only when
-      // seedCapabilities has placed a Capability precept there (the Runtime
-      // path). In bare test envs the capabilities are never seeded and their
-      // scope ids get reused for ordinary query tokens - those must NOT be read
-      // as attractor positions, or the field would be pure noise. When no
-      // capability is placed, no skill qualifies, winId stays 0, and the intent
-      // prior decides (reproducing the legacy routing).
-      if (!sys.isAllocated(sid)) continue;
-      if (sys.operatorClass[sid] !== OperatorClass.Capability) continue;
+    for (const key of this.skills.keys()) {
+      // Only a genuine Capability precept is a field source. A skill is keyed
+      // by its SKILL:* symbol scope; the attractor is the Capability-tagged
+      // precept seedCapabilities allocated UNDER that scope (scope and id are
+      // separate address spaces). In bare test envs the capabilities are never
+      // seeded and the scope is shared only by ordinary query tokens - those
+      // are never Capability-class and must NOT be read as attractor
+      // positions, or the field would be pure noise. When no capability is
+      // placed, no skill qualifies, winId stays 0, and the intent prior
+      // decides (reproducing the legacy routing).
+      let sid = -1;
+      for (const cand of sys.getIdsByScope(key)) {
+        if (
+          sys.isAllocated(cand) &&
+          sys.operatorClass[cand] === OperatorClass.Capability
+        ) {
+          sid = cand;
+          break;
+        }
+      }
+      if (sid < 0) continue;
       const dx = qx - sys.posX[sid];
       const dy = qy - sys.posY[sid];
       const dz = qz - sys.posZ[sid];
@@ -404,7 +413,7 @@ class Traveler implements Mapping.Engine {
       if (score > winScore) {
         secondScore = winScore < 0 ? 0 : winScore;
         winScore = score;
-        winId = sid;
+        winId = key;
         winDepth = depth;
       } else if (score > secondScore) {
         secondScore = score;

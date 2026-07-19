@@ -406,18 +406,24 @@ export class Runtime {
       }
     };
 
-    // Seed Capability Precepts
+    // Seed Capability Precepts.
+    // A skill is keyed by its SKILL:* symbol SCOPE; the capability well is a
+    // real precept allocated via createLocation under that scope. Scope and id
+    // are separate address spaces (createLocation hands out sequential ids), so
+    // writing at index = scope lands on whatever unrelated precept was
+    // allocated there first - the pre-fix behaviour that left the seed dead
+    // (see FINDINGS.md, electSkill entry). electSkill resolves the scope back
+    // to this precept through getIdsByScope + the Capability tag.
     const seedCapabilities = async () => {
       const sys = rt.system;
       const atom = rt.atomizer;
 
       const seed = (name: string, x: number, y: number, z: number) => {
-        const id = atom.getSymbolScope(name, false);
-        if (sys.isAllocated(id)) return;
-        sys.allocated[id] = 1;
-        if (id >= sys.length) sys.length = id + 1;
-        sys.mass[id] = sys.c ** 2 * 10;
-        sys.scope[id] = 1.0;
+        const scope = atom.getSymbolScope(name, false);
+        for (const existing of sys.getIdsByScope(scope)) {
+          if (sys.operatorClass[existing] === OperatorClass.Capability) return;
+        }
+        const id = sys.createLocation(sys.c ** 2 * 10, scope);
         sys.depth[id] = 1.0;
         sys.time[id] = 1.0;
         sys.posX[id] = x;

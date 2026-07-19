@@ -316,6 +316,18 @@ declare namespace Grounding {
     placement: Placement | null;
   }
 
+  interface TextGroundingResult extends AstGroundingResult {
+    /**
+     * Labels that resolved to EXISTING precepts by scope. These are pinned
+     * anchors: their live coordinates are never moved (protecting the
+     * number-line, antonym-antipode, and code-symbol geometry contracts),
+     * and the new nodes relax into their metric frame.
+     */
+    reused: Map<string, number>;
+    /** Labels for which a new precept was created and placed. */
+    created: Map<string, number>;
+  }
+
   /** One arithmetic prediction-vs-evaluation case (Phase 4.5 survey loop). */
   interface ArithCase {
     /** Surface expression, e.g. "3 + 4". */

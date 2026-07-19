@@ -21,6 +21,14 @@ import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import Store from "@core_s/Memory";
+import {
+  type FamilyScore,
+  type Gold,
+  mapAnswerToVerdict,
+  runScoringSelftest,
+  type ScoredItem,
+  scoreFamily,
+} from "./scoring";
 
 // ---------------------------------------------------------------------------
 // Task families
@@ -254,6 +262,246 @@ function hitRate(pairs: TaskPair[], answers: Map<string, string>): number {
 }
 
 // ---------------------------------------------------------------------------
+// Real-dataset mode (--datasets): the honest external baseline (PARITY §2).
+// Vendored stratified samples of the official AI2 distributions - see
+// data/benchmarks/README.md for schema, provenance, and regeneration.
+// ---------------------------------------------------------------------------
+
+interface DatasetItem {
+  id: string;
+  theory: string;
+  question: string;
+  answer: Gold;
+  depth: number;
+}
+
+interface RealFamilyScores {
+  [family: string]: FamilyScore;
+}
+
+interface ExternalRealScores {
+  date: string;
+  /** ingestSequence + perceive - comparable to the inline families. */
+  fast: RealFamilyScores;
+  /** Full live path: traveler.process() per theory sentence, then the query. */
+  honest: RealFamilyScores;
+}
+
+function loadJsonl(path: string): DatasetItem[] {
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter(l => l.trim().length > 0)
+    .map(l => JSON.parse(l) as DatasetItem);
+}
+
+const KEYWORD_STOPWORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "is",
+  "are",
+  "not",
+  "does",
+  "do",
+  "then",
+  "it",
+  "to",
+  "of",
+  "someone",
+  "something",
+  "they",
+]);
+
+/**
+ * The expected-content keyword for verdict mapping: the last content token of
+ * the question ("Anne is nice." -> "nice", "The cow needs the bear." ->
+ * "bear"). Thin and documented on purpose - the mapper's unit cases pin its
+ * behaviour so it cannot silently absorb the front-end improvement.
+ */
+function keywordOf(question: string): string {
+  const toks = question
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter(t => t.length > 0 && !KEYWORD_STOPWORDS.has(t));
+  return toks[toks.length - 1] ?? "";
+}
+
+function questionNegated(question: string): boolean {
+  return /\b(not|cannot|can't|doesn't|don't|isn't|aren't)\b/i.test(question);
+}
+
+/** Splits a theory paragraph into individual sentences for the live path. */
+function theorySentences(theory: string): string[] {
+  return theory
+    .split(/(?<=\.)\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+async function runFastItem(item: DatasetItem): Promise<string> {
+  const system = new System();
+  const atomizer = new LogicAtomizer();
+  await atomizer.init();
+  const store = new Store(system, atomizer, ":memory:");
+  await store.waitForInit();
+  const resolver = new Traveler(system, atomizer, store);
+  const traveler = createTestTraveler(system, atomizer, resolver, store);
+  traveler.setGPUEnabled(false);
+  try {
+    const source = `${item.theory.toLowerCase()} ${item.question
+      .toLowerCase()
+      .replace(/\.\s*$/, "")} |-`;
+    const { answer } = await runQuery(source, traveler, atomizer, system);
+    return answer;
+  } finally {
+    await store.close();
+  }
+}
+
+async function runHonestItem(item: DatasetItem): Promise<string> {
+  const system = new System();
+  const atomizer = new LogicAtomizer();
+  await atomizer.init();
+  const store = new Store(system, atomizer, ":memory:");
+  await store.waitForInit();
+  const resolver = new Traveler(system, atomizer, store);
+  const traveler = createTestTraveler(system, atomizer, resolver, store);
+  traveler.setGPUEnabled(false);
+  try {
+    for (const sentence of theorySentences(item.theory)) {
+      await traveler.process(sentence.toLowerCase());
+    }
+    const query = `${item.question.toLowerCase().replace(/\.\s*$/, "")}?`;
+    return (await traveler.process(query)).toLowerCase().trim();
+  } finally {
+    await store.close();
+  }
+}
+
+async function runDatasetMode(dir: string, limit: number): Promise<void> {
+  runScoringSelftest();
+
+  const BASELINE_PATH = join(
+    import.meta.dirname ?? __dirname,
+    "metric_ab.baseline.json"
+  );
+  const datasets: { name: string; items: DatasetItem[] }[] = [
+    {
+      name: "ruletaker",
+      items: loadJsonl(join(dir, "ruletaker_sample.jsonl")),
+    },
+    {
+      name: "proofwriter",
+      items: loadJsonl(join(dir, "proofwriter_sample.jsonl")),
+    },
+  ];
+
+  const fastScored = new Map<string, ScoredItem[]>();
+  const honestScored = new Map<string, ScoredItem[]>();
+
+  for (const ds of datasets) {
+    const items = limit > 0 ? ds.items.slice(0, limit) : ds.items;
+    for (const item of items) {
+      const negated = questionNegated(item.question);
+      const keyword = keywordOf(item.question);
+
+      const fastAnswer = await runFastItem(item);
+      const honestAnswer = await runHonestItem(item);
+      const fastVerdict = mapAnswerToVerdict(fastAnswer, keyword, negated);
+      const honestVerdict = mapAnswerToVerdict(honestAnswer, keyword, negated);
+
+      const family = `${ds.name}.d${item.depth}`;
+      for (const [map, verdict] of [
+        [fastScored, fastVerdict],
+        [honestScored, honestVerdict],
+      ] as const) {
+        if (!map.has(family)) map.set(family, []);
+        map.get(family)?.push({ gold: item.answer, verdict });
+      }
+      console.log(
+        `  [${item.id.padEnd(28)}] gold=${item.answer.padEnd(7)} fast=${fastVerdict.padEnd(7)} honest=${honestVerdict.padEnd(7)} "${honestAnswer.slice(0, 40)}"`
+      );
+    }
+  }
+
+  const collect = (map: Map<string, ScoredItem[]>): RealFamilyScores => {
+    const out: RealFamilyScores = {};
+    const all: ScoredItem[] = [];
+    for (const [family, items] of [...map.entries()].sort()) {
+      out[family] = scoreFamily(items);
+      all.push(...items);
+    }
+    out.overall = scoreFamily(all);
+    return out;
+  };
+
+  const scores: ExternalRealScores = {
+    date: new Date().toISOString(),
+    fast: collect(fastScored),
+    honest: collect(honestScored),
+  };
+
+  for (const mode of ["fast", "honest"] as const) {
+    console.log(`\n  -- ${mode} --`);
+    for (const [family, s] of Object.entries(scores[mode])) {
+      console.log(
+        `  ${family.padEnd(16)} balAcc=${(s.balancedAccuracy * 100).toFixed(1).padStart(5)}%  abstain=${(s.abstentionRate * 100).toFixed(1).padStart(5)}%  confFalse=${s.confidentFalsehoods}  n=${s.n}`
+      );
+    }
+  }
+
+  if (!existsSync(BASELINE_PATH)) {
+    console.error(`\nBaseline file not found: ${BASELINE_PATH}`);
+    process.exit(1);
+  }
+  const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  const prev = baseline.externalReal as ExternalRealScores | undefined;
+
+  if (prev && limit <= 0) {
+    let regressions = 0;
+    for (const mode of ["fast", "honest"] as const) {
+      for (const [family, prevScore] of Object.entries(prev[mode] ?? {})) {
+        const now = scores[mode][family];
+        if (!now) continue;
+        if (now.balancedAccuracy < prevScore.balancedAccuracy - 0.05) {
+          console.error(
+            `REGRESSION: ${mode}.${family} balancedAccuracy ${(prevScore.balancedAccuracy * 100).toFixed(1)}% -> ${(now.balancedAccuracy * 100).toFixed(1)}%`
+          );
+          regressions++;
+        }
+        if (now.confidentFalsehoods > prevScore.confidentFalsehoods) {
+          console.error(
+            `REGRESSION: ${mode}.${family} confidentFalsehoods ${prevScore.confidentFalsehoods} -> ${now.confidentFalsehoods} (characteristic failure must remain silence)`
+          );
+          regressions++;
+        }
+      }
+    }
+    if (regressions > 0) {
+      console.error(`\n${regressions} regression(s) detected.`);
+      process.exit(1);
+    }
+    console.log("\nNo regressions vs externalReal baseline.");
+  } else if (!prev && limit <= 0) {
+    console.log(
+      "\nFirst dataset run - externalReal scores written to baseline."
+    );
+  }
+
+  if (limit <= 0) {
+    baseline.externalReal = scores;
+    writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
+    console.log(`Baseline updated: ${BASELINE_PATH}`);
+  } else {
+    console.log(`\n--limit ${limit} smoke run - baseline NOT updated.`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -272,6 +520,28 @@ interface ExternalScores {
 }
 
 async function run(): Promise<void> {
+  const dsIdx = process.argv.indexOf("--datasets");
+  if (dsIdx >= 0) {
+    const next = process.argv[dsIdx + 1];
+    const dir =
+      next && !next.startsWith("--")
+        ? next
+        : join(
+            import.meta.dirname ?? __dirname,
+            "..",
+            "..",
+            "data",
+            "benchmarks"
+          );
+    const limitIdx = process.argv.indexOf("--limit");
+    const limit =
+      limitIdx >= 0
+        ? Number.parseInt(process.argv[limitIdx + 1] ?? "0", 10)
+        : 0;
+    await runDatasetMode(dir, Number.isNaN(limit) ? 0 : limit);
+    return;
+  }
+
   const BASELINE_PATH = join(
     import.meta.dirname ?? __dirname,
     "metric_ab.baseline.json"

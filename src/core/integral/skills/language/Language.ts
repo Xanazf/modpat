@@ -15,6 +15,8 @@
 import { DOPAT_CONFIG } from "@config";
 import { OperatorClass, type SystemRef } from "@core_i/System";
 import type { BridgeCandidate } from "@core_i/Traveler";
+import { buildGraphFromText } from "@core_s/grounding/TextGraph";
+import { groundTextGraphIntoSystem } from "@core_s/grounding/TextGrounding";
 import type Store from "@core_s/Memory";
 import { isIdentityQueryAboutSelf, shiftPerspective } from "@props/Identity";
 import logger from "@utils/SpectralLogger";
@@ -408,6 +410,27 @@ export class Language {
       const response = `Ignored (Unprocessable Input): "${text}"`;
       this.respond(response);
       return response;
+    }
+
+    // Grammar-grounded relational geometry (PARITY §3.1 route (a)). Runs
+    // AFTER the logic-trap check (contradicted facts never land) and is
+    // purely additive: the ordered `quanta` sequence and everything that
+    // consumes it below are untouched. Pronouns resolve against working
+    // memory before parsing; a graph needs >= 2 nodes and >= 1 relation to
+    // be worth landing.
+    if (DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_INGESTION_ENABLED) {
+      try {
+        const resolved = this.workingMemory.resolveReferences(statement_);
+        const graph = buildGraphFromText(resolved);
+        if (
+          graph.nodes.length >= 2 &&
+          graph.edges.length + (graph.contrasts?.length ?? 0) >= 1
+        ) {
+          groundTextGraphIntoSystem(graph, this.system, this.atomizer);
+        }
+      } catch (e) {
+        logger.error("[TextGraph] grounding failed:", e);
+      }
     }
 
     const { signature } = this.store.abstractSequence(quanta);

@@ -191,6 +191,144 @@ export function placeGraph(
   return { x, y, z, w, mass };
 }
 
+// -- Anchored placement (pinned live frame; free nodes relax into it) --------
+
+/**
+ * SMACOF placement where `pinned` nodes (graph index -> live [x,y,z,w]) are
+ * immovable: free nodes relax against both pinned and free neighbours, so new
+ * terms land in the metric frame of the precepts that already exist - the
+ * live-manifold landing primitive for grammar-grounded text ingestion.
+ *
+ * Hop-distance targets are auto-scaled into the pinned frame: the scale is
+ * the median (pinned pairwise metric distance / pinned pairwise hop distance)
+ * over connected pinned pairs, so a graph whose anchors sit far apart in the
+ * live manifold does not crush its free nodes between them. With fewer than
+ * two connected pinned anchors the targets keep unit scale (callers apply
+ * their own scale for all-fresh graphs).
+ *
+ * With an empty `pinned` map this reduces exactly to `placeGraph`.
+ */
+export function placeGraphAnchored(
+  g: Grounding.GroundGraph,
+  pinned: ReadonlyMap<number, readonly [number, number, number, number]>,
+  options: Grounding.GroundingOptions = {}
+): Grounding.Placement {
+  if (pinned.size === 0) return placeGraph(g, options);
+
+  const opts = { ...DEFAULTS, ...options };
+  const n = g.nodes.length;
+  const x = new Float64Array(n);
+  const y = new Float64Array(n);
+  const z = new Float64Array(n);
+  const w = new Float64Array(n);
+  const mass = centralityMass(g);
+  if (n === 0) return { x, y, z, w, mass };
+
+  const adj = undirectedAdjacency(g);
+  const dist: Float64Array[] = new Array(n);
+  for (let i = 0; i < n; i++) dist[i] = bfsHopDistances(i, adj);
+
+  // Target scale: median metric/hop ratio over connected pinned pairs.
+  const pinnedIdx = [...pinned.keys()].filter(i => i >= 0 && i < n);
+  const ratios: number[] = [];
+  for (let a = 0; a < pinnedIdx.length; a++) {
+    for (let b = a + 1; b < pinnedIdx.length; b++) {
+      const i = pinnedIdx[a];
+      const j = pinnedIdx[b];
+      const hop = dist[i][j];
+      if (!Number.isFinite(hop) || hop === 0) continue;
+      const pi = pinned.get(i)!;
+      const pj = pinned.get(j)!;
+      const dx = pi[0] - pj[0];
+      const dy = pi[1] - pj[1];
+      const dz = pi[2] - pj[2];
+      const metric = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (metric > 1e-9) ratios.push(metric / hop);
+    }
+  }
+  ratios.sort((a, b) => a - b);
+  const scale = ratios.length > 0 ? ratios[Math.floor(ratios.length / 2)] : 1;
+
+  // Init: pinned at their live coords; free nodes at the scaled centroid of
+  // their pinned neighbours (or a seeded scatter when none is reachable).
+  const fixed = new Uint8Array(n);
+  for (const [i, p] of pinned) {
+    if (i < 0 || i >= n) continue;
+    fixed[i] = 1;
+    x[i] = p[0];
+    y[i] = p[1];
+    z[i] = p[2];
+    w[i] = p[3];
+  }
+  const rng = makeRng(opts.seed);
+  const spread = Math.max(1, Math.sqrt(n)) * scale;
+  let cx = 0;
+  let cy = 0;
+  let cz = 0;
+  for (const i of pinnedIdx) {
+    cx += x[i] / pinnedIdx.length;
+    cy += y[i] / pinnedIdx.length;
+    cz += z[i] / pinnedIdx.length;
+  }
+  for (let i = 0; i < n; i++) {
+    if (fixed[i]) continue;
+    x[i] = cx + (rng() - 0.5) * spread;
+    y[i] = cy + (rng() - 0.5) * spread;
+    z[i] = cz + (rng() - 0.5) * spread;
+    const numeric = g.nodes[i].numeric;
+    if (numeric !== null) w[i] = numeric * opts.numberLineScale;
+  }
+
+  const eps = 1e-9;
+  for (let iter = 0; iter < opts.iterations; iter++) {
+    for (let i = 0; i < n; i++) {
+      if (fixed[i]) continue;
+      let ax = 0;
+      let ay = 0;
+      let az = 0;
+      let den = 0;
+      const di = dist[i];
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        const hop = di[j];
+        if (!Number.isFinite(hop) || hop === 0) continue;
+        const d = hop * scale;
+        const wgt = 1 / (d * d);
+        const dx = x[i] - x[j];
+        const dy = y[i] - y[j];
+        const dz = z[i] - z[j];
+        const cur = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (cur > eps) {
+          const f = d / cur;
+          ax += wgt * (x[j] + f * dx);
+          ay += wgt * (y[j] + f * dy);
+          az += wgt * (z[j] + f * dz);
+        } else {
+          ax += wgt * x[j];
+          ay += wgt * y[j];
+          az += wgt * z[j];
+        }
+        den += wgt;
+      }
+      if (den > 0) {
+        x[i] = ax / den;
+        y[i] = ay / den;
+        z[i] = az / den;
+      }
+    }
+  }
+
+  // Stance offsets apply to free nodes only - pinned geometry is inviolate.
+  if (g.contrasts && g.contrasts.length > 0) {
+    const s = solveStanceField(g);
+    for (let i = 0; i < n; i++) {
+      if (!fixed[i]) z[i] += s[i] * opts.stanceScale * scale;
+    }
+  }
+
+  return { x, y, z, w, mass };
+}
+
 // -- Incremental, operator-anchored placement (the O(N²) boundary, closed) ---
 
 const INCREMENTAL_DEFAULTS: Required<Grounding.IncrementalOptions> = {

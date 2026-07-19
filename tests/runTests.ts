@@ -42,6 +42,7 @@ import { executeStressSuite } from "./stress_and_edge_cases.test";
 import { runStructuralGroundingTests } from "./structural_grounding.test";
 import { runSurveyLoopTests } from "./survey_loop.test";
 import { runTemporalOrderingTests } from "./temporal_ordering.test";
+import { runTextGraphTests } from "./text_graph.test";
 import { runTimelineBuffersTests } from "./timeline_buffers.test";
 import { runTravelerCorrectionsTests } from "./traveler_corrections.test";
 import { executeUMAPSuite } from "./umap_loader.test";
@@ -140,6 +141,7 @@ async function run() {
     await runWithTimeout("phi_session", runPhiSessionTest);
     await runWithTimeout("spatial_hash", runSpatialHashTests);
     await runWithTimeout("structural_grounding", runStructuralGroundingTests);
+    await runWithTimeout("text_graph", runTextGraphTests);
     await runWithTimeout("coherence_gate", runCoherenceGateTests);
     await runWithTimeout("coherence_calibration", runCoherenceCalibrationTests);
     await runWithTimeout("reduction", runReductionTests);

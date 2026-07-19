@@ -48,7 +48,7 @@ function arithOp(tok: string): string | null {
   return ARITH_SYMBOL[tok.toLowerCase()] ?? null;
 }
 
-class GraphBuilder {
+export class GraphBuilder {
   private idByLabel = new Map<string, number>();
   readonly nodes: Grounding.GroundNode[] = [];
   readonly edges: Grounding.GroundEdge[] = [];
@@ -87,7 +87,7 @@ class GraphBuilder {
 }
 
 /** Returns true and adds the edge if `text` is a binary relation; else false. */
-function parseRelation(
+export function parseRelation(
   b: GraphBuilder,
   text: string,
   edgeKind: EdgeKind

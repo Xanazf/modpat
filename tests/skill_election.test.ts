@@ -42,6 +42,15 @@ export async function runSkillElectionTests() {
     const CODE = atom.getSymbolScope("SKILL:CODE", false);
     const ARITH = atom.getSymbolScope("SKILL:ARITHMETIC", false);
 
+    // Skills are keyed by their SKILL:* symbol scope; the field source is the
+    // Capability precept seedCapabilities allocates UNDER that scope.
+    const capabilityId = (scope: number): number => {
+      for (const id of sys.getIdsByScope(scope)) {
+        if (sys.operatorClass[id] === OperatorClass.Capability) return id;
+      }
+      return -1;
+    };
+
     // Ingest a throwaway token and pin its coordinate so the query locus is the
     // point under test (a single atom ⇒ the centroid IS its position).
     const queryAt = (
@@ -59,6 +68,27 @@ export async function runSkillElectionTests() {
       sys.posW[id] = w;
       return Uint32Array.of(id);
     };
+
+    await describe("seedCapabilities places real capability precepts", async () => {
+      await it("all four SKILL:* scopes own a separated, Capability-tagged well", async () => {
+        const caps = [LANG, ASSERT, CODE, ARITH].map(capabilityId);
+        for (const id of caps) assert.ok(id >= 0, "capability precept seeded");
+        for (const id of caps) {
+          assert.strictEqual(sys.operatorClass[id], OperatorClass.Capability);
+          assert.strictEqual(sys.mass[id], sys.c ** 2 * 10);
+        }
+        // Seeded coordinates are pairwise separated (no co-located wells).
+        const xs = caps.map(id => sys.posX[id]);
+        for (let i = 0; i < xs.length; i++) {
+          for (let j = i + 1; j < xs.length; j++) {
+            assert.ok(
+              Math.abs(xs[i] - xs[j]) >= 5,
+              `wells ${i} and ${j} separated`
+            );
+          }
+        }
+      });
+    });
 
     await describe("Geometry-silent limit reproduces legacy intent routing", async () => {
       // Far outside every capability's influence radius (caps sit at posX 5-60).
@@ -80,30 +110,23 @@ export async function runSkillElectionTests() {
 
     // NOTE on the production field. Only genuine Capability precepts (those
     // seedCapabilities tags `OperatorClass.Capability` at distinct coordinates)
-    // are read as attractor field sources. In a live Runtime today the four
-    // SKILL:* precepts are NOT proper, separated capabilities - they are already
-    // allocated (grounded as the literal "SKILL:*" tokens, opClass 0/1) before
-    // the seed runs, so its `isAllocated` guard skips them and they cluster
-    // within ~10 posX units. The election therefore finds no qualifying field
-    // source and defers to the intent prior - i.e. the legacy string routing IS
-    // the production behaviour (validated above). The election is still genuinely
-    // geometric; the next block proves a separated, properly-tagged capability's
-    // basin overrides the prior - the behaviour that activates once capabilities
-    // are seeded as the distinguished attractors seedCapabilities intends.
+    // are read as attractor field sources; the skills map is keyed by the
+    // SKILL:* symbol scope and electSkill resolves each scope to its Capability
+    // precept through getIdsByScope. Queries whose locus lands outside every
+    // well (the common case - content grounds far from posX 5-60) fall to the
+    // intent prior, i.e. the legacy string routing (validated above). The next
+    // block proves the geometric override: a query settling squarely inside a
+    // separated capability's basin elects it despite a contrary intent label.
     await describe("A strong basin hit overrides the intent prior", async () => {
-      // Make ARITHMETIC the proper, separated Capability attractor the seed
-      // intends, then restore the live state afterwards.
-      const saved = {
-        x: sys.posX[ARITH],
-        op: sys.operatorClass[ARITH],
-      };
+      // Move the seeded ARITHMETIC well far out on its own, then restore.
+      const ARITH_CAP = capabilityId(ARITH);
+      assert.ok(ARITH_CAP >= 0, "seeded ARITHMETIC capability exists");
+      const saved = { x: sys.posX[ARITH_CAP] };
       const separateArith = () => {
-        sys.posX[ARITH] = 5000;
-        sys.operatorClass[ARITH] = OperatorClass.Capability;
+        sys.posX[ARITH_CAP] = 5000;
       };
       const restoreArith = () => {
-        sys.posX[ARITH] = saved.x;
-        sys.operatorClass[ARITH] = saved.op;
+        sys.posX[ARITH_CAP] = saved.x;
       };
 
       await it("a query inside a separated capability's well elects it despite intent=code", async () => {

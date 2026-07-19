@@ -27,7 +27,7 @@ import { mapFidelity } from "@core_s/grounding/MapFidelity";
 import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
 import { random, seedRandom } from "@utils/seededRandom";
 
-const CORPORA: Array<{ name: string; statements: string[] }> = [
+export const CORPORA: Array<{ name: string; statements: string[] }> = [
   {
     name: "syllogism tree",
     statements: [
@@ -247,9 +247,15 @@ async function main(): Promise<void> {
   );
 }
 
-main()
-  .catch(err => {
-    console.error(err);
-    process.exit(1);
-  })
-  .finally(() => process.exit(0));
+// Entrypoint guard: CORPORA is imported by tests/text_graph.test.ts, and an
+// import must not trigger the sweep (or its process.exit).
+const invokedDirectly =
+  process.argv[1]?.endsWith("logic_math_corpus_sweep.ts") ?? false;
+if (invokedDirectly) {
+  main()
+    .catch(err => {
+      console.error(err);
+      process.exit(1);
+    })
+    .finally(() => process.exit(0));
+}

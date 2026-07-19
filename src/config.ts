@@ -216,6 +216,32 @@ const DOPAT_CONFIG = {
      */
     COLD_START_COOCCURRENCE_ENABLED: true,
     /**
+     * PARITY §3.1 route (a) - grammar-grounded assertion ingestion. When on,
+     * Language.ingestAssertion additionally parses the assertion into a
+     * GroundGraph (TextGraph: compromise grammar, not the pattern lexicon)
+     * and lands the content-term relational geometry into the live System via
+     * groundTextGraphIntoSystem: existing precepts are pinned anchors (their
+     * geometry - numerals' posW=value, antonym antipodes, code symbols - is
+     * never moved), new terms relax into their metric frame, and negation
+     * lands as exact antipodes (the WaveResolver contract). The ordered
+     * ingestSequence path and all its order-dependent consumers (E1Formula,
+     * SVO-split crystallization, Composition) are untouched. Landed precepts
+     * carry the "text-ground" tag and deliberately stay OUT of
+     * system.groundedPrecepts - see the COLD_START selective-trigger note
+     * above for why language mentions must not enter that basis.
+     */
+    TEXT_GRAPH_INGESTION_ENABLED: true,
+    /**
+     * X/Y/Z scale for an ALL-FRESH text fact-set (no pinned anchors to
+     * inherit a frame from). SMACOF layout units are ~1 per hop; the live
+     * manifold's operative distances sit at INFLUENCE_RADIUS scale, so fresh
+     * terrain may need spreading. Default 1.0 until the text_corpus_sweep
+     * distance distribution justifies a different value (measured, not
+     * guessed). When anchors exist the frame is inherited from them and this
+     * knob is ignored.
+     */
+    TEXT_GRAPH_SPATIAL_SCALE: 1.0,
+    /**
      * Phase 4.5 - the survey loop, wired into learnCycle. When on, each
      * learnCycle ends with a territory-correction tick: every registered
      * GroundTruthChannel (self-supplied arithmetic, KB-supplied closed-world)
