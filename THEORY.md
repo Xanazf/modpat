@@ -216,3 +216,11 @@ namespace Dimension6 {
   }
 }
 ```
+
+## Compression is intelligence
+
+How to condense information? What does the action of condensing information look like as a topology?
+  - A river delta?
+  - ground + seed > sprout > plant = growth..?
+
+A modular asset system...
