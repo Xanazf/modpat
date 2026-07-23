@@ -17,6 +17,9 @@ node_modules
 
 **/*.duckdb*
 data/*
+# The vendored external-benchmark samples (CC BY 4.0, ~100K) and their
+# measured-history README are the honest baseline's audit trail - tracked.
+!data/benchmarks/
 *.zip
 scripts/venv
 .env
