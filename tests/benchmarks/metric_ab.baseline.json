@@ -292,7 +292,7 @@
     "avgTimeFullGradMs": 136.82
   },
   "external": {
-    "date": "2026-07-19T19:10:20.661Z",
+    "date": "2026-07-20T11:28:27.626Z",
     "ruletaker": {
       "hop1": 0.6,
       "hop2": 0.75,
@@ -311,17 +311,17 @@
     }
   },
   "paraphrase": {
-    "date": "2026-07-19T19:52:13.465Z",
+    "date": "2026-07-21T18:51:29.532Z",
     "families": {
       "taxonomy_hop1": {
-        "balancedAccuracy": 0.14285714285714285,
-        "abstentionRate": 0.8571428571428571,
+        "balancedAccuracy": 1,
+        "abstentionRate": 0,
         "confidentFalsehoods": 0,
         "n": 7
       },
       "taxonomy_hop3": {
-        "balancedAccuracy": 0,
-        "abstentionRate": 1,
+        "balancedAccuracy": 1,
+        "abstentionRate": 0,
         "confidentFalsehoods": 0,
         "n": 6
       },
@@ -332,8 +332,8 @@
         "n": 6
       },
       "negation_contrast": {
-        "balancedAccuracy": 0,
-        "abstentionRate": 1,
+        "balancedAccuracy": 1,
+        "abstentionRate": 0,
         "confidentFalsehoods": 0,
         "n": 6
       },
@@ -352,7 +352,7 @@
     }
   },
   "externalReal": {
-    "date": "2026-07-19T19:57:27.878Z",
+    "date": "2026-07-21T19:15:09.993Z",
     "fast": {
       "proofwriter.d0": {
         "balancedAccuracy": 0.25,
@@ -423,8 +423,8 @@
     },
     "honest": {
       "proofwriter.d0": {
-        "balancedAccuracy": 0.4166666666666667,
-        "abstentionRate": 0.9166666666666666,
+        "balancedAccuracy": 0.8333333333333334,
+        "abstentionRate": 0.5,
         "confidentFalsehoods": 0,
         "n": 12
       },
@@ -453,8 +453,8 @@
         "n": 12
       },
       "ruletaker.d0": {
-        "balancedAccuracy": 0,
-        "abstentionRate": 0.95,
+        "balancedAccuracy": 0.55,
+        "abstentionRate": 0.4,
         "confidentFalsehoods": 1,
         "n": 20
       },
@@ -465,8 +465,8 @@
         "n": 20
       },
       "ruletaker.d2": {
-        "balancedAccuracy": 0.1,
-        "abstentionRate": 0.9,
+        "balancedAccuracy": 0.15,
+        "abstentionRate": 0.85,
         "confidentFalsehoods": 0,
         "n": 20
       },
@@ -483,8 +483,8 @@
         "n": 20
       },
       "overall": {
-        "balancedAccuracy": 0.3619047619047619,
-        "abstentionRate": 0.9375,
+        "balancedAccuracy": 0.44285714285714284,
+        "abstentionRate": 0.83125,
         "confidentFalsehoods": 4,
         "n": 160
       }

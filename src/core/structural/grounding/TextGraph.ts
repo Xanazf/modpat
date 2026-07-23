@@ -122,23 +122,54 @@ function verbLemma(normal: string): string {
 // ---------------------------------------------------------------------------
 
 class DedupGraphBuilder extends GraphBuilder {
-  private seenEdges = new Set<string>();
-  private seenContrasts = new Set<string>();
+  private seenEdges = new Map<string, Grounding.GroundEdge>();
+  private seenContrasts = new Map<string, Grounding.ContrastPair>();
 
-  override edge(from: number, to: number, kind: EdgeKind, weight = 1): void {
+  /**
+   * While true, created edges/contrasts are stamped `hypothetical` (rule
+   * content from an if/then sentence - see GroundEdge.hypothetical). Set per
+   * sentence by parseGrammatical. An asserted duplicate UPGRADES an earlier
+   * hypothetical record (the fact outranks the rule mention), never the
+   * reverse.
+   */
+  hypothetical = false;
+
+  override edge(
+    from: number,
+    to: number,
+    kind: EdgeKind,
+    weight = 1,
+    pairScoped = false
+  ): void {
     if (from < 0 || to < 0 || from === to) return;
     const key = `${from}|${to}|${kind}`;
-    if (this.seenEdges.has(key)) return;
-    this.seenEdges.add(key);
+    const seen = this.seenEdges.get(key);
+    if (seen) {
+      if (!this.hypothetical) delete seen.hypothetical;
+      if (!pairScoped) delete seen.pairScoped;
+      return;
+    }
     super.edge(from, to, kind, weight);
+    const created = this.edges[this.edges.length - 1];
+    if (this.hypothetical) created.hypothetical = true;
+    if (pairScoped) created.pairScoped = true;
+    this.seenEdges.set(key, created);
   }
 
-  override contrast(a: number, b: number): void {
+  override contrast(a: number, b: number, pairScoped = false): void {
     if (a < 0 || b < 0 || a === b) return;
     const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-    if (this.seenContrasts.has(key)) return;
-    this.seenContrasts.add(key);
+    const seen = this.seenContrasts.get(key);
+    if (seen) {
+      if (!this.hypothetical) delete seen.hypothetical;
+      if (!pairScoped) delete seen.pairScoped;
+      return;
+    }
     super.contrast(a, b);
+    const created = this.contrasts[this.contrasts.length - 1];
+    if (this.hypothetical) created.hypothetical = true;
+    if (pairScoped) created.pairScoped = true;
+    this.seenContrasts.set(key, created);
   }
 }
 
@@ -243,24 +274,33 @@ function parseClause(
     // so this is pure enrichment - no subsumption risk).
     const verbNode = b.ensure(verbLemma(toks[verbIdx].normal), NodeKind.Term);
     for (const s of subject.heads) {
+      // subject -> verb is assertional (capability: "fish can swim"); the
+      // verb's OUTGOING side below is pair-scoped, so nothing chains through.
+      // Under transitive negation the subject->verb edge is pair-scoped as
+      // well: "the dog does not need the dog" asserts NO dog->need link
+      // (measured 2026-07-21: the assertional edge made the negated question
+      // itself ledger-affirmable, a confident falsehood on RuleTaker d3).
       if (negated && object.heads.length === 0) b.contrast(s, verbNode);
-      else b.edge(s, verbNode, kind, weight);
+      else b.edge(s, verbNode, kind, weight, negated);
     }
     for (const o of object.heads) {
-      if (negated) b.contrast(subject.heads[0] ?? verbNode, o);
-      else b.edge(verbNode, o, kind, weight);
+      // Pair-scoped: the shared verb node must not bridge different
+      // assertions (see GroundEdge.pairScoped).
+      if (negated) b.contrast(subject.heads[0] ?? verbNode, o, true);
+      else b.edge(verbNode, o, kind, weight, true);
     }
     clauseHead = verbNode;
   }
 
   // Prepositional attachment: predicate/complement -> each prep content token
-  // ("water boils at 100 degrees" -> boil->100, boil->degree).
+  // ("water boils at 100 degrees" -> boil->100, boil->degree). Verb-anchored
+  // attachments share the reified verb node, so they are pair-scoped too.
   const prepAnchor = clauseHead;
   if (prepAnchor >= 0) {
     for (const t of prepToks) {
       if (!isContent(t, true)) continue;
       const n = b.ensure(t.normal, NodeKind.Term);
-      b.edge(prepAnchor, n, kind, weight);
+      b.edge(prepAnchor, n, kind, weight, !copula);
     }
   }
 
@@ -333,6 +373,16 @@ function parseGrammatical(
 ): void {
   for (const toks of sentences) {
     const clauses = splitClauses(toks);
+    // Conditional sentences ("if ... then ...") are RULES: neither clause is
+    // asserted, so everything they intern is stamped hypothetical for the
+    // query ledger. "so"/"because" sentences assert both clauses and stay
+    // factual ("steam rises because water boils" asserts the rising AND the
+    // boiling).
+    const prevHypothetical = b.hypothetical;
+    b.hypothetical =
+      prevHypothetical ||
+      toks.some(t => t.normal === "if") ||
+      clauses.some(c => c.pivot === "then");
     let prevHead = -1;
     for (const clause of clauses) {
       const head = parseClause(stripLeadingPivot(clause.toks), b, kind);
@@ -347,6 +397,7 @@ function parseGrammatical(
       }
       if (head >= 0) prevHead = head;
     }
+    b.hypothetical = prevHypothetical;
   }
 }
 

@@ -107,6 +107,30 @@ declare namespace Root {
      * referents, not unrelated prior mentions that merely co-occurred.
      */
     groundedPrecepts: ReadonlySet<number>;
+    /**
+     * IDs whose geometry was deliberately landed by the TEXT grounding
+     * channel (created nodes AND reused pinned anchors). Separate from
+     * groundedPrecepts so text mentions stay out of the co-occurrence basis;
+     * the graph-query readout walks exactly this set. Mutable Set at runtime
+     * (TextGrounding adds members post-placement).
+     */
+    textGroundedPrecepts: Set<number>;
+    /**
+     * Explicit adjacency (positive edges) and contrast (mutually-exclusive)
+     * ledgers for the text channel, mirrored (a->b implies b->a). GraphQuery
+     * reads these directly instead of re-deriving reachability from geometry
+     * - disjoint fresh SMACOF layouts can coincide in absolute space, so
+     * distance-based chain search is unreliable across separate ingestions.
+     */
+    textGroundedEdges: Map<number, Set<number>>;
+    textGroundedContrasts: Map<number, Set<number>>;
+    /**
+     * Directed companion to textGroundedEdges (asserted from -> to only, no
+     * mirror). GraphQuery chains over THIS so a reversed-direction question
+     * ("are animals cats?") falls silent instead of affirming; the mirrored
+     * map stays for membership checks and freeLocation cleanup.
+     */
+    textGroundedEdgesOut: Map<number, Set<number>>;
 
     // Sequence ring: enforced write path
     getSequenceStart(id: number): number;

@@ -25,6 +25,7 @@ import { DOPAT_CONFIG } from "@config";
 import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
+import { groundTextIfEnabled } from "@core_s/grounding/TextGrounding";
 import Store from "@core_s/Memory";
 import {
   type FamilyScore,
@@ -355,6 +356,14 @@ async function runFastItem(item: DatasetItem): Promise<string> {
   const traveler = createTestTraveler(system, atomizer, resolver, store);
   traveler.setGPUEnabled(false);
   try {
+    // Fast mode gets the same terrain benefit as honest mode: the THEORY's
+    // relational geometry is landed before perception. The question is never
+    // grounded - that would assert the asked fact into the terrain.
+    groundTextIfEnabled(
+      theorySentences(item.theory.toLowerCase()),
+      system,
+      atomizer
+    );
     const source = `${item.theory.toLowerCase()} ${item.question
       .toLowerCase()
       .replace(/\.\s*$/, "")} |-`;

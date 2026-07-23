@@ -81,14 +81,19 @@ export function reduceAdditive(
 
 // -- Universal instantiation / IS-transitivity as IS-graph traversal --------
 
-/** Lowercases, strips a leading article / "not", and singularizes the noun. */
+/** Lowercases, strips a leading article / "not" (either order, repeatedly -
+ *  "not a fish" must reduce as fully as "a fish" or "not fish" alone), and
+ *  singularizes the noun. */
 export function lemma(raw: string): string {
-  const w = raw
-    .toLowerCase()
-    .trim()
-    .replace(/^(?:a|an|the)\s+/, "")
-    .replace(/^not\s+/, "")
-    .trim();
+  let w = raw.toLowerCase().trim();
+  let prev: string;
+  do {
+    prev = w;
+    w = w
+      .replace(/^(?:a|an|the)\s+/, "")
+      .replace(/^not\s+/, "")
+      .trim();
+  } while (w !== prev);
   if (!w) return w;
   const singular = nlp(w).nouns().toSingular().out("text").trim();
   return singular || w;

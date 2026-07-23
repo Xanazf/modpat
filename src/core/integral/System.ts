@@ -250,6 +250,45 @@ class System implements Root.ManifoldView {
   public readonly groundedPrecepts = new Set<number>();
 
   /**
+   * IDs whose geometry was deliberately landed by the TEXT grounding channel
+   * (TextGrounding: grammar-parsed relational placement) - BOTH freshly
+   * created nodes and pre-existing precepts reused as pinned anchors.
+   * Deliberately separate from `groundedPrecepts`: text mentions must stay
+   * out of the cold-start co-occurrence basis (see the documented regression
+   * in config.ts), but the graph-query readout needs to walk exactly the
+   * relational geometry that was landed on purpose - not incidental
+   * same-sentence token clusters. Populated by groundTextGraphIntoSystem;
+   * like groundedPrecepts it is derived state and need not survive snapshots.
+   */
+  public readonly textGroundedPrecepts = new Set<number>();
+
+  /**
+   * Explicit relational ledger for the TextGrounding channel: undirected
+   * adjacency (positive edges) and contrast (mutually-exclusive) pairs,
+   * recorded directly from each landed GroundGraph's edges/contrasts rather
+   * than re-derived from geometry. GraphQuery reads THIS, not distance -
+   * disjoint fresh assertions ("rex is a dog" after "cats are mammals") get
+   * independent SMACOF layouts that can coincide in absolute space (no
+   * shared anchor to place them apart), so geometric chain-reachability is
+   * unreliable across unrelated ingestion calls. The ledger has no such
+   * failure mode: it only ever records what was actually asserted. Both maps
+   * are mirrored (a->b implies b->a) and cleaned up in freeLocation.
+   */
+  public readonly textGroundedEdges = new Map<number, Set<number>>();
+  public readonly textGroundedContrasts = new Map<number, Set<number>>();
+
+  /**
+   * Directed companion to textGroundedEdges: only the asserted from -> to
+   * direction, never mirrored. GraphQuery chains over THIS map so that a
+   * reversed-direction question ("are animals cats?" after "cats are ...
+   * animals") gets silence instead of a confident affirmation - the one
+   * confident-falsehood mode the undirected v1 ledger had. The mirrored map
+   * above still serves membership checks and freeLocation cleanup (its
+   * neighbor sets are the reverse index for this one).
+   */
+  public readonly textGroundedEdgesOut = new Map<number, Set<number>>();
+
+  /**
    * Initializes the logical manifold and allocates the underlying ArrayBuffer.
    */
   constructor() {
@@ -427,6 +466,9 @@ class System implements Root.ManifoldView {
     // free-list slot never inherits a previous occupant's grounded status).
     if (from === "ast-ground") this.groundedPrecepts.add(id);
     else this.groundedPrecepts.delete(id);
+    // Same slot-reuse hygiene for the text channel (membership is added
+    // post-placement by groundTextGraphIntoSystem, never at creation).
+    this.textGroundedPrecepts.delete(id);
 
     // Register in scope index.
     let scopeSet = this.scopeIndex.get(initialScope);
@@ -503,6 +545,20 @@ class System implements Root.ManifoldView {
 
     this.allocated[id] = 0;
     this.groundedPrecepts.delete(id);
+    this.textGroundedPrecepts.delete(id);
+    // The mirrored map's neighbor set covers every directed in-partner, so it
+    // doubles as the reverse index for cleaning the directed Out map.
+    for (const nb of this.textGroundedEdges.get(id) ?? []) {
+      this.textGroundedEdgesOut.get(nb)?.delete(id);
+    }
+    this.textGroundedEdgesOut.delete(id);
+    for (const ledger of [this.textGroundedEdges, this.textGroundedContrasts]) {
+      const neighbors = ledger.get(id);
+      if (neighbors) {
+        for (const nb of neighbors) ledger.get(nb)?.delete(id);
+        ledger.delete(id);
+      }
+    }
 
     // Zero out all physical properties to prevent stale data.
     this.mass[id] = 0;

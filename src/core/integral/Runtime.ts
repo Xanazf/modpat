@@ -34,6 +34,7 @@ import Unfolder from "@mutate/Unfolder";
 import { SelfConcept } from "@props/Identity";
 import { createCoderSkill } from "@skill_code/Coder";
 import { CognitiveLoop } from "@skill_cogi/CognitiveLoop";
+import { resolveGraphQuery } from "@skill_cogi/GraphQuery";
 import Language from "@skill_lang/Language";
 import { expressFromSinks } from "@skill_lang/SurfaceExpression";
 import { IntentTag } from "@utils/intentPrecept";
@@ -68,6 +69,20 @@ function _registerDefaultSkills(
         return { answer: arith, confidence: 1.0 };
       }
     }
+    // Graph-query readout (PARITY §3.1 read side): geometry-decisive yes/no
+    // answers from the text-grounded terrain. Null -> perception as before.
+    if (DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_QUERY_ENABLED) {
+      const graphAnswer = resolveGraphQuery(
+        ctx.query,
+        ctx.system,
+        ctx.atomizer
+      );
+      if (graphAnswer) {
+        ctx.language.respond(graphAnswer.answer);
+        return graphAnswer;
+      }
+    }
+
     const opts = { contextScopes: ctx.language.contextScopes() };
     const result = await mapper.perceiveCoherent(ctx.queryIds, opts);
 

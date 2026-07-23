@@ -26,11 +26,24 @@
  */
 
 import { DOPAT_CONFIG } from "@config";
+import logger from "@utils/SpectralLogger";
 import { placeGraphAnchored } from "./StructuralGrounding";
+import { buildGraphFromText } from "./TextGraph";
 
 /**
  * Resolves a label's existing precept: prefer a structurally-grounded one,
- * else the most massive allocated candidate. Returns -1 when none exists.
+ * then this channel's own prior anchor, else the most massive allocated
+ * candidate. Returns -1 when none exists.
+ *
+ * The text-ground check matters because the SAME scope is shared with
+ * Language's raw per-token ingestion (every processed sentence tokenizes
+ * independently via atomizer.ingestSequence, regardless of grounding). A
+ * raw token precept can incidentally out-mass this channel's own anchor,
+ * and picking it here would silently attach new edges/contrasts to a
+ * precept invisible to the ledger, fracturing the relational chain without
+ * any error (measured: "cats are not fish" landed its contrast on a raw
+ * "cat" token instead of the anchor "felix is a cat" pointed at, making the
+ * fact ledger-unreachable from felix).
  */
 function resolveExisting(system: Root.ManifoldView, scope: number): number {
   if (scope <= 0) return -1;
@@ -39,12 +52,43 @@ function resolveExisting(system: Root.ManifoldView, scope: number): number {
   for (const id of system.getIdsByScope(scope)) {
     if (!system.isAllocated(id)) continue;
     if (system.groundedPrecepts.has(id)) return id;
+    if (system.textGroundedPrecepts.has(id)) return id;
     if (system.mass[id] > bestMass) {
       bestMass = system.mass[id];
       best = id;
     }
   }
   return best;
+}
+
+/**
+ * Flag-gated convenience wrapper shared by every text-grounding call site
+ * (Language.ingestAssertion, Unfolder.ingestContent, benchmark fast mode):
+ * parse `text` into a TextGraph and land it, applying the same minimum-signal
+ * gate everywhere (>= 2 nodes and >= 1 edge/contrast - a bag of unrelated
+ * tokens carries no relational geometry worth landing). Never throws: a parse
+ * or landing failure is logged and swallowed so ingestion always proceeds.
+ * Returns the grounding result, or null when gated off / skipped / failed.
+ */
+export function groundTextIfEnabled(
+  text: string | string[],
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine,
+  opts: Grounding.GroundingOptions = {}
+): Grounding.TextGroundingResult | null {
+  if (!DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_INGESTION_ENABLED) return null;
+  try {
+    const graph = buildGraphFromText(text);
+    if (
+      graph.nodes.length < 2 ||
+      graph.edges.length + (graph.contrasts?.length ?? 0) < 1
+    )
+      return null;
+    return groundTextGraphIntoSystem(graph, system, atomizer, opts);
+  } catch (e) {
+    logger.error("[TextGraph] grounding failed:", e);
+    return null;
+  }
 }
 
 export function groundTextGraphIntoSystem(
@@ -120,12 +164,71 @@ export function groundTextGraphIntoSystem(
     system.update(id, "text-ground");
   }
 
+  // Register EVERY node precept (created and reused-pinned alike) in the
+  // text-ground registry: the graph-query readout walks exactly the geometry
+  // this channel landed on purpose, and a reused anchor is as much a part of
+  // that relational frame as a fresh node. NOT groundedPrecepts - see header.
+  for (let i = 0; i < n; i++) {
+    const id = nodeToPrecept[i];
+    if (id >= 0 && system.isAllocated(id)) system.textGroundedPrecepts.add(id);
+  }
+
+  // Explicit relational ledger (GraphQuery's read side): record every edge
+  // of THIS graph, mirrored, regardless of whether its endpoints are new or
+  // reused-pinned - a reused anchor gaining a new asserted neighbour is
+  // exactly the case that must show up in the ledger. Recorded unconditional
+  // of placement/scale so it never depends on absolute geometry.
+  const addLedger = (
+    ledger: Map<number, Set<number>>,
+    aId: number,
+    bId: number
+  ): void => {
+    if (aId < 0 || bId < 0 || aId === bId) return;
+    let aSet = ledger.get(aId);
+    if (!aSet) {
+      aSet = new Set();
+      ledger.set(aId, aSet);
+    }
+    aSet.add(bId);
+    let bSet = ledger.get(bId);
+    if (!bSet) {
+      bSet = new Set();
+      ledger.set(bId, bSet);
+    }
+    bSet.add(aId);
+  };
+  for (const e of graph.edges) {
+    const fromId = nodeToPrecept[e.from];
+    const toId = nodeToPrecept[e.to];
+    addLedger(system.textGroundedEdges, fromId, toId);
+    // Directed companion: ASSERTED edges only, asserted direction only.
+    // GraphQuery chains over this, so two exclusions apply: reversed
+    // questions must not affirm (no mirror), and rule content must not
+    // affirm ("if X then the dog is green" lands hypothetical edges -
+    // measured 2026-07-21: chaining through them turned 15 open-world
+    // unknowns into confident falsehoods on the honest ProofWriter run).
+    if (e.hypothetical || e.pairScoped) continue;
+    if (fromId >= 0 && toId >= 0 && fromId !== toId) {
+      let outSet = system.textGroundedEdgesOut.get(fromId);
+      if (!outSet) {
+        outSet = new Set();
+        system.textGroundedEdgesOut.set(fromId, outSet);
+      }
+      outSet.add(toId);
+    }
+  }
+
   // WaveResolver contract: a NEW member of a contrast pair sits at the exact
   // antipode (mirror through origin) of its partner, giving cos = -1.
   for (const c of graph.contrasts ?? []) {
     const aId = nodeToPrecept[c.a];
     const bId = nodeToPrecept[c.b];
     if (aId < 0 || bId < 0) continue;
+    // Rule-scope negation ("if X then Y is not Z") shapes placement below
+    // but must not back ledger DENIALS - same asserted-content contract as
+    // the directed edge map.
+    if (!c.hypothetical && !c.pairScoped)
+      addLedger(system.textGroundedContrasts, aId, bId);
     const aPinned = pinned.has(c.a);
     const bPinned = pinned.has(c.b);
     if (aPinned && bPinned) continue;

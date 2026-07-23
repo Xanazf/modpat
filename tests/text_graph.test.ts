@@ -26,6 +26,10 @@ import { buildGraphFromText } from "@core_s/grounding/TextGraph";
 import { traversalFidelity } from "@core_s/grounding/TraversalFidelity";
 import { EdgeKind, NodeKind } from "@core_s/helpers/enums";
 import Store from "@core_s/Memory";
+import {
+  questionToProposition,
+  resolveGraphQuery,
+} from "@skill_cogi/GraphQuery";
 import logger from "@utils/SpectralLogger";
 import { random, seedRandom } from "@utils/seededRandom";
 import { CORPORA } from "../scripts/dev/logic_math_corpus_sweep";
@@ -402,6 +406,205 @@ export async function runTextGraphTests(): Promise<void> {
         assert.strictEqual(after, before, "re-assertion deduped by scope");
       } finally {
         physics.TEXT_GRAPH_INGESTION_ENABLED = prevFlag;
+        await store.close();
+      }
+    });
+
+    // ---- 5. GraphQuery readout (PARITY §3.1 read side) --------------------
+    //
+    // The read half of the front-end: yes/no questions verified against the
+    // explicit text-ground ledger. Guards the whole contract - affirm along
+    // asserted chains, deny via registered contrast partners, silence
+    // everywhere else (including REVERSED-direction questions, the
+    // undirected-v1 confident-falsehood mode), and asking never creates.
+
+    await it("canonicalizes yes/no question surfaces to declaratives", async () => {
+      const cases: Array<[string, string | null]> = [
+        ["is felix a mammal?", "felix is a mammal"],
+        ["would you say felix is a mammal?", "felix is a mammal"],
+        ["felix is a mammal, right?", "felix is a mammal"],
+        ["is it true that felix is a mammal?", "felix is a mammal"],
+        ["does it follow that felix is a mammal?", "felix is a mammal"],
+        ["are roses organisms?", "roses are organisms"],
+        ["is felix not a fish?", "felix is not a fish"],
+        ["can felix fly?", "felix can fly"],
+        ["what is felix?", null],
+        ["who owns felix?", null],
+      ];
+      for (const [q, want] of cases) {
+        assert.strictEqual(
+          questionToProposition(q),
+          want,
+          `canonicalization of "${q}"`
+        );
+      }
+    });
+
+    await it("answers ledger-decisive questions and stays silent otherwise", async () => {
+      const physics = DOPAT_CONFIG.PHYSICS as unknown as {
+        TEXT_GRAPH_INGESTION_ENABLED: boolean;
+        TEXT_GRAPH_QUERY_ENABLED: boolean;
+      };
+      const prevIngest = physics.TEXT_GRAPH_INGESTION_ENABLED;
+      const prevQuery = physics.TEXT_GRAPH_QUERY_ENABLED;
+      physics.TEXT_GRAPH_INGESTION_ENABLED = true;
+      physics.TEXT_GRAPH_QUERY_ENABLED = true;
+
+      const system = new System();
+      const atomizer = new LogicAtomizer();
+      await atomizer.init();
+      const store = new Store(system, atomizer, ":memory:");
+      await store.waitForInit();
+      const resolver = new Traveler(system, atomizer, store);
+      const traveler = createTestTraveler(system, atomizer, resolver, store);
+      traveler.setGPUEnabled(false);
+
+      try {
+        // Facts through the LIVE entry point, same as the paraphrase bench.
+        for (const fact of [
+          "cats are mammals",
+          "mammals are animals",
+          "felix is a cat",
+          "cats are not fish",
+          "fish can swim",
+        ]) {
+          await traveler.process(fact);
+        }
+        assert.ok(
+          system.textGroundedEdges.size > 0,
+          "ingestion populated the edge ledger"
+        );
+        assert.ok(
+          system.textGroundedContrasts.size > 0,
+          "ingestion populated the contrast ledger"
+        );
+
+        const ask = (q: string) => resolveGraphQuery(q, system, atomizer);
+
+        // Affirm: hop-1 and a 3-hop chain (felix -> cat -> mammal -> animal).
+        assert.strictEqual(ask("is felix a cat?")?.answer, "felix is a cat");
+        assert.strictEqual(
+          ask("is felix an animal?")?.answer,
+          "felix is an animal"
+        );
+        assert.strictEqual(
+          ask("are cats animals?")?.answer,
+          "cats are animals"
+        );
+        assert.strictEqual(ask("can fish swim?")?.answer, "fish can swim");
+
+        // Deny via contrast partner: felix reaches cat, cat >< fish.
+        const deny = ask("is felix a fish?");
+        assert.ok(deny, "contrast-reachable question is decisive");
+        assert.ok(
+          deny.answer.startsWith("no,") && deny.answer.includes("not"),
+          `deny phrasing: "${deny.answer}"`
+        );
+
+        // Negated question about a registered contrast affirms the negation.
+        const negated = ask("is felix not a fish?");
+        assert.ok(negated, "negated contrast question is decisive");
+        assert.ok(
+          negated.answer.startsWith("correct,"),
+          `negation-affirm phrasing: "${negated.answer}"`
+        );
+
+        // REVERSED direction must be SILENCE, not affirmation. This is the
+        // undirected-v1 ledger's confident-falsehood mode; the directed
+        // textGroundedEdgesOut map exists exactly to kill it. If this
+        // assertion fires, the ledger is inventing converse relations again.
+        assert.strictEqual(
+          ask("are animals cats?"),
+          null,
+          "reversed taxonomy question must fall through to perception"
+        );
+        assert.strictEqual(
+          ask("are mammals cats?"),
+          null,
+          "reversed hop-1 question must fall through to perception"
+        );
+
+        // Rule content must never be affirmable by reachability: an if/then
+        // sentence asserts NEITHER clause. Measured 2026-07-21 on the honest
+        // ProofWriter run: without the hypothetical stamp, consequent-internal
+        // edges turned open-world unknowns into confident falsehoods
+        // (4 -> 19 overall). Rule discharge belongs to the reasoning engine.
+        await traveler.process("if it rains then the grass grows");
+        assert.strictEqual(
+          ask("does the grass grow?"),
+          null,
+          "conditional consequent must not affirm from the ledger"
+        );
+        assert.strictEqual(
+          ask("does it rain?"),
+          null,
+          "conditional antecedent must not affirm from the ledger"
+        );
+
+        // Reified-SVO cross-contamination: the shared verb node must not
+        // bridge different assertions. "mouse visits cat" + "dog visits
+        // squirrel" must NOT make "does the mouse visit the squirrel?"
+        // affirmable (measured 2026-07-21: every residual honest confident
+        // falsehood was a Rel* item of this shape). The conservative price:
+        // transitive SVO questions are silence for now - affirming them
+        // soundly needs pair-scoped verification, which is future work.
+        await traveler.process("the mouse visits the cat");
+        await traveler.process("the dog visits the squirrel");
+        assert.strictEqual(
+          ask("does the mouse visit the squirrel?"),
+          null,
+          "shared verb node must not bridge assertions"
+        );
+        assert.strictEqual(
+          ask("does the mouse visit the cat?"),
+          null,
+          "transitive SVO affirm is out of ledger scope (pair-scoped)"
+        );
+
+        // Polarity-loss guard: a reflexive negation ("does not need the
+        // dog" asked OF the dog) drops its self-contrast in the parse,
+        // leaving a bare positive link. Answering that residue affirms the
+        // positive reading while echoing the negated surface - it must be
+        // silence.
+        await traveler.process("the dog needs the cat");
+        assert.strictEqual(
+          ask("the dog does not need the dog?"),
+          null,
+          "negated surface with no parsed contrast must fall through"
+        );
+
+        // Unknown term: silence, and asking must never create. ("planet" has
+        // a dictionary scope from atomizer init - the invariant is that no
+        // PRECEPT gets allocated for it by asking.)
+        assert.strictEqual(ask("is felix a planet?"), null);
+        const planetScope = atomizer.getSymbolScope("planet", false);
+        const planetPrecepts =
+          planetScope > 0
+            ? [...system.getIdsByScope(planetScope)].filter(id =>
+                system.isAllocated(id)
+              ).length
+            : 0;
+        assert.strictEqual(
+          planetPrecepts,
+          0,
+          "asking about an unknown term must not allocate a precept"
+        );
+
+        // Out-of-scope surfaces: wh-questions are not this resolver's job.
+        assert.strictEqual(ask("what is felix?"), null);
+
+        // Live wiring: the Runtime LANGUAGE skill consults GraphQuery before
+        // perception, so the full process() path must surface the answer.
+        const live = (await traveler.process("is felix an animal?"))
+          .toLowerCase()
+          .trim();
+        assert.ok(
+          live.includes("animal") && !live.startsWith("no"),
+          `live process() answer: "${live}"`
+        );
+      } finally {
+        physics.TEXT_GRAPH_INGESTION_ENABLED = prevIngest;
+        physics.TEXT_GRAPH_QUERY_ENABLED = prevQuery;
         await store.close();
       }
     });

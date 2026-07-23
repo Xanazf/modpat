@@ -171,6 +171,26 @@ declare namespace Grounding {
     kind: import("@core_s/helpers/enums").EdgeKind;
     /** Relative pull strength (astExtract energy, or 1.0 by default). */
     weight: number;
+    /**
+     * True when the edge came from a conditional (if/then) sentence: rule
+     * CONTENT, not an asserted fact. Placement treats it like any edge
+     * (rules shape terrain), but the text-ground query ledger skips it -
+     * "if X then the dog is green" must never make "is the dog green?"
+     * affirmable by reachability. Rule discharge is the reasoning engine's
+     * job, not the ledger's.
+     */
+    hypothetical?: boolean;
+    /**
+     * True for the verb->object half of a reified SVO (and verb-anchored
+     * prepositional attachments): the reified verb node is SHARED across
+     * every assertion using that verb, so this edge is only sound inside
+     * its own assertion - chaining through it manufactures facts
+     * ("the mouse visits the cat" + "the dog visits the squirrel" must not
+     * make "the mouse visits the squirrel" reachable; measured 2026-07-21,
+     * all 13 residual honest confident falsehoods were Rel* items of this
+     * shape). Placement uses it normally; the query ledger skips it.
+     */
+    pairScoped?: boolean;
   }
 
   /**
@@ -184,6 +204,13 @@ declare namespace Grounding {
   interface ContrastPair {
     a: number;
     b: number;
+    /** Same contract as GroundEdge.hypothetical: negation inside an if/then
+     *  sentence is rule content and must not back ledger denials. */
+    hypothetical?: boolean;
+    /** Same contract as GroundEdge.pairScoped: a negated transitive SVO
+     *  ("the mouse does not visit the squirrel") relates a specific pair,
+     *  not two mutually-exclusive concepts - no ledger denials from it. */
+    pairScoped?: boolean;
   }
 
   interface GroundGraph {
