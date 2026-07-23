@@ -250,26 +250,91 @@ The architecture's freebies on this terrain, each already measured:
 - **Inference cost** - traversal is ms-scale cache-coherent array work per
   query on CPU; no forward pass.
 
-## 5. Effort estimate (theorized, to be graded)
+## 5. Effort estimate (redone 2026-07-23, partially measured)
 
-Distance shares: language front-end ~45%, FOL breadth ~20%, code synthesis
-~15%, arithmetic ~8%, scale ~7%, expression ~5%. At this repo's demonstrated
-cadence (wave channel, composition, bitemporal-W each went
-idea→wired→guarded in days-to-weeks, single developer):
+### Grading the 2026-07-05 estimate
 
-- **Honest external baseline** (real datasets through the pipeline): days.
-  **DONE 2026-07-21** (see §2 update) - the estimate held.
-- **Logic-family parity** (3.2 + 3.3 + a first cut of 3.1 via route (b)):
-  months, single-digit.
-- **Arithmetic + word-problem parity**: +2-3 months after 3.1's first cut.
-- **Code (HumanEval-class)**: the long pole after language; ~a year.
-- **Full route-(a) language grounding**: open-ended research; the hybrid
-  carries parity until it lands.
+The original shares (language front-end ~45%, FOL breadth ~20%, code
+synthesis ~15%, arithmetic ~8%, scale ~7%, expression ~5%) and milestones
+were pure theory - written before the honest baseline existed. They can now
+be graded against what actually happened:
 
-On the record: **if the naturalistic hop-1 family does not clear 0.9 within
-one quarter of starting 3.1, the front-end estimate above is wrong and the
-distance is larger than claimed.** Wrong-if criterion included so this
-document can be graded like the 2026-06-11 predictions.
+- **Honest external baseline**: estimated days. **DONE 2026-07-21, on time.**
+- **Wrong-if criterion** ("if the naturalistic hop-1 family does not clear
+  0.9 within one quarter of starting 3.1, the front-end estimate is wrong"):
+  **CONFIRMED, and beaten.** The route-(a) clock started 2026-07-19;
+  taxonomy hop-1 cleared 0.14→1.0 within **4 days**, not the one-quarter
+  (three-month) bar. The estimate wasn't just right, it was conservative.
+- **"Logic-family parity" bullet** (3.2 + 3.3 + a first cut of 3.1 **via
+  route (b)**, estimated months, single-digit): **partially confirmed,
+  ahead of pace, via a different route than predicted.** First cuts of 3.1
+  AND 3.2 landed in the same 4-day window, not months - but via route (a)
+  (grammar-grounded ingestion), not the anticipated route (b) (small-LM
+  boundary translator) the estimate was hedged on. This resolves an open
+  uncertainty from §3.1: route (a) was expected to be the slow, thesis-pure
+  path with (b) needed as a stopgap for surface robustness; it turned out
+  fast enough to be the primary path directly, with no stopgap needed for
+  the SVO/attribute slice. **3.3 (disjunction physics) remains fully open**,
+  so the bullet as originally scoped is not yet closed.
+- **"Full route-(a) language grounding: open-ended research"**: also
+  resolved faster than hedged - the SVO/attribute-rule slice is done, not
+  open-ended. What remains open-ended is deeper syntactic generality
+  (arbitrary nested clauses, prepositional relations) - a narrower claim
+  than the original.
+- **Arithmetic + word-problem parity, Code (HumanEval-class)**: unstarted,
+  ungraded - see below, these are now the shares that matter most.
+
+### Updated shares (still theorized; renormalized to the distance remaining today)
+
+The deduction family (RuleTaker/ProofWriter-class - §3.1 + §3.2 + §3.3) is
+no longer theorized: it is measured at **83.8% balanced accuracy, 0
+confident falsehoods**, with the entire residual being abstention (33.8%),
+not error. That family's remaining distance is now small and mostly
+engineering (relations beyond SVO, existentials, nested quantifiers, proof
+by cases) plus one still-open mechanism (CWA negation-as-failure, attempted
+once and reverted - see §2). Every OTHER benchmark family named in §1
+(FOLIO's nested-quantifier-heavy FOL, arithmetic word problems,
+HumanEval-class code) is exactly as untouched as it was on 2026-07-05 - so
+its SHARE of what's left necessarily grew, not because it got harder, but
+because the biggest original item shrank:
+
+| item | share of distance remaining | status |
+| ---- | ---------------------------- | ------ |
+| 3.1 residual (prepositional/multi-clause reading, vault persistence) | 10% | first cut DONE; residual is engineering |
+| 3.2 residual (existentials, nested quantifiers, proof by cases, CWA reinstatement) | 15% | first cut DONE; CWA attempted once, reverted (§2) |
+| 3.3 disjunction physics | 10% | untouched; one hard mechanism (prediction 2, OPEN since 2026-06-11) |
+| 3.4 arithmetic beyond addition | 10% | untouched |
+| 3.5 code synthesis depth (HumanEval-class) | **35%** | untouched - now the single largest remaining item |
+| 3.6 scale | 5% | untouched; engineering only, low risk |
+| 3.7 degree/magnitude placement | 5% | untouched; gate probe unrun |
+| 3.8 expression (proof verbalization) | 10% | untouched; depends on 3.1 |
+
+**Code synthesis is now the long pole**, exactly as the 2026-07-05 estimate
+predicted it would eventually become ("the long pole after language; ~a
+year") - that framing is confirmed sooner than expected, precisely because
+language moved faster than budgeted.
+
+### Updated milestones
+
+- **Deduction-family parity** (close the residual §3.1/§3.2 gaps +
+  disjunction physics): the measured 83.8%/0-confFalse baseline plus the
+  Phase-3 pattern's six prior executions suggest weeks, not months, for the
+  engineering residual (3.1/3.2); disjunction physics (3.3) is the
+  uncertain one - it has been open since 2026-06-11 without a mechanism,
+  so it should NOT be assumed to fall on the same fast cadence.
+- **Arithmetic + word-problem parity**: 3.1's first cut is done, so this
+  clock has effectively started; +2-3 months from here is unchanged and
+  ungraded (no work has begun).
+- **Code (HumanEval-class)**: unchanged, ~a year, now explicitly the
+  largest single remaining item rather than one competing with language.
+
+On the record, a fresh gradable prediction for the next iteration: **if
+closed-world negation-as-failure cannot be reinstated in the harness
+without regressing confFalse above 0 within a comparable few-day iteration
+cycle to the OWA relational discharge (this session), CWA is a harder
+mechanism than the stage-1 pattern suggests and should be scoped as its own
+multi-iteration effort, not a flag-flip.** Wrong-if: a CWA re-attempt lands
+confFalse-0 within roughly the same cadence as this session's OWA work.
 
 ## 6. Training curriculum (theorized)
 
@@ -364,9 +429,11 @@ that nobody writes Stage 7.
 
 Parity on deterministic *reasoning* is near - the mechanisms mostly exist
 and measure 0.83-1.00 on the families they cover; parity on deterministic
-*tasks as people pose them* is mostly one problem (the natural-language
-front-end) plus four named mechanisms (FOL breadth, disjunction physics,
-multiplicative/positional arithmetic, degree placement), an honest
-external-dataset baseline (run 2026-07-21: 44.3% balanced accuracy at 4
-confident falsehoods - the distance is now a number), and a staged curriculum
-whose gates this repo has, unusually, already built and measured.
+*tasks as people pose them* is now mostly three named mechanisms
+(disjunction physics, multiplicative/positional arithmetic, degree
+placement) plus closed-world negation-as-failure, an honest external-
+dataset baseline (run 2026-07-21, iterated 2026-07-23: **83.8% balanced
+accuracy at ZERO confident falsehoods** across 160 real RuleTaker/
+ProofWriter items - the distance is now a number, and a small one), and a
+staged curriculum whose gates this repo has, unusually, already built and
+measured.
