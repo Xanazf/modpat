@@ -115,7 +115,7 @@ text and pushed through the embedding bottleneck (`AstSeedWorker → ingestSeque
 and its edges are stored as **vault proofs** rather than **spatial adjacency**. The arc
 turns that captured structure into geometry.
 
-### Deduction and code are the same shape; induction is its mirror (theorized, 2026-07-23)
+### Deduction and code are the same shape; induction is its inversion, not just its mirror (theorized, 2026-07-23)
 
 PARITY §3.2's rule discharge (`GroundRule`: `conditions[] → conclusion`, built
 this session) and a code `if`/`else` (`test → consequent`) are the identical
@@ -133,27 +133,50 @@ value - discharging it needs execution as the ground truth (the survey
 loop's behavioural-fidelity channel, already built for code, PARITY §3.5)
 rather than an asserted-fact ledger.
 
-The sharper claim: **induction is the same `GroundRule` triple solved for
-the other slot.** Deduction fixes `(rule, conditions)` and solves for
-`conclusion` (what §3.2 discharges). Induction fixes `(conditions,
-conclusion)` - observed across several example cases - and solves for the
-*rule* that explains them: rule learning / program synthesis-from-examples,
-expressed as the identical shape run in reverse. If code's control flow
-lived in this graph, code synthesis-from-examples (PARITY §3.5, the current
-long pole) would decompose into two pieces this repo already has an answer
-for: **induce** the `GroundRule` from example input/output pairs or
-execution traces (a new mechanism, the actual missing bridge - not "harder
-code generation" in the abstract), then **render** it to source text, which
-`Synthesizer`'s template instantiation already does well. Recognizing the
-if/else shape was never the hard part; inducing the right general rule from
-few examples is - reframing 3.5's gap as an induction problem rather than a
-generation problem is the point of this note.
+The sharper claim, corrected same day: **induction is not merely the same
+`GroundRule` triple viewed differently - it is that triple with the solve
+direction INVERTED, and the inversion is double.** (1) Algebraic inversion:
+deduction fixes `(rule, conditions)` and solves for `conclusion` (what §3.2
+discharges); induction fixes `(conditions, conclusion)` - observed across
+several example cases - and solves for the *rule* that explains them.
+(2) Epistemic inversion, the half a passive "mirror" misses entirely:
+deduction is **truth-preserving** - given a faithful terrain, a discharged
+conclusion is correct by construction, the same "errors structurally
+inexpressible" guarantee the exact-domain reduction work already leans on.
+Induction is **not** truth-preserving in that sense - a rule generalized
+from finitely many examples can be wrong even when it fits every example
+seen so far (the classical problem of induction: no finite evidence entails
+a universal). Running the shape backward does not carry the forward
+direction's certainty backward with it. This is the same asymmetry the
+architecture already encodes physically elsewhere: negation is a point
+reflection *through the origin* (`WaveResolver`'s antipode contract) - a
+true inversion, not a mirror across a plane, and it is the closer geometric
+analogy here too.
+
+Consequence: an **induced** rule is not admissible on the same terms as a
+**discharged** conclusion - it needs the verification a discharged
+conclusion is exempt from, which is not a new mechanism to invent but the
+survey loop's existing job (behavioural fidelity against execution, PARITY
+§3.5) pointed at a different kind of candidate than it currently surveys.
+If code's control flow lived in this graph, code synthesis-from-examples
+(§3.5, the current long pole) would decompose into: **induce** the
+`GroundRule` from example input/output pairs or execution traces (the
+actual missing mechanism - not "harder code generation" in the abstract),
+**render** it to source text (`Synthesizer`'s template instantiation
+already does this well), then **survey** it against held-out
+examples/execution before trusting it - the induction step inherently
+needs the check the deduction step never did. Recognizing the if/else shape
+was never the hard part; inducing the right general rule from few examples,
+and knowing not to trust it unchecked, is.
 
 **Gate before building:** the same discipline as the degree-placement note
 above - confirm induction can recover a KNOWN simple rule (e.g. a single
-comparison threshold) from a handful of clean input/output examples before
-committing to wiring it through the unified graph and the Synthesizer. If it
-can't recover even the simple case cleanly, the mirror-image framing is
+comparison threshold) from a handful of clean input/output examples, AND
+that the survey step actually catches a wrong overgeneralization (e.g. a
+rule that fits the given examples but fails a held-out one), before
+committing to wiring either through the unified graph and the Synthesizer.
+If it can't recover even the simple case cleanly, or the survey step
+doesn't catch the seeded overgeneralization, the inversion framing is
 elegant but not yet a mechanism.
 
 ---
