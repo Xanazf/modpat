@@ -213,11 +213,44 @@ declare namespace Grounding {
     pairScoped?: boolean;
   }
 
+  /**
+   * One predicate literal of an extracted attribute rule: "the subject has
+   * (or lacks, when negated) this predicate". `subject` is a node index, or
+   * -1 for the rule's bound variable ("something"/"someone"/"it"/"they", or
+   * the dummy head of a quantified generic - "all nice, blue THINGS").
+   */
+  interface RuleAtom {
+    subject: number;
+    predicate: number;
+    negated: boolean;
+  }
+
+  /**
+   * A conditional extracted at parse time, while clause structure is still
+   * known (the flattened hypothetical edges lose antecedent/consequent).
+   * Conjunctive conditions must ALL hold to fire; a negated condition
+   * requires EXPLICIT contrast support under the open-world reading, never
+   * absence of evidence.
+   */
+  interface GroundRule {
+    conditions: RuleAtom[];
+    conclusion: RuleAtom;
+  }
+
+  /** GroundRule with node indices resolved to precept ids (subject -1 = the
+   *  bound variable, preserved). Lives on System.textGroundedRules. */
+  interface TextRule {
+    conditions: { subject: number; predicate: number; negated: boolean }[];
+    conclusion: { subject: number; predicate: number; negated: boolean };
+  }
+
   interface GroundGraph {
     nodes: GroundNode[];
     edges: GroundEdge[];
     /** Signed stance relations; empty/absent for graphs with no negation source. */
     contrasts?: ContrastPair[];
+    /** Attribute rules extracted at parse time; absent when no rule surface. */
+    rules?: GroundRule[];
   }
 
   interface AdjacencyEntry {

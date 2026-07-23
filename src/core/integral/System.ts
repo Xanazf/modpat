@@ -289,6 +289,16 @@ class System implements Root.ManifoldView {
   public readonly textGroundedEdgesOut = new Map<number, Set<number>>();
 
   /**
+   * Precept-resolved attribute rules from the TextGrounding channel ("if
+   * something is rough and not blue then it is not kind", "all nice, blue
+   * things are kind"). Rules are NOT edges: they assert nothing until their
+   * conditions are established, so they live outside the edge/contrast
+   * ledgers and are discharged by GraphQuery in a transient per-query
+   * closure. Cleaned in freeLocation like the other text ledgers.
+   */
+  public readonly textGroundedRules: Grounding.TextRule[] = [];
+
+  /**
    * Initializes the logical manifold and allocates the underlying ArrayBuffer.
    */
   constructor() {
@@ -557,6 +567,16 @@ class System implements Root.ManifoldView {
       if (neighbors) {
         for (const nb of neighbors) ledger.get(nb)?.delete(id);
         ledger.delete(id);
+      }
+    }
+    // A rule any of whose atoms referenced the freed precept is no longer
+    // meaningful - drop it whole rather than leave a dangling condition.
+    for (let i = this.textGroundedRules.length - 1; i >= 0; i--) {
+      const r = this.textGroundedRules[i];
+      const touches = (a: { subject: number; predicate: number }) =>
+        a.subject === id || a.predicate === id;
+      if (touches(r.conclusion) || r.conditions.some(touches)) {
+        this.textGroundedRules.splice(i, 1);
       }
     }
 

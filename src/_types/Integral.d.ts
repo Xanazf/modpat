@@ -131,6 +131,14 @@ declare namespace Root {
      * map stays for membership checks and freeLocation cleanup.
      */
     textGroundedEdgesOut: Map<number, Set<number>>;
+    /**
+     * Precept-resolved attribute rules from text ingestion (see
+     * Grounding.TextRule; subject -1 = the rule's bound variable). GraphQuery
+     * discharges these at query time in a transient per-subject closure -
+     * rules are never asserted into the edge ledgers themselves. In-memory
+     * only, cleaned by freeLocation.
+     */
+    textGroundedRules: Grounding.TextRule[];
 
     // Sequence ring: enforced write path
     getSequenceStart(id: number): number;

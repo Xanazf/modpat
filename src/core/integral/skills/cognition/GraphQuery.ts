@@ -37,15 +37,20 @@
  * work, not here; this only stops the ledger from inventing the mirror.
  */
 
+import { DOPAT_CONFIG } from "@config";
 import { buildGraphFromText } from "@core_s/grounding/TextGraph";
 import logger from "@utils/SpectralLogger";
 
 /** Chain hop budget: taxonomy depth 3 + slack. */
 const MAX_HOPS = 8;
+/** Rule-discharge fixpoint budget: benchmark theories chain to depth 5. */
+const MAX_RULE_ITERATIONS = 16;
 
 export interface GraphQueryResult {
   answer: string;
   confidence: number;
+  /** "rule-discharge" when the deciding evidence came from a fired rule. */
+  provenance?: "ledger" | "rule-discharge";
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +140,108 @@ function ledgerReach(
 }
 
 // ---------------------------------------------------------------------------
+// Rule discharge (PARITY §3.2) - transient per-subject closure
+// ---------------------------------------------------------------------------
+
+interface DerivedFacts {
+  pos: Set<number>;
+  neg: Set<number>;
+  /** A fired conclusion contradicted asserted or derived knowledge; the
+   *  whole closure is poisoned (sets are emptied) and contributes nothing. */
+  conflicted: boolean;
+}
+
+const EMPTY_DERIVED: DerivedFacts = {
+  pos: new Set(),
+  neg: new Set(),
+  conflicted: false,
+};
+
+/**
+ * Fires system.textGroundedRules to fixpoint for subject entity `a`,
+ * READ-ONLY: derived facts exist only in the returned sets, nothing is
+ * written to any ledger and no precept is allocated (asking never creates).
+ *
+ * Open-world semantics: a positive condition holds via derived facts or
+ * directed-ledger reachability (taxonomy chains satisfy conditions); a
+ * negated condition holds ONLY via explicit contrast support (derived
+ * negative, or a registered contrast partner of the predicate that is the
+ * subject itself or asserted-reachable from it). Absence of evidence never
+ * fires a rule - the closed-world reading is a separate, future mode.
+ *
+ * Conflict poisons: if a fired conclusion contradicts asserted or derived
+ * knowledge, the closure returns empty - the theory is inconsistent at this
+ * subject and silence is the only sound verdict.
+ */
+function deriveForSubject(system: Root.ManifoldView, a: number): DerivedFacts {
+  const rules = system.textGroundedRules;
+  if (
+    !DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_RULE_DISCHARGE_ENABLED ||
+    rules.length === 0
+  ) {
+    return EMPTY_DERIVED;
+  }
+  const out: DerivedFacts = {
+    pos: new Set(),
+    neg: new Set(),
+    conflicted: false,
+  };
+
+  const holdsPos = (s: number, p: number): boolean =>
+    (s === a && out.pos.has(p)) ||
+    ledgerReach(system.textGroundedEdgesOut, s, p) >= 0;
+
+  const holdsNeg = (s: number, p: number): boolean => {
+    if (s === a && out.neg.has(p)) return true;
+    for (const partner of system.textGroundedContrasts.get(p) ?? []) {
+      if (
+        partner === s ||
+        ledgerReach(system.textGroundedEdgesOut, s, partner) >= 0
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (let iter = 0; iter < MAX_RULE_ITERATIONS; iter++) {
+    let changed = false;
+    for (const r of rules) {
+      const conclSubj = r.conclusion.subject < 0 ? a : r.conclusion.subject;
+      if (conclSubj !== a) continue;
+      const target = r.conclusion.predicate;
+      const bucket = r.conclusion.negated ? out.neg : out.pos;
+      if (bucket.has(target)) continue;
+      let fire = true;
+      for (const c of r.conditions) {
+        const s = c.subject < 0 ? a : c.subject;
+        if (c.negated ? !holdsNeg(s, c.predicate) : !holdsPos(s, c.predicate)) {
+          fire = false;
+          break;
+        }
+      }
+      if (!fire) continue;
+      // The would-be conclusion contradicting current knowledge (asserted
+      // or derived) poisons the closure - an inconsistent theory must not
+      // pick a side.
+      const contradicted = r.conclusion.negated
+        ? holdsPos(a, target)
+        : holdsNeg(a, target);
+      if (contradicted) {
+        out.pos.clear();
+        out.neg.clear();
+        out.conflicted = true;
+        return out;
+      }
+      bucket.add(target);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Resolver
 // ---------------------------------------------------------------------------
 
@@ -189,17 +296,42 @@ export function resolveGraphQuery(
       }
     }
 
-    /** Truth of the positive link a--b: 1 affirm, -1 deny, 0 undecided. */
+    // Rule-discharge closures, one per subject precept, computed lazily and
+    // memoized for the duration of this query only.
+    const derivedCache = new Map<number, DerivedFacts>();
+    const derived = (a: number): DerivedFacts => {
+      let d = derivedCache.get(a);
+      if (!d) {
+        d = deriveForSubject(system, a);
+        derivedCache.set(a, d);
+      }
+      return d;
+    };
+    let usedDerived = false;
+
+    /** Truth of the positive link a--b: 1 affirm, -1 deny, 0 undecided.
+     *  Affirm and deny evidence are computed symmetrically; both present
+     *  (a contradictory theory) -> undecided -> silence. */
     const verify = (aNode: number, bNode: number): number => {
       const a = nodePrecept[aNode];
       if (a < 0) return 0;
       const b = nodePrecept[bNode];
-      if (b >= 0 && ledgerReach(system.textGroundedEdgesOut, a, b) >= 0)
-        return 1;
-      // Deny: some precept registered as the object's contrast partner is
-      // reachable from the subject. The object precept itself may be
-      // outside the ledger - scan every allocated precept of its scope for
-      // one that IS a registered contrast member.
+      const d = derived(a);
+      // A poisoned closure means the theory is inconsistent AT THIS SUBJECT
+      // (a fired rule contradicted asserted or derived knowledge). Nothing
+      // about the subject is trustworthy - not even its asserted edges, one
+      // of which is a party to the contradiction - so the only sound verdict
+      // is silence.
+      if (d.conflicted) return 0;
+      const assertedAffirm =
+        b >= 0 && ledgerReach(system.textGroundedEdgesOut, a, b) >= 0;
+      const derivedAffirm = b >= 0 && d.pos.has(b);
+      const derivedDeny = b >= 0 && d.neg.has(b);
+      // Asserted deny: some precept registered as the object's contrast
+      // partner is reachable from the subject. The object precept itself may
+      // be outside the ledger - scan every allocated precept of its scope
+      // for one that IS a registered contrast member.
+      let assertedDeny = false;
       const objIds =
         b >= 0
           ? [b]
@@ -208,11 +340,24 @@ export function resolveGraphQuery(
                 atomizer.getSymbolScope(graph.nodes[bNode].label, false)
               ),
             ].filter(id => system.isAllocated(id));
-      for (const obj of objIds) {
+      scan: for (const obj of objIds) {
         for (const partner of system.textGroundedContrasts.get(obj) ?? []) {
-          if (ledgerReach(system.textGroundedEdgesOut, a, partner) >= 0)
-            return -1;
+          if (ledgerReach(system.textGroundedEdgesOut, a, partner) >= 0) {
+            assertedDeny = true;
+            break scan;
+          }
         }
+      }
+      const affirm = assertedAffirm || derivedAffirm;
+      const deny = assertedDeny || derivedDeny;
+      if (affirm && deny) return 0;
+      if (affirm) {
+        if (!assertedAffirm) usedDerived = true;
+        return 1;
+      }
+      if (deny) {
+        if (!assertedDeny) usedDerived = true;
+        return -1;
       }
       return 0;
     };
@@ -250,8 +395,11 @@ export function resolveGraphQuery(
     } else {
       answer = positive ? proposition : `no, ${subj} is not ${obj}`;
     }
-    logger.debug(`[GraphQuery] "${text}" -> "${answer}" (verdict ${verdict})`);
-    return { answer, confidence: 0.9 };
+    const provenance = usedDerived ? "rule-discharge" : "ledger";
+    logger.debug(
+      `[GraphQuery] "${text}" -> "${answer}" (verdict ${verdict}, ${provenance})`
+    );
+    return { answer, confidence: usedDerived ? 0.85 : 0.9, provenance };
   } catch (e) {
     logger.warn("[GraphQuery] resolver failed, falling through:", e);
     return null;

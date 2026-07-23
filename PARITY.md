@@ -3,6 +3,9 @@
 Written 2026-07-05, against the tree at `e9e6fe2` + the seedCapabilities fix.
 Updated 2026-07-23 against `7054f59`: the honest external baseline has been
 run (§2 update) and the §3.1 route-(a) first cut is built and guarded.
+Updated again 2026-07-23 (same day): §3.2's first iteration - attribute-rule
+discharge over the text ledger - is built, guarded, and pinned at 68.1%
+balAcc (§2 second update).
 Every claim below is tagged **measured** (a number exists in this repo),
 **referenced** (a number exists in the literature, coarse), or **theorized**
 (an argument, to be graded like the ROADMAP's on-the-record predictions).
@@ -76,6 +79,20 @@ the ledger. The inline-sample table above is retained for history but
 superseded: 44.3% at confFalse 4 is the number every estimate now hangs off,
 and the residual distance is rule-hop depth (§3.2), not fact lookup.
 
+**Second update (2026-07-23, measured): the rule-hop wall is down.** §3.2's
+first iteration (attribute-rule extraction at parse time + query-time
+open-world fixpoint discharge, `TEXT_GRAPH_RULE_DISCHARGE_ENABLED`) moves
+the honest overall to **68.1% / 51.2% / 5**. Per-family: proofwriter d1
+33.3%→75.0%, d2→58.3%, d3→83.3%, d5→75.0%; ruletaker d1 5%→50%, d2
+15%→45%, d5 10%→50%. All 5 confident falsehoods are perception-path
+token soup on Rel* items (the discharge closure never ran for any of them;
+single-item ablation byte-identical flag on/off - see
+data/benchmarks/README.md). Residuals: ruletaker false-recall needs the
+closed-world negation-as-failure mode (§3.2 stage 2, flagged, unbuilt);
+Rel* items need relational rule support (out of stage-1 scope); the
+perception-garbage commitment class predates this work and is the next
+soundness target.
+
 ## 3. The gap inventory
 
 Ordered by how much distance each item covers. Size classes: **mechanism**
@@ -136,6 +153,20 @@ traversal fast-path + a guard test) is established and has been executed six
 times; each missing connective is one more iteration. Size: several
 mechanisms, individually medium. This is where flagships are weakest (FOLIO
 70s-80s), so it is the most winnable ground.
+
+**Status (2026-07-23, measured):** first iteration built and pinned -
+copula-attribute rules ("if something is rough and not blue then it is not
+kind", "all nice, blue things are kind") are extracted as structured
+condition/conclusion records at parse time (`TextGraph`), precept-resolved
+into `system.textGroundedRules` (`TextGrounding`), and discharged by
+GraphQuery in a transient per-query fixpoint closure - open-world semantics
+(negated conditions demand explicit contrast support; conjunctions fire only
+on full match; derived-vs-asserted conflict poisons to silence; asking never
+creates). Guarded in `tests/rule_discharge.test.ts` (11 cases). Honest
+external: 44.3%→68.1% balAcc, zero mechanism falsehoods (§2 second update).
+Still missing here: relational (verb) rules, the closed-world
+negation-as-failure mode (stage 2, flagged design in the 2026-07-23 plan),
+existentials, nested quantifiers, proof by cases.
 
 ### 3.3 Disjunction physics (prediction 2, OPEN)
 

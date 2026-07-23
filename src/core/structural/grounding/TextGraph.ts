@@ -124,6 +124,18 @@ function verbLemma(normal: string): string {
 class DedupGraphBuilder extends GraphBuilder {
   private seenEdges = new Map<string, Grounding.GroundEdge>();
   private seenContrasts = new Map<string, Grounding.ContrastPair>();
+  /** Attribute rules extracted by tryExtractAttributeRule, deduped. */
+  readonly rules: Grounding.GroundRule[] = [];
+  private seenRules = new Set<string>();
+
+  addRule(rule: Grounding.GroundRule): void {
+    const atomKey = (x: Grounding.RuleAtom) =>
+      `${x.subject}:${x.predicate}:${x.negated ? 1 : 0}`;
+    const key = `${rule.conditions.map(atomKey).sort().join("&")}=>${atomKey(rule.conclusion)}`;
+    if (this.seenRules.has(key)) return;
+    this.seenRules.add(key);
+    this.rules.push(rule);
+  }
 
   /**
    * While true, created edges/contrasts are stamped `hypothetical` (rule
@@ -365,6 +377,215 @@ function tokenize(statement: string): Tok[][] {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Attribute-rule extraction (PARITY §3.2 - rule-hop discharge source)
+// ---------------------------------------------------------------------------
+//
+// The flattened hypothetical edges lose antecedent/consequent structure, so
+// rules are extracted HERE, at parse time, into Grounding.GroundRule records
+// that GraphQuery can discharge. Extraction is deliberately narrow: only
+// copula-attribute rules ("if something is rough and not blue then it is not
+// kind", "all nice, blue things are kind"). Anything else returns null and
+// keeps today's behavior (hypothetical flattening = silence) - the
+// characteristic failure must remain silence, never a mis-read rule.
+
+/** Subjects that bind the rule's variable. */
+const VAR_SUBJECTS = new Set([
+  "something",
+  "someone",
+  "somebody",
+  "anything",
+  "anyone",
+  "it",
+  "they",
+]);
+/** Dummy heads of quantified generics ("all nice, blue THINGS are kind").
+ *  Noun-headed generics ("cats are mammals") must NEVER match: they stay
+ *  asserted taxonomy edges - d0 fact lookup and the paraphrase families
+ *  chain through them. */
+const DUMMY_HEADS = new Set(["thing", "things", "people", "person"]);
+
+function isNegTok(t: Tok): boolean {
+  return hasTag(t, "Negative") || t.normal === "not" || t.normal === "no";
+}
+
+/**
+ * Parses a "[not] PRED" span into its negation flag + single-token predicate
+ * node. Strict: any token that is not negation/determiner glue must be the
+ * one content predicate; anything else (prepositions, verbs, multi-token
+ * predicates) rejects the whole rule.
+ */
+function parsePredicateSpan(
+  span: Tok[],
+  b: DedupGraphBuilder
+): { predicate: number; negated: boolean } | null {
+  let negated = false;
+  let pred: Tok | null = null;
+  for (const t of span) {
+    if (isNegTok(t)) {
+      negated = true;
+      continue;
+    }
+    if (!t.normal || hasTag(t, "Determiner")) continue;
+    if (!isContent(t, true) || pred) return null;
+    pred = t;
+  }
+  if (!pred) return null;
+  return { predicate: b.ensure(pred.normal, NodeKind.Term), negated };
+}
+
+/**
+ * Parses one condition/conclusion chunk: "[subj] (is|are) [not] PRED", or
+ * the subject-elided "[not] PRED" (inherits `inheritedSubject`). Subject -1
+ * is the rule's bound variable.
+ */
+function parseRuleChunk(
+  chunk: Tok[],
+  b: DedupGraphBuilder,
+  inheritedSubject: number | null
+): Grounding.RuleAtom | null {
+  const copIdx = chunk.findIndex(t => hasTag(t, "Copula"));
+  let subject: number;
+  let rest: Tok[];
+  if (copIdx < 0) {
+    if (inheritedSubject === null) return null;
+    subject = inheritedSubject;
+    rest = chunk;
+  } else {
+    const subjToks = chunk
+      .slice(0, copIdx)
+      .filter(t => t.normal && !hasTag(t, "Determiner"));
+    if (subjToks.length !== 1) return null;
+    const s = subjToks[0];
+    if (VAR_SUBJECTS.has(s.normal)) subject = -1;
+    else if (isContent(s, false)) subject = b.ensure(s.normal, NodeKind.Term);
+    else return null;
+    rest = chunk.slice(copIdx + 1);
+  }
+  const p = parsePredicateSpan(rest, b);
+  if (!p) return null;
+  return { subject, predicate: p.predicate, negated: p.negated };
+}
+
+/** Detector A: "if COND (and COND)* then CONCL" copula-attribute rules. */
+function tryExtractConditional(
+  toks: Tok[],
+  b: DedupGraphBuilder
+): Grounding.GroundRule | null {
+  const ifIdx = toks.findIndex(t => t.normal === "if");
+  const thenIdx = toks.findIndex(t => t.normal === "then");
+  if (ifIdx < 0 || thenIdx <= ifIdx) return null;
+  const anteToks = toks.slice(ifIdx + 1, thenIdx);
+  const consToks = toks.slice(thenIdx + 1);
+  if (anteToks.length === 0 || consToks.length === 0) return null;
+
+  // Relational rules ("if someone chases the cat then ...") are out of
+  // scope: any preposition or tensed non-copula verb rejects.
+  const disqualifies = (span: Tok[]) =>
+    span.some(
+      t =>
+        hasTag(t, "Preposition") ||
+        (isVerbTok(t) && !hasTag(t, "Copula") && hasTense(t))
+    );
+  if (disqualifies(anteToks) || disqualifies(consToks)) return null;
+
+  const chunks: Tok[][] = [];
+  let cur: Tok[] = [];
+  for (const t of anteToks) {
+    if (t.normal === "and") {
+      if (cur.length) chunks.push(cur);
+      cur = [];
+    } else cur.push(t);
+  }
+  if (cur.length) chunks.push(cur);
+  if (chunks.length === 0 || chunks.length > 4) return null;
+
+  let sawVariable = false;
+  let lastSubject: number | null = null;
+  const conditions: Grounding.RuleAtom[] = [];
+  for (const chunk of chunks) {
+    const atom = parseRuleChunk(chunk, b, lastSubject);
+    if (!atom) return null;
+    lastSubject = atom.subject;
+    if (atom.subject === -1) sawVariable = true;
+    conditions.push(atom);
+  }
+  const conclusion = parseRuleChunk(consToks, b, lastSubject);
+  if (!conclusion) return null;
+  // An unbound consequent variable has nothing to range over.
+  if (conclusion.subject === -1 && !sawVariable) return null;
+  return { conditions, conclusion };
+}
+
+/** Detector B: "(all|every)? ADJ(, ADJ)*(and ADJ)? things|people (is|are)
+ *  [not] PRED" quantified generics over a dummy head. */
+function tryExtractGeneric(
+  toks: Tok[],
+  b: DedupGraphBuilder
+): Grounding.GroundRule | null {
+  const ts = toks.filter(t => t.normal || hasTag(t, "Negative"));
+  if (ts.some(t => t.normal === "if" || t.normal === "then")) return null;
+  let i = 0;
+  if (i < ts.length && (ts[i].normal === "all" || ts[i].normal === "every"))
+    i++;
+  const condToks: Tok[] = [];
+  let headIdx = -1;
+  for (; i < ts.length; i++) {
+    const t = ts[i];
+    if (DUMMY_HEADS.has(t.normal)) {
+      headIdx = i;
+      break;
+    }
+    if (t.normal === "and") continue;
+    // Negated subject conditions and any non-content glue are out of scope.
+    if (isNegTok(t) || hasTag(t, "Copula") || !isContent(t, false)) return null;
+    condToks.push(t);
+  }
+  if (headIdx < 0 || condToks.length === 0 || condToks.length > 4) return null;
+  const rest = ts.slice(headIdx + 1);
+  if (rest.length === 0 || !hasTag(rest[0], "Copula")) return null;
+  const p = parsePredicateSpan(rest.slice(1), b);
+  if (!p) return null;
+  return {
+    conditions: condToks.map(t => ({
+      subject: -1,
+      predicate: b.ensure(t.normal, NodeKind.Term),
+      negated: false,
+    })),
+    conclusion: { subject: -1, predicate: p.predicate, negated: p.negated },
+  };
+}
+
+/**
+ * Extracts a copula-attribute rule from one sentence's tokens, or returns
+ * false when the sentence is not one (the caller then runs the existing
+ * parse - silence-preserving fallback). On success the rule is recorded on
+ * the builder and the sentence is CONSUMED: its content is conditional, so
+ * neither delegation nor the grammatical pass may assert it. The rule's
+ * atoms still land hypothetical-stamped Reference edges for terrain shaping
+ * and mirrored-ledger membership (query-time node resolution walks that).
+ */
+function tryExtractAttributeRule(toks: Tok[], b: DedupGraphBuilder): boolean {
+  const rule = tryExtractConditional(toks, b) ?? tryExtractGeneric(toks, b);
+  if (!rule) return false;
+  b.addRule(rule);
+  const prevHypothetical = b.hypothetical;
+  b.hypothetical = true;
+  for (const c of rule.conditions) {
+    b.edge(c.predicate, rule.conclusion.predicate, EdgeKind.Reference);
+    if (c.subject >= 0) b.edge(c.subject, c.predicate, EdgeKind.Reference);
+  }
+  if (rule.conclusion.subject >= 0) {
+    b.edge(
+      rule.conclusion.subject,
+      rule.conclusion.predicate,
+      EdgeKind.Reference
+    );
+  }
+  b.hypothetical = prevHypothetical;
+  return true;
+}
+
 /** Grammatical pass over pre-tokenized sentences. */
 function parseGrammatical(
   b: DedupGraphBuilder,
@@ -426,6 +647,17 @@ export function buildGraphFromText(
     if (!s) return;
     const sentences = tokenize(s);
 
+    // Attribute-rule sentences are consumed whole by the extractor: their
+    // content is conditional, so neither delegation nor the grammatical pass
+    // may assert it (quantified generics used to land inert asserted edges
+    // on a dummy-head label - "all nice, blue things are kind" interned
+    // "blue thing"->kind and silently dropped "nice").
+    const remaining: Tok[][] = [];
+    for (const toks of sentences) {
+      if (!tryExtractAttributeRule(toks, b)) remaining.push(toks);
+    }
+    if (remaining.length === 0) return;
+
     // Delegation is gated to single-clause statements: LogicGraph's regexes
     // match across clause boundaries ("if it rains then the ground is wet"
     // would intern subject "it the ground"), so multi-clause surface goes to
@@ -439,11 +671,11 @@ export function buildGraphFromText(
     // NP-coordination distribution ("a and b are c" -> a->c, b->c); running
     // it unconditionally would add noisy reified nodes ("p implies q" ->
     // "imply") on statements the symbolic grammar already covered.
-    const hasCoordination = sentences.some(toks =>
+    const hasCoordination = remaining.some(toks =>
       toks.some(t => t.normal === "and" || t.normal === "or")
     );
     if (!delegated || hasCoordination) {
-      parseGrammatical(b, sentences, kind);
+      parseGrammatical(b, remaining, kind);
     }
   };
 
@@ -460,5 +692,10 @@ export function buildGraphFromText(
     }
   }
 
-  return { nodes: b.nodes, edges: b.edges, contrasts: b.contrasts };
+  return {
+    nodes: b.nodes,
+    edges: b.edges,
+    contrasts: b.contrasts,
+    rules: b.rules,
+  };
 }

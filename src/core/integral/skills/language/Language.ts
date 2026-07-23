@@ -415,9 +415,17 @@ export class Language {
     // AFTER the logic-trap check (contradicted facts never land) and is
     // purely additive: the ordered `quanta` sequence and everything that
     // consumes it below are untouched. Pronouns resolve against working
-    // memory before parsing.
+    // memory before parsing - EXCEPT in conditional (if/then) sentences,
+    // where "it"/"they" is the rule's BOUND VARIABLE, not anaphora:
+    // rewriting it against a stale conclusion frame corrupts the extracted
+    // rule ("then it is not tidy" once became "carol is green"-shaped, a
+    // wrong rule that could fire - a confident-falsehood source, not just a
+    // lost parse).
+    const isConditional = /\bif\b|\bthen\b/.test(statement_);
     groundTextIfEnabled(
-      this.workingMemory.resolveReferences(statement_),
+      isConditional
+        ? statement_
+        : this.workingMemory.resolveReferences(statement_),
       this.system,
       this.atomizer
     );

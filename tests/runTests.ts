@@ -30,6 +30,7 @@ import { runPhiSessionTest } from "./phi_session.test";
 import { runProactivePathTests } from "./proactive_paths.test";
 import { runReductionTests } from "./reduction.test";
 import { runRigorousTests as executeRigorousLogicSuite } from "./rigorous_logic.test";
+import { runRuleDischargeTests } from "./rule_discharge.test";
 import { runSceneGroundingTests } from "./scene_grounding.test";
 import { executeSemanticSuite } from "./semantic_atomizer.test";
 import { executeComplexSemanticSuite } from "./semantic_reasoning_perf.test";
@@ -142,6 +143,7 @@ async function run() {
     await runWithTimeout("spatial_hash", runSpatialHashTests);
     await runWithTimeout("structural_grounding", runStructuralGroundingTests);
     await runWithTimeout("text_graph", runTextGraphTests);
+    await runWithTimeout("rule_discharge", runRuleDischargeTests);
     await runWithTimeout("coherence_gate", runCoherenceGateTests);
     await runWithTimeout("coherence_calibration", runCoherenceCalibrationTests);
     await runWithTimeout("reduction", runReductionTests);

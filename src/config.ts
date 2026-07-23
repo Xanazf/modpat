@@ -254,6 +254,20 @@ const DOPAT_CONFIG = {
      */
     TEXT_GRAPH_QUERY_ENABLED: true,
     /**
+     * PARITY §3.2 - rule-hop discharge over the text ledger. When on,
+     * GraphQuery additionally fires the attribute rules extracted at parse
+     * time (system.textGroundedRules: "if something is rough and not blue
+     * then it is not kind", "all nice, blue things are kind") in a transient
+     * per-query fixpoint closure over the ASSERTED ledger: a rule fires only
+     * when every condition holds - positive conditions by directed-ledger
+     * reachability, negated conditions by EXPLICIT contrast support only
+     * (open-world: absence of evidence never fires a rule). Derived facts
+     * live only in the closure - nothing is written, asking never creates -
+     * and a derived-vs-asserted conflict poisons the closure back to
+     * silence. Off -> byte-identical to the pure-asserted readout.
+     */
+    TEXT_GRAPH_RULE_DISCHARGE_ENABLED: true,
+    /**
      * Phase 4.5 - the survey loop, wired into learnCycle. When on, each
      * learnCycle ends with a territory-correction tick: every registered
      * GroundTruthChannel (self-supplied arithmetic, KB-supplied closed-world)

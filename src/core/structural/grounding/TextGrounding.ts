@@ -239,5 +239,51 @@ export function groundTextGraphIntoSystem(
     system.update(moved, "text-ground");
   }
 
+  // Rule ledger: precept-resolve each extracted attribute rule (subject -1 =
+  // the bound variable, preserved as -1). Rules assert nothing here - they
+  // are discharged by GraphQuery in a transient per-query closure - so a
+  // rule with any unresolvable atom is dropped whole rather than landed
+  // partially. Deduped against the live ledger by canonical key.
+  if (graph.rules?.length) {
+    const atomKey = (x: {
+      subject: number;
+      predicate: number;
+      negated: boolean;
+    }) => `${x.subject}:${x.predicate}:${x.negated ? 1 : 0}`;
+    const existing = new Set(
+      system.textGroundedRules.map(
+        r =>
+          `${r.conditions.map(atomKey).sort().join("&")}=>${atomKey(r.conclusion)}`
+      )
+    );
+    const resolveAtom = (
+      a: Grounding.RuleAtom
+    ): { subject: number; predicate: number; negated: boolean } | null => {
+      const subject = a.subject < 0 ? -1 : nodeToPrecept[a.subject];
+      const predicate = nodeToPrecept[a.predicate];
+      if (predicate < 0 || (a.subject >= 0 && subject < 0)) return null;
+      return { subject, predicate, negated: a.negated };
+    };
+    for (const rule of graph.rules) {
+      const conclusion = resolveAtom(rule.conclusion);
+      if (!conclusion) continue;
+      const conditions: {
+        subject: number;
+        predicate: number;
+        negated: boolean;
+      }[] = [];
+      for (const c of rule.conditions) {
+        const atom = resolveAtom(c);
+        if (!atom) break;
+        conditions.push(atom);
+      }
+      if (conditions.length !== rule.conditions.length) continue;
+      const key = `${conditions.map(atomKey).sort().join("&")}=>${atomKey(conclusion)}`;
+      if (existing.has(key)) continue;
+      existing.add(key);
+      system.textGroundedRules.push({ conditions, conclusion });
+    }
+  }
+
   return { graph, nodeToPrecept, labelToPrecept, placement, reused, created };
 }
