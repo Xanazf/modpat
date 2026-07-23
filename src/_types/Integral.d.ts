@@ -139,6 +139,31 @@ declare namespace Root {
      * only, cleaned by freeLocation.
      */
     textGroundedRules: Grounding.TextRule[];
+    /**
+     * Pair-exact SVO ledgers: keys are `${subject}|${verb}|${object}`
+     * precept-id strings, positive and negated assertions separately. The
+     * sound complement to the pairScoped edge exclusion - triples are scoped
+     * to their own assertion, so affirming/denying them cannot bridge
+     * assertions the way chaining through the shared verb node does.
+     */
+    textGroundedTriples: Set<string>;
+    textGroundedTriplesNeg: Set<string>;
+    /**
+     * Every precept that appears in ANY triple (subject, verb, or object).
+     * A triple's endpoints often have no edge/contrast ledger presence of
+     * their own (a negated SVO clause records only the pairScoped contrast/
+     * edge, which are excluded from the readable ledgers) - node resolution
+     * needs this membership set to find them without scanning triple keys.
+     */
+    textGroundedTripleParticipants: Set<number>;
+    /**
+     * Parse-completeness counters for the closed-world safety valve: CWA
+     * denial ("not derivable => false") is permitted only when every
+     * grounding call landed content (textGroundedUnparsed === 0) - an
+     * incompletely-read theory falls back to open-world silence.
+     */
+    textGroundedSentences: number;
+    textGroundedUnparsed: number;
 
     // Sequence ring: enforced write path
     getSequenceStart(id: number): number;
@@ -276,7 +301,13 @@ declare namespace Mapping {
     coherence: number;
     iterations: number;
     learned: string[];
-    diagnosis: "coherent" | "void" | "conflict" | "weak" | "exhausted";
+    diagnosis:
+      | "coherent"
+      | "void"
+      | "conflict"
+      | "weak"
+      | "exhausted"
+      | "gated";
     diagnostics: Mapping.PerceptionDiagnostics | null;
   }
 

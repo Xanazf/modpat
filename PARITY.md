@@ -4,8 +4,9 @@ Written 2026-07-05, against the tree at `e9e6fe2` + the seedCapabilities fix.
 Updated 2026-07-23 against `7054f59`: the honest external baseline has been
 run (§2 update) and the §3.1 route-(a) first cut is built and guarded.
 Updated again 2026-07-23 (same day): §3.2's first iteration - attribute-rule
-discharge over the text ledger - is built, guarded, and pinned at 68.1%
-balAcc (§2 second update).
+discharge over the text ledger, then a perception-gate scoping fix and
+relational (SVO) discharge - is built, guarded, and pinned at 83.8% balAcc,
+confFalse 0 across all 160 items (§2 second update).
 Every claim below is tagged **measured** (a number exists in this repo),
 **referenced** (a number exists in the literature, coarse), or **theorized**
 (an argument, to be graded like the ROADMAP's on-the-record predictions).
@@ -79,19 +80,30 @@ the ledger. The inline-sample table above is retained for history but
 superseded: 44.3% at confFalse 4 is the number every estimate now hangs off,
 and the residual distance is rule-hop depth (§3.2), not fact lookup.
 
-**Second update (2026-07-23, measured): the rule-hop wall is down.** §3.2's
-first iteration (attribute-rule extraction at parse time + query-time
-open-world fixpoint discharge, `TEXT_GRAPH_RULE_DISCHARGE_ENABLED`) moves
-the honest overall to **68.1% / 51.2% / 5**. Per-family: proofwriter d1
-33.3%→75.0%, d2→58.3%, d3→83.3%, d5→75.0%; ruletaker d1 5%→50%, d2
-15%→45%, d5 10%→50%. All 5 confident falsehoods are perception-path
-token soup on Rel* items (the discharge closure never ran for any of them;
-single-item ablation byte-identical flag on/off - see
-data/benchmarks/README.md). Residuals: ruletaker false-recall needs the
-closed-world negation-as-failure mode (§3.2 stage 2, flagged, unbuilt);
-Rel* items need relational rule support (out of stage-1 scope); the
-perception-garbage commitment class predates this work and is the next
-soundness target.
+**Second update (2026-07-23, measured): the rule-hop wall is down AND the
+perception-garbage class is fixed.** §3.2's first iteration (attribute-rule
+extraction + query-time open-world fixpoint discharge,
+`TEXT_GRAPH_RULE_DISCHARGE_ENABLED`) first moved the honest overall to
+68.1% / 51.2% / 5 - all 5 confident falsehoods perception-path token soup on
+Rel* items the discharge closure never touched. Two further mechanisms then
+took confFalse to **zero**: (1) scoping the Phase 2 emission gate onto the
+live query path (`perceiveCoherent`), which had never run it - narrowed to
+the two untrusted-provenance tiers (`cluster`/`geodesic`, raw settling with
+no symbolic backing) after gating everything regressed vault-recall
+answers on an unrelated corpus; (2) relational (SVO) rule discharge over a
+pair-exact triple ledger (`textGroundedTriples`/`textGroundedTriplesNeg`),
+the sound complement to the pairScoped edge exclusion, which lifted the
+Rel* silence directly. Final: **83.8% / 33.8% / 0**, no regression flags,
+no `--accept` needed. Per-family: proofwriter d0/d2/d3 100%, d1/d5 91.7%
+(confFalse 0 throughout); ruletaker d0 70%, d1 60%, d2 65%, d3 75%, d5 70%
+(confFalse 0 throughout, down from 1 each). Full mechanism writeup and a
+recorded false start (a reflexive-derivation guard that was measured
+WRONG against gold labels and removed) in `data/benchmarks/README.md`.
+Residuals: closed-world negation-as-failure (§3.2 stage 2) is built but
+NOT enabled in the harness - a per-dataset toggle regressed confFalse to 16
+and was reverted, so it needs more work before it can claim ruletaker's
+remaining false-recall gap; relational rules cover SVO but not
+prepositional/multi-clause relations.
 
 ## 3. The gap inventory
 
@@ -155,18 +167,22 @@ mechanisms, individually medium. This is where flagships are weakest (FOLIO
 70s-80s), so it is the most winnable ground.
 
 **Status (2026-07-23, measured):** first iteration built and pinned -
-copula-attribute rules ("if something is rough and not blue then it is not
-kind", "all nice, blue things are kind") are extracted as structured
+copula-attribute AND relational (SVO) rules ("if something is rough and not
+blue then it is not kind", "all nice, blue things are kind", "if someone
+chases the cat then they like the dog") are extracted as structured
 condition/conclusion records at parse time (`TextGraph`), precept-resolved
 into `system.textGroundedRules` (`TextGrounding`), and discharged by
 GraphQuery in a transient per-query fixpoint closure - open-world semantics
 (negated conditions demand explicit contrast support; conjunctions fire only
-on full match; derived-vs-asserted conflict poisons to silence; asking never
-creates). Guarded in `tests/rule_discharge.test.ts` (11 cases). Honest
-external: 44.3%→68.1% balAcc, zero mechanism falsehoods (§2 second update).
-Still missing here: relational (verb) rules, the closed-world
-negation-as-failure mode (stage 2, flagged design in the 2026-07-23 plan),
-existentials, nested quantifiers, proof by cases.
+on full match; derived-vs-asserted conflict poisons to silence; reflexive
+derivation via variable unification is SOUND and intentionally allowed -
+confirmed against gold labels, see data/benchmarks/README.md; asking never
+creates). Guarded in `tests/rule_discharge.test.ts` (18 cases). Honest
+external: 44.3%→83.8% balAcc, confFalse 4→0 (§2 second update). Still
+missing here: relations beyond simple SVO (prepositional, multi-clause), the
+closed-world negation-as-failure mode (stage 2, built but not enabled -
+its harness toggle regressed confFalse to 16 and was reverted), existentials,
+nested quantifiers, proof by cases.
 
 ### 3.3 Disjunction physics (prediction 2, OPEN)
 

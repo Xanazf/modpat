@@ -221,7 +221,25 @@ declare namespace Grounding {
    */
   interface RuleAtom {
     subject: number;
+    /** Attribute node ("kind") for copula atoms; OBJECT node ("cat") for
+     *  relational atoms (verb set). */
     predicate: number;
+    /** Verb node for relational atoms ("chases the cat"); absent = copula. */
+    verb?: number;
+    negated: boolean;
+  }
+
+  /**
+   * A pair-exact SVO assertion recorded at parse time, where subject, verb
+   * and object are unambiguous. This is the record the pairScoped edge stamp
+   * always pointed at: the reified verb node is shared across assertions so
+   * chaining through its edges manufactures facts, but the TRIPLE is scoped
+   * to its own assertion and safe to affirm/deny exactly.
+   */
+  interface GroundTriple {
+    subject: number;
+    verb: number;
+    object: number;
     negated: boolean;
   }
 
@@ -237,11 +255,20 @@ declare namespace Grounding {
     conclusion: RuleAtom;
   }
 
-  /** GroundRule with node indices resolved to precept ids (subject -1 = the
-   *  bound variable, preserved). Lives on System.textGroundedRules. */
+  /** RuleAtom with node indices resolved to precept ids (subject -1 = the
+   *  bound variable, preserved; verb undefined = copula). */
+  interface TextRuleAtom {
+    subject: number;
+    predicate: number;
+    verb?: number;
+    negated: boolean;
+  }
+
+  /** GroundRule with node indices resolved to precept ids. Lives on
+   *  System.textGroundedRules. */
   interface TextRule {
-    conditions: { subject: number; predicate: number; negated: boolean }[];
-    conclusion: { subject: number; predicate: number; negated: boolean };
+    conditions: TextRuleAtom[];
+    conclusion: TextRuleAtom;
   }
 
   interface GroundGraph {
@@ -251,6 +278,8 @@ declare namespace Grounding {
     contrasts?: ContrastPair[];
     /** Attribute rules extracted at parse time; absent when no rule surface. */
     rules?: GroundRule[];
+    /** Pair-exact SVO assertions; absent when no content-verb clause. */
+    triples?: GroundTriple[];
   }
 
   interface AdjacencyEntry {

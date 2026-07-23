@@ -77,16 +77,22 @@ export function groundTextIfEnabled(
   opts: Grounding.GroundingOptions = {}
 ): Grounding.TextGroundingResult | null {
   if (!DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_INGESTION_ENABLED) return null;
+  system.textGroundedSentences++;
   try {
     const graph = buildGraphFromText(text);
     if (
       graph.nodes.length < 2 ||
       graph.edges.length + (graph.contrasts?.length ?? 0) < 1
-    )
+    ) {
+      // Nothing landed: this input is invisible to the ledger, so the
+      // closed-world valve must know the theory is incompletely read.
+      system.textGroundedUnparsed++;
       return null;
+    }
     return groundTextGraphIntoSystem(graph, system, atomizer, opts);
   } catch (e) {
     logger.error("[TextGraph] grounding failed:", e);
+    system.textGroundedUnparsed++;
     return null;
   }
 }
@@ -245,11 +251,8 @@ export function groundTextGraphIntoSystem(
   // rule with any unresolvable atom is dropped whole rather than landed
   // partially. Deduped against the live ledger by canonical key.
   if (graph.rules?.length) {
-    const atomKey = (x: {
-      subject: number;
-      predicate: number;
-      negated: boolean;
-    }) => `${x.subject}:${x.predicate}:${x.negated ? 1 : 0}`;
+    const atomKey = (x: Grounding.TextRuleAtom) =>
+      `${x.subject}:${x.verb ?? -1}:${x.predicate}:${x.negated ? 1 : 0}`;
     const existing = new Set(
       system.textGroundedRules.map(
         r =>
@@ -258,20 +261,18 @@ export function groundTextGraphIntoSystem(
     );
     const resolveAtom = (
       a: Grounding.RuleAtom
-    ): { subject: number; predicate: number; negated: boolean } | null => {
+    ): Grounding.TextRuleAtom | null => {
       const subject = a.subject < 0 ? -1 : nodeToPrecept[a.subject];
       const predicate = nodeToPrecept[a.predicate];
+      const verb = a.verb === undefined ? undefined : nodeToPrecept[a.verb];
       if (predicate < 0 || (a.subject >= 0 && subject < 0)) return null;
-      return { subject, predicate, negated: a.negated };
+      if (verb !== undefined && verb < 0) return null;
+      return { subject, predicate, verb, negated: a.negated };
     };
     for (const rule of graph.rules) {
       const conclusion = resolveAtom(rule.conclusion);
       if (!conclusion) continue;
-      const conditions: {
-        subject: number;
-        predicate: number;
-        negated: boolean;
-      }[] = [];
+      const conditions: Grounding.TextRuleAtom[] = [];
       for (const c of rule.conditions) {
         const atom = resolveAtom(c);
         if (!atom) break;
@@ -283,6 +284,21 @@ export function groundTextGraphIntoSystem(
       existing.add(key);
       system.textGroundedRules.push({ conditions, conclusion });
     }
+  }
+
+  // Pair-exact SVO ledgers: dedup is free via the Set keys.
+  for (const t of graph.triples ?? []) {
+    const s = nodeToPrecept[t.subject];
+    const v = nodeToPrecept[t.verb];
+    const o = nodeToPrecept[t.object];
+    if (s < 0 || v < 0 || o < 0) continue;
+    (t.negated
+      ? system.textGroundedTriplesNeg
+      : system.textGroundedTriples
+    ).add(`${s}|${v}|${o}`);
+    system.textGroundedTripleParticipants.add(s);
+    system.textGroundedTripleParticipants.add(v);
+    system.textGroundedTripleParticipants.add(o);
   }
 
   return { graph, nodeToPrecept, labelToPrecept, placement, reused, created };

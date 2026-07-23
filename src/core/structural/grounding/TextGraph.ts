@@ -114,7 +114,34 @@ function isContent(t: Tok, afterVerb: boolean): boolean {
 /** "chased" -> "chase", "rains" -> "rain"; falls back to the raw normal. */
 function verbLemma(normal: string): string {
   const inf = nlp(normal).verbs().toInfinitive().text().trim();
-  return inf || normal;
+  if (inf) return inf;
+  // A recovered mis-tagged verb ("chases" read as a plural noun) has no verb
+  // parse; its noun singular IS the infinitive ("chases" -> "chase"), and
+  // normalizing keeps one node per verb across tagged and recovered uses.
+  const sing = nlp(normal).nouns().toSingular().text().trim();
+  return sing || normal;
+}
+
+/**
+ * compromise mis-tags 3rd-person-singular verbs as plural nouns ("the tiger
+ * chases the cat" -> chases[Noun,Plural]), which used to make the whole
+ * clause parse as a bare NP fragment - the assertion silently landed
+ * NOTHING. A non-initial noun directly followed by a determiner in a clause
+ * with no real verb is structurally a verb; recover its index, or -1.
+ */
+function recoverMistaggedVerb(toks: Tok[]): number {
+  if (toks.some(isVerbTok)) return -1;
+  for (let i = 1; i < toks.length - 1; i++) {
+    const t = toks[i];
+    if (
+      hasTag(t, "Noun") &&
+      !hasTag(t, "Pronoun") &&
+      hasTag(toks[i + 1], "Determiner")
+    ) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,14 +154,33 @@ class DedupGraphBuilder extends GraphBuilder {
   /** Attribute rules extracted by tryExtractAttributeRule, deduped. */
   readonly rules: Grounding.GroundRule[] = [];
   private seenRules = new Set<string>();
+  /** Pair-exact SVO assertions emitted by parseClause, deduped. Rule content
+   *  (hypothetical mode) never records a triple - the structured rule is the
+   *  carrier for conditional SVO content. */
+  readonly triples: Grounding.GroundTriple[] = [];
+  private seenTriples = new Set<string>();
 
   addRule(rule: Grounding.GroundRule): void {
     const atomKey = (x: Grounding.RuleAtom) =>
-      `${x.subject}:${x.predicate}:${x.negated ? 1 : 0}`;
+      `${x.subject}:${x.verb ?? -1}:${x.predicate}:${x.negated ? 1 : 0}`;
     const key = `${rule.conditions.map(atomKey).sort().join("&")}=>${atomKey(rule.conclusion)}`;
     if (this.seenRules.has(key)) return;
     this.seenRules.add(key);
     this.rules.push(rule);
+  }
+
+  triple(
+    subject: number,
+    verb: number,
+    object: number,
+    negated: boolean
+  ): void {
+    if (this.hypothetical) return;
+    if (subject < 0 || verb < 0 || object < 0) return;
+    const key = `${subject}|${verb}|${object}|${negated ? 1 : 0}`;
+    if (this.seenTriples.has(key)) return;
+    this.seenTriples.add(key);
+    this.triples.push({ subject, verb, object, negated });
   }
 
   /**
@@ -236,8 +282,10 @@ function parseClause(
 
   // Main verb: first non-modal/aux Verb. A copula followed by a tensed verb
   // ("is running") promotes to the tensed verb; a tense-less Verb-mistag
-  // ("are not fish") does not.
+  // ("are not fish") does not. A verbless clause tries mis-tag recovery
+  // ("chases" tagged Noun,Plural) before degrading to a bare NP fragment.
   let verbIdx = toks.findIndex(isVerbTok);
+  if (verbIdx < 0) verbIdx = recoverMistaggedVerb(toks);
   let copula = verbIdx >= 0 && hasTag(toks[verbIdx], "Copula");
   if (copula) {
     for (let j = verbIdx + 1; j < toks.length; j++) {
@@ -300,6 +348,10 @@ function parseClause(
       // assertions (see GroundEdge.pairScoped).
       if (negated) b.contrast(subject.heads[0] ?? verbNode, o, true);
       else b.edge(verbNode, o, kind, weight, true);
+      // Pair-exact triple record: here subject/verb/object are unambiguous,
+      // so the assertion is recorded in a form safe to affirm/deny exactly
+      // (the sound complement to the pairScoped exclusion).
+      for (const s of subject.heads) b.triple(s, verbNode, o, negated);
     }
     clauseHead = verbNode;
   }
@@ -410,64 +462,122 @@ function isNegTok(t: Tok): boolean {
 }
 
 /**
- * Parses a "[not] PRED" span into its negation flag + single-token predicate
- * node. Strict: any token that is not negation/determiner glue must be the
- * one content predicate; anything else (prepositions, verbs, multi-token
- * predicates) rejects the whole rule.
+ * Parses a "[not] PRED-NP" span into its negation flag + head predicate node
+ * (head-last, matching the fact side's collectNpGroups convention - "a bald
+ * eagle" -> eagle). Any token that is not negation/determiner glue must be
+ * content; prepositions, verbs, and bound-variable words reject the rule.
  */
 function parsePredicateSpan(
   span: Tok[],
   b: DedupGraphBuilder
 ): { predicate: number; negated: boolean } | null {
   let negated = false;
-  let pred: Tok | null = null;
+  let head: Tok | null = null;
   for (const t of span) {
     if (isNegTok(t)) {
       negated = true;
       continue;
     }
     if (!t.normal || hasTag(t, "Determiner")) continue;
-    if (!isContent(t, true) || pred) return null;
-    pred = t;
+    if (VAR_SUBJECTS.has(t.normal)) return null;
+    if (!isContent(t, true)) return null;
+    head = t;
   }
-  if (!pred) return null;
-  return { predicate: b.ensure(pred.normal, NodeKind.Term), negated };
+  if (!head) return null;
+  return { predicate: b.ensure(head.normal, NodeKind.Term), negated };
 }
 
 /**
- * Parses one condition/conclusion chunk: "[subj] (is|are) [not] PRED", or
- * the subject-elided "[not] PRED" (inherits `inheritedSubject`). Subject -1
- * is the rule's bound variable.
+ * Parses a rule-chunk subject span (head-last NP, or a bound-variable word):
+ * ground node id, -1 for the variable, `inherited` when elided, or null when
+ * the span contains anything else.
+ */
+function parseRuleSubject(
+  span: Tok[],
+  b: DedupGraphBuilder,
+  inherited: number | null
+): number | null {
+  let sawVar = false;
+  let head: Tok | null = null;
+  for (const t of span) {
+    if (
+      !t.normal ||
+      hasTag(t, "Determiner") ||
+      hasTag(t, "Auxiliary") ||
+      isNegTok(t)
+    ) {
+      continue;
+    }
+    if (VAR_SUBJECTS.has(t.normal)) {
+      sawVar = true;
+      continue;
+    }
+    if (isContent(t, false)) {
+      head = t;
+      continue;
+    }
+    return null;
+  }
+  if (head) return b.ensure(head.normal, NodeKind.Term);
+  if (sawVar) return -1;
+  return inherited;
+}
+
+/**
+ * Parses one condition/conclusion chunk into a RuleAtom:
+ *   copula:     "[subj] (is|are) [not] PRED"   -> attribute atom
+ *   relational: "[subj] [does not] VERB OBJ"   -> SVO atom (verb set)
+ *   elided:     "[not] PRED"                    -> inherits subject
+ * Subject -1 is the rule's bound variable. Prepositions reject.
  */
 function parseRuleChunk(
   chunk: Tok[],
   b: DedupGraphBuilder,
   inheritedSubject: number | null
 ): Grounding.RuleAtom | null {
+  if (chunk.some(t => hasTag(t, "Preposition"))) return null;
   const copIdx = chunk.findIndex(t => hasTag(t, "Copula"));
-  let subject: number;
+  let verbIdx = chunk.findIndex(
+    t => isVerbTok(t) && !hasTag(t, "Copula") && hasTense(t)
+  );
+  if (verbIdx < 0 && copIdx < 0) verbIdx = recoverMistaggedVerb(chunk);
+
+  if (verbIdx >= 0 && (copIdx < 0 || verbIdx < copIdx)) {
+    // Relational chunk. Negation is do-support before the verb ("does not
+    // chase the cat"), so it is read off the whole chunk.
+    const subject = parseRuleSubject(
+      chunk.slice(0, verbIdx),
+      b,
+      inheritedSubject
+    );
+    if (subject === null) return null;
+    const obj = parsePredicateSpan(chunk.slice(verbIdx + 1), b);
+    if (!obj) return null;
+    return {
+      subject,
+      predicate: obj.predicate,
+      verb: b.ensure(verbLemma(chunk[verbIdx].normal), NodeKind.Term),
+      negated: chunk.some(isNegTok) || obj.negated,
+    };
+  }
+
+  let subject: number | null;
   let rest: Tok[];
   if (copIdx < 0) {
-    if (inheritedSubject === null) return null;
     subject = inheritedSubject;
     rest = chunk;
   } else {
-    const subjToks = chunk
-      .slice(0, copIdx)
-      .filter(t => t.normal && !hasTag(t, "Determiner"));
-    if (subjToks.length !== 1) return null;
-    const s = subjToks[0];
-    if (VAR_SUBJECTS.has(s.normal)) subject = -1;
-    else if (isContent(s, false)) subject = b.ensure(s.normal, NodeKind.Term);
-    else return null;
+    subject = parseRuleSubject(chunk.slice(0, copIdx), b, inheritedSubject);
     rest = chunk.slice(copIdx + 1);
   }
+  if (subject === null) return null;
   const p = parsePredicateSpan(rest, b);
   if (!p) return null;
   return { subject, predicate: p.predicate, negated: p.negated };
 }
 
-/** Detector A: "if COND (and COND)* then CONCL" copula-attribute rules. */
+/** Detector A: "if COND (and COND)* then CONCL" rules - copula-attribute
+ *  and relational (SVO) chunks both parse; prepositions reject per chunk. */
 function tryExtractConditional(
   toks: Tok[],
   b: DedupGraphBuilder
@@ -478,16 +588,6 @@ function tryExtractConditional(
   const anteToks = toks.slice(ifIdx + 1, thenIdx);
   const consToks = toks.slice(thenIdx + 1);
   if (anteToks.length === 0 || consToks.length === 0) return null;
-
-  // Relational rules ("if someone chases the cat then ...") are out of
-  // scope: any preposition or tensed non-copula verb rejects.
-  const disqualifies = (span: Tok[]) =>
-    span.some(
-      t =>
-        hasTag(t, "Preposition") ||
-        (isVerbTok(t) && !hasTag(t, "Copula") && hasTense(t))
-    );
-  if (disqualifies(anteToks) || disqualifies(consToks)) return null;
 
   const chunks: Tok[][] = [];
   let cur: Tok[] = [];
@@ -571,17 +671,16 @@ function tryExtractAttributeRule(toks: Tok[], b: DedupGraphBuilder): boolean {
   b.addRule(rule);
   const prevHypothetical = b.hypothetical;
   b.hypothetical = true;
+  const memberEdges = (a: Grounding.RuleAtom): void => {
+    if (a.verb !== undefined) b.edge(a.verb, a.predicate, EdgeKind.Reference);
+    if (a.subject >= 0)
+      b.edge(a.subject, a.verb ?? a.predicate, EdgeKind.Reference);
+  };
   for (const c of rule.conditions) {
     b.edge(c.predicate, rule.conclusion.predicate, EdgeKind.Reference);
-    if (c.subject >= 0) b.edge(c.subject, c.predicate, EdgeKind.Reference);
+    memberEdges(c);
   }
-  if (rule.conclusion.subject >= 0) {
-    b.edge(
-      rule.conclusion.subject,
-      rule.conclusion.predicate,
-      EdgeKind.Reference
-    );
-  }
+  memberEdges(rule.conclusion);
   b.hypothetical = prevHypothetical;
   return true;
 }
@@ -697,5 +796,6 @@ export function buildGraphFromText(
     edges: b.edges,
     contrasts: b.contrasts,
     rules: b.rules,
+    triples: b.triples,
   };
 }

@@ -83,7 +83,11 @@ function _registerDefaultSkills(
       }
     }
 
-    const opts = { contextScopes: ctx.language.contextScopes() };
+    // gated: the Phase 2 emission gate runs on the live path (its absence
+    // here was the source of every token-soup confident falsehood on the
+    // honest external runs - the gate existed, measured 100% on the
+    // calibration corpus, and was simply not connected to this valve).
+    const opts = { contextScopes: ctx.language.contextScopes(), gated: true };
     const result = await mapper.perceiveCoherent(ctx.queryIds, opts);
 
     // --- Surface expression (the "flip" geometry) ---
@@ -152,7 +156,7 @@ function _registerDefaultSkills(
       const arith = ctx.language.computeArithmetic(ir.attractionCenter);
       if (arith !== null) return { answer: arith, confidence: 1.0 };
     }
-    const opts = { contextScopes: ctx.language.contextScopes() };
+    const opts = { contextScopes: ctx.language.contextScopes(), gated: true };
     const result = await mapper.perceiveCoherent(ctx.queryIds, opts);
     const decoded = ctx.atomizer.decodeSequence(result.ids, ctx.system).trim();
     return { answer: decoded || "unknown", confidence: result.coherence };

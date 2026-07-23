@@ -545,9 +545,10 @@ export async function runTextGraphTests(): Promise<void> {
         // bridge different assertions. "mouse visits cat" + "dog visits
         // squirrel" must NOT make "does the mouse visit the squirrel?"
         // affirmable (measured 2026-07-21: every residual honest confident
-        // falsehood was a Rel* item of this shape). The conservative price:
-        // transitive SVO questions are silence for now - affirming them
-        // soundly needs pair-scoped verification, which is future work.
+        // falsehood was a Rel* item of this shape). The DIRECT pair now
+        // affirms via the pair-exact triple ledger (the future work the
+        // pair-scoped stamp pointed at); the cross-bridge stays silence
+        // because a triple is scoped to its own assertion by construction.
         await traveler.process("the mouse visits the cat");
         await traveler.process("the dog visits the squirrel");
         assert.strictEqual(
@@ -555,22 +556,24 @@ export async function runTextGraphTests(): Promise<void> {
           null,
           "shared verb node must not bridge assertions"
         );
-        assert.strictEqual(
-          ask("does the mouse visit the cat?"),
-          null,
-          "transitive SVO affirm is out of ledger scope (pair-scoped)"
+        const direct = ask("does the mouse visit the cat?");
+        assert.ok(
+          direct?.answer.includes("mouse") &&
+            direct.answer.includes("cat") &&
+            !direct.answer.startsWith("no"),
+          `direct SVO affirms via the triple ledger: "${direct?.answer}"`
         );
 
-        // Polarity-loss guard: a reflexive negation ("does not need the
-        // dog" asked OF the dog) drops its self-contrast in the parse,
-        // leaving a bare positive link. Answering that residue affirms the
-        // positive reading while echoing the negated surface - it must be
-        // silence.
+        // Reflexive negation ("does not need the dog" asked OF the dog):
+        // the self-contrast is discarded in the parse, but the negated
+        // TRIPLE carries the polarity exactly - and dog|need|dog was never
+        // asserted or denied, so the verdict is silence (not an affirmation
+        // of the positive residue, the pre-triple confident-falsehood mode).
         await traveler.process("the dog needs the cat");
         assert.strictEqual(
           ask("the dog does not need the dog?"),
           null,
-          "negated surface with no parsed contrast must fall through"
+          "unasserted reflexive triple must fall through"
         );
 
         // Unknown term: silence, and asking must never create. ("planet" has

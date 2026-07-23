@@ -140,60 +140,114 @@ function ledgerReach(
 }
 
 // ---------------------------------------------------------------------------
-// Rule discharge (PARITY §3.2) - transient per-subject closure
+// Rule discharge (PARITY §3.2) - transient whole-theory closure
 // ---------------------------------------------------------------------------
 
-interface DerivedFacts {
-  pos: Set<number>;
-  neg: Set<number>;
-  /** A fired conclusion contradicted asserted or derived knowledge; the
-   *  whole closure is poisoned (sets are emptied) and contributes nothing. */
-  conflicted: boolean;
+interface TheoryClosure {
+  /** Derived positive/negative attribute facts, per subject precept. */
+  pos: Map<number, Set<number>>;
+  neg: Map<number, Set<number>>;
+  /** Derived positive/negative SVO facts, absolute `${s}|${v}|${o}` keys. */
+  tpos: Set<string>;
+  tneg: Set<string>;
+  /** Subjects whose derivations contradicted asserted or derived knowledge:
+   *  every question about them is silence - one of their asserted facts is a
+   *  party to the contradiction, so nothing about them is trustworthy. */
+  conflicted: Set<number>;
 }
 
-const EMPTY_DERIVED: DerivedFacts = {
-  pos: new Set(),
-  neg: new Set(),
-  conflicted: false,
+const EMPTY_CLOSURE: TheoryClosure = {
+  pos: new Map(),
+  neg: new Map(),
+  tpos: new Set(),
+  tneg: new Set(),
+  conflicted: new Set(),
 };
 
 /**
- * Fires system.textGroundedRules to fixpoint for subject entity `a`,
- * READ-ONLY: derived facts exist only in the returned sets, nothing is
+ * Fires system.textGroundedRules to fixpoint over the WHOLE theory,
+ * READ-ONLY: derived facts exist only in the returned closure, nothing is
  * written to any ledger and no precept is allocated (asking never creates).
  *
- * Open-world semantics: a positive condition holds via derived facts or
- * directed-ledger reachability (taxonomy chains satisfy conditions); a
- * negated condition holds ONLY via explicit contrast support (derived
- * negative, or a registered contrast partner of the predicate that is the
- * subject itself or asserted-reachable from it). Absence of evidence never
- * fires a rule - the closed-world reading is a separate, future mode.
+ * Variable binding: a rule with a variable conclusion fires once per
+ * candidate subject (every entity that appears as a directed-ledger source
+ * or a triple subject); a rule with a GROUND conclusion fires when ANY
+ * candidate binding satisfies the variable conditions (∃x semantics -
+ * "if someone chases the cat then the cat is young").
  *
- * Conflict poisons: if a fired conclusion contradicts asserted or derived
- * knowledge, the closure returns empty - the theory is inconsistent at this
- * subject and silence is the only sound verdict.
+ * Open-world semantics: a positive condition holds via derived facts,
+ * directed-ledger reachability (taxonomy chains), or the pair-exact triple
+ * ledger; a negated condition holds ONLY via explicit support (derived
+ * negative, a registered contrast partner, or a negated triple). Under the
+ * flagged CLOSED-WORLD mode (TEXT_GRAPH_CWA_ENABLED) a negated condition is
+ * also satisfied by non-derivability of its positive - evaluated in a
+ * second phase each iteration so explicitly-supported firings always win
+ * (stratification approximation).
+ *
+ * Conflict poisons PER SUBJECT: a contradicted conclusion marks its subject
+ * conflicted; the subject's derived facts are withheld and every question
+ * about it answers silence, while unrelated subjects keep discharging.
  */
-function deriveForSubject(system: Root.ManifoldView, a: number): DerivedFacts {
+function deriveClosure(system: Root.ManifoldView): TheoryClosure {
   const rules = system.textGroundedRules;
   if (
     !DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_RULE_DISCHARGE_ENABLED ||
     rules.length === 0
   ) {
-    return EMPTY_DERIVED;
+    return EMPTY_CLOSURE;
   }
-  const out: DerivedFacts = {
-    pos: new Set(),
-    neg: new Set(),
-    conflicted: false,
+  const out: TheoryClosure = {
+    pos: new Map(),
+    neg: new Map(),
+    tpos: new Set(),
+    tneg: new Set(),
+    conflicted: new Set(),
+  };
+  // Negation-as-failure manufactures facts from ABSENCE, so it is doubly
+  // valved: the closed-world flag AND parse completeness - an incompletely
+  // read theory has unknown absences.
+  const cwa =
+    DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_CWA_ENABLED &&
+    system.textGroundedUnparsed === 0;
+
+  // Candidate subjects: entities the theory says anything about.
+  const candidates = new Set<number>();
+  for (const k of system.textGroundedEdgesOut.keys()) candidates.add(k);
+  for (const k of system.textGroundedContrasts.keys()) candidates.add(k);
+  for (const key of system.textGroundedTriples) {
+    candidates.add(Number(key.split("|")[0]));
+  }
+  for (const key of system.textGroundedTriplesNeg) {
+    candidates.add(Number(key.split("|")[0]));
+  }
+
+  const setOf = (m: Map<number, Set<number>>, s: number): Set<number> => {
+    let set = m.get(s);
+    if (!set) {
+      set = new Set();
+      m.set(s, set);
+    }
+    return set;
   };
 
-  const holdsPos = (s: number, p: number): boolean =>
-    (s === a && out.pos.has(p)) ||
-    ledgerReach(system.textGroundedEdgesOut, s, p) >= 0;
+  const holdsPos = (s: number, c: Grounding.TextRuleAtom): boolean => {
+    if (c.verb !== undefined) {
+      const key = `${s}|${c.verb}|${c.predicate}`;
+      return out.tpos.has(key) || system.textGroundedTriples.has(key);
+    }
+    return (
+      out.pos.get(s)?.has(c.predicate) ||
+      ledgerReach(system.textGroundedEdgesOut, s, c.predicate) >= 0
+    );
+  };
 
-  const holdsNeg = (s: number, p: number): boolean => {
-    if (s === a && out.neg.has(p)) return true;
-    for (const partner of system.textGroundedContrasts.get(p) ?? []) {
+  const holdsNegExplicit = (s: number, c: Grounding.TextRuleAtom): boolean => {
+    if (c.verb !== undefined) {
+      const key = `${s}|${c.verb}|${c.predicate}`;
+      return out.tneg.has(key) || system.textGroundedTriplesNeg.has(key);
+    }
+    if (out.neg.get(s)?.has(c.predicate)) return true;
+    for (const partner of system.textGroundedContrasts.get(c.predicate) ?? []) {
       if (
         partner === s ||
         ledgerReach(system.textGroundedEdgesOut, s, partner) >= 0
@@ -204,39 +258,79 @@ function deriveForSubject(system: Root.ManifoldView, a: number): DerivedFacts {
     return false;
   };
 
-  for (let iter = 0; iter < MAX_RULE_ITERATIONS; iter++) {
+  const condHolds = (
+    c: Grounding.TextRuleAtom,
+    x: number,
+    naf: boolean
+  ): boolean => {
+    const s = c.subject < 0 ? x : c.subject;
+    if (!c.negated) return holdsPos(s, c);
+    if (holdsNegExplicit(s, c)) return true;
+    // Negation-as-failure: only in the CWA phase, only when the positive is
+    // not derivable right now.
+    return naf && cwa && !holdsPos(s, c);
+  };
+
+  const conclude = (r: Grounding.TextRule, x: number): boolean => {
+    const s = r.conclusion.subject < 0 ? x : r.conclusion.subject;
+    if (out.conflicted.has(s)) return false;
+    const isRel = r.conclusion.verb !== undefined;
+    // NOTE: a variable can soundly unify with an entity NAMED elsewhere in
+    // the same rule ("if someone sees the cat then they chase the tiger"
+    // firing with X=tiger derives the reflexive chase(tiger,tiger)). An
+    // earlier version of this code refused such reflexive derivations,
+    // reasoning they were manufactured rather than intended - that was
+    // WRONG: every reflexive relational question in the RuleTaker sample
+    // (data/benchmarks/ruletaker_sample.jsonl - "the cow visits the cow",
+    // "the tiger chases the tiger", etc.) has gold=true, confirming the
+    // official semantics derives them exactly this way. Do not re-add a
+    // reflexivity guard without re-checking the gold labels first.
+    const key = isRel
+      ? `${s}|${r.conclusion.verb}|${r.conclusion.predicate}`
+      : "";
+    const bucket = isRel
+      ? r.conclusion.negated
+        ? out.tneg
+        : out.tpos
+      : r.conclusion.negated
+        ? setOf(out.neg, s)
+        : setOf(out.pos, s);
+    const member = isRel ? key : r.conclusion.predicate;
+    if ((bucket as Set<string | number>).has(member)) return false;
+    // A conclusion contradicting current knowledge (asserted or derived)
+    // poisons its subject - an inconsistent theory must not pick a side.
+    const contra = r.conclusion.negated
+      ? holdsPos(s, r.conclusion)
+      : holdsNegExplicit(s, r.conclusion);
+    if (contra) {
+      out.conflicted.add(s);
+      out.pos.delete(s);
+      out.neg.delete(s);
+      return false;
+    }
+    (bucket as Set<string | number>).add(member);
+    return true;
+  };
+
+  const firePass = (naf: boolean): boolean => {
     let changed = false;
     for (const r of rules) {
-      const conclSubj = r.conclusion.subject < 0 ? a : r.conclusion.subject;
-      if (conclSubj !== a) continue;
-      const target = r.conclusion.predicate;
-      const bucket = r.conclusion.negated ? out.neg : out.pos;
-      if (bucket.has(target)) continue;
-      let fire = true;
-      for (const c of r.conditions) {
-        const s = c.subject < 0 ? a : c.subject;
-        if (c.negated ? !holdsNeg(s, c.predicate) : !holdsPos(s, c.predicate)) {
-          fire = false;
-          break;
-        }
+      const hasVar =
+        r.conclusion.subject < 0 || r.conditions.some(c => c.subject < 0);
+      const bindings = hasVar ? candidates : [NaN];
+      for (const x of bindings) {
+        if (!r.conditions.every(c => condHolds(c, x, naf))) continue;
+        if (conclude(r, x)) changed = true;
       }
-      if (!fire) continue;
-      // The would-be conclusion contradicting current knowledge (asserted
-      // or derived) poisons the closure - an inconsistent theory must not
-      // pick a side.
-      const contradicted = r.conclusion.negated
-        ? holdsPos(a, target)
-        : holdsNeg(a, target);
-      if (contradicted) {
-        out.pos.clear();
-        out.neg.clear();
-        out.conflicted = true;
-        return out;
-      }
-      bucket.add(target);
-      changed = true;
     }
-    if (!changed) break;
+    return changed;
+  };
+
+  for (let iter = 0; iter < MAX_RULE_ITERATIONS; iter++) {
+    if (firePass(false)) continue;
+    // Explicit support exhausted; let the CWA phase (a no-op under OWA)
+    // attempt negation-as-failure firings, then return to explicit passes.
+    if (!firePass(true)) break;
   }
   return out;
 }
@@ -265,15 +359,17 @@ export function resolveGraphQuery(
     if (graph.edges.length === 0 && contrasts.length === 0) return null;
     if (system.textGroundedEdges.size === 0) return null;
 
-    // Polarity-loss guard: a negated surface whose parse carries NO contrast
-    // has dropped its negation (e.g. reflexive "the dog does not need the
-    // dog" - the dog><dog self-contrast is discarded, leaving a bare
-    // dog->need link). Verifying the residue would answer the POSITIVE
-    // reading while echoing the negated surface - a confident falsehood
-    // (measured on RuleTaker d3, 2026-07-21). Silence instead.
+    // Polarity-loss guard: a negated surface whose parse carries NO negation
+    // record (contrast or negated triple) has dropped its negation.
+    // Verifying the residue would answer the POSITIVE reading while echoing
+    // the negated surface - a confident falsehood (measured on RuleTaker d3,
+    // 2026-07-21). Silence instead. (Reflexive "the dog does not need the
+    // dog" used to trip this - its self-contrast is discarded - but the
+    // negated TRIPLE now carries the polarity exactly.)
     if (
       /\b(?:not|never|cannot|no)\b/.test(proposition) &&
-      contrasts.length === 0
+      contrasts.length === 0 &&
+      !graph.triples?.some(t => t.negated)
     )
       return null;
 
@@ -288,7 +384,8 @@ export function resolveGraphQuery(
         if (
           system.isAllocated(id) &&
           (system.textGroundedEdges.has(id) ||
-            system.textGroundedContrasts.has(id))
+            system.textGroundedContrasts.has(id) ||
+            system.textGroundedTripleParticipants.has(id))
         ) {
           nodePrecept[i] = id;
           break;
@@ -296,18 +393,19 @@ export function resolveGraphQuery(
       }
     }
 
-    // Rule-discharge closures, one per subject precept, computed lazily and
-    // memoized for the duration of this query only.
-    const derivedCache = new Map<number, DerivedFacts>();
-    const derived = (a: number): DerivedFacts => {
-      let d = derivedCache.get(a);
-      if (!d) {
-        d = deriveForSubject(system, a);
-        derivedCache.set(a, d);
-      }
-      return d;
+    // Whole-theory rule-discharge closure, computed lazily once per query.
+    let closureCache: TheoryClosure | null = null;
+    const theClosure = (): TheoryClosure => {
+      closureCache ??= deriveClosure(system);
+      return closureCache;
     };
     let usedDerived = false;
+    // Closed-world denial ("not derivable => false") is permitted only under
+    // the flag AND when every grounding call landed content - an
+    // incompletely-read theory falls back to open-world silence.
+    const cwaDeny =
+      DOPAT_CONFIG.PHYSICS.TEXT_GRAPH_CWA_ENABLED &&
+      system.textGroundedUnparsed === 0;
 
     /** Truth of the positive link a--b: 1 affirm, -1 deny, 0 undecided.
      *  Affirm and deny evidence are computed symmetrically; both present
@@ -316,17 +414,17 @@ export function resolveGraphQuery(
       const a = nodePrecept[aNode];
       if (a < 0) return 0;
       const b = nodePrecept[bNode];
-      const d = derived(a);
-      // A poisoned closure means the theory is inconsistent AT THIS SUBJECT
-      // (a fired rule contradicted asserted or derived knowledge). Nothing
-      // about the subject is trustworthy - not even its asserted edges, one
+      const d = theClosure();
+      // A conflicted subject means the theory is inconsistent AT THIS
+      // SUBJECT (a fired rule contradicted asserted or derived knowledge).
+      // Nothing about it is trustworthy - not even its asserted edges, one
       // of which is a party to the contradiction - so the only sound verdict
       // is silence.
-      if (d.conflicted) return 0;
+      if (d.conflicted.has(a)) return 0;
       const assertedAffirm =
         b >= 0 && ledgerReach(system.textGroundedEdgesOut, a, b) >= 0;
-      const derivedAffirm = b >= 0 && d.pos.has(b);
-      const derivedDeny = b >= 0 && d.neg.has(b);
+      const derivedAffirm = b >= 0 && (d.pos.get(a)?.has(b) ?? false);
+      const derivedDeny = b >= 0 && (d.neg.get(a)?.has(b) ?? false);
       // Asserted deny: some precept registered as the object's contrast
       // partner is reachable from the subject. The object precept itself may
       // be outside the ledger - scan every allocated precept of its scope
@@ -359,8 +457,80 @@ export function resolveGraphQuery(
         if (!assertedDeny) usedDerived = true;
         return -1;
       }
+      // Closed-world mode: both entities are resolved in the ledger, the
+      // theory is fully parsed, and the positive is not derivable => false.
+      if (cwaDeny && b >= 0) {
+        usedDerived = true;
+        return -1;
+      }
       return 0;
     };
+
+    /** Truth of the positive triple s-v-o: same contract as verify(). */
+    const verifyTriple = (t: Grounding.GroundTriple): number => {
+      const s = nodePrecept[t.subject];
+      const v = nodePrecept[t.verb];
+      const o = nodePrecept[t.object];
+      if (s < 0 || v < 0 || o < 0) return 0;
+      const d = theClosure();
+      if (d.conflicted.has(s)) return 0;
+      const key = `${s}|${v}|${o}`;
+      const assertedAffirm = system.textGroundedTriples.has(key);
+      const derivedAffirm = d.tpos.has(key);
+      const assertedDeny = system.textGroundedTriplesNeg.has(key);
+      const derivedDeny = d.tneg.has(key);
+      const affirm = assertedAffirm || derivedAffirm;
+      const deny = assertedDeny || derivedDeny;
+      if (affirm && deny) return 0;
+      if (affirm) {
+        if (!assertedAffirm) usedDerived = true;
+        return 1;
+      }
+      if (deny) {
+        if (!assertedDeny) usedDerived = true;
+        return -1;
+      }
+      if (cwaDeny) {
+        usedDerived = true;
+        return -1;
+      }
+      return 0;
+    };
+
+    // Relational (SVO) questions carry pair-exact triples - those decide
+    // exactly, and the pair-scoped edges/contrasts the same parse emits are
+    // noise for verification, so the triple path takes precedence.
+    if (graph.triples?.length) {
+      let verdict = 0;
+      let negatedQ = false;
+      for (const t of graph.triples) {
+        const v = verifyTriple(t);
+        if (v === 0) return null;
+        if (t.negated) negatedQ = true;
+        if (verdict === 0) verdict = v;
+        else if (verdict !== v) return null;
+      }
+      const t0 = graph.triples[0];
+      const s = graph.nodes[t0.subject].label;
+      const vb = graph.nodes[t0.verb].label;
+      const o = graph.nodes[t0.object].label;
+      const positive = verdict === 1;
+      let answer: string;
+      if (negatedQ) {
+        answer = positive
+          ? `the ${s} does ${vb} the ${o}`
+          : `correct, the ${s} does not ${vb} the ${o}`;
+      } else {
+        answer = positive
+          ? proposition
+          : `no, the ${s} does not ${vb} the ${o}`;
+      }
+      const provenance = usedDerived ? "rule-discharge" : "ledger";
+      logger.debug(
+        `[GraphQuery] "${text}" -> "${answer}" (triple verdict ${verdict}, ${provenance})`
+      );
+      return { answer, confidence: usedDerived ? 0.85 : 0.9, provenance };
+    }
 
     // The asked proposition: negated questions arrive as contrast pairs
     // (the grammar already folded "not" into a contrast), positive ones as

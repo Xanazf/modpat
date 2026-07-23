@@ -24,6 +24,7 @@ import { createTestTraveler } from "@core_i/Runtime";
 import System from "@core_i/System";
 import Traveler from "@core_i/Traveler";
 import { buildGraphFromText } from "@core_s/grounding/TextGraph";
+import { groundTextIfEnabled } from "@core_s/grounding/TextGrounding";
 import Store from "@core_s/Memory";
 import { resolveGraphQuery } from "@skill_cogi/GraphQuery";
 import { describe, it } from "./utils/harness";
@@ -31,7 +32,9 @@ import { describe, it } from "./utils/harness";
 function ruleShapes(g: Grounding.GroundGraph): string[] {
   const lbl = (i: number) => (i < 0 ? "VAR" : g.nodes[i].label);
   const atom = (a: Grounding.RuleAtom) =>
-    `${a.negated ? "!" : ""}${lbl(a.subject)}.${lbl(a.predicate)}`;
+    `${a.negated ? "!" : ""}${lbl(a.subject)}.${
+      a.verb !== undefined ? `${lbl(a.verb)}:` : ""
+    }${lbl(a.predicate)}`;
   return (g.rules ?? []).map(
     r => `${r.conditions.map(atom).join(" & ")} => ${atom(r.conclusion)}`
   );
@@ -58,11 +61,20 @@ export async function runRuleDischargeTests(): Promise<void> {
           "if someone is red and not white then they are smart",
           ["VAR.red & !VAR.white => VAR.smart"],
         ],
-        // NOT rules: noun-headed taxonomy and verb-predicate conditionals.
+        // Relational (SVO) rules, incl. the "chases"[Noun,Plural] mis-tag
+        // recovery and mixed attribute+relational conditions.
+        [
+          "if someone chases the cat then they like the dog",
+          ["VAR.chase:cat => VAR.like:dog"],
+        ],
+        [
+          "if someone chases the cat and they see the cat then the cat is young",
+          ["VAR.chase:cat & VAR.see:cat => cat.young"],
+        ],
+        // NOT rules: noun-headed taxonomy and intransitive conditionals.
         ["all men are mortal", []],
         ["cats are mammals", []],
         ["if it rains then the grass grows", []],
-        ["if someone chases the cat then they like the dog", []],
       ];
       for (const [text, want] of cases) {
         assert.deepStrictEqual(
@@ -269,6 +281,134 @@ export async function runRuleDischargeTests(): Promise<void> {
           live.includes("kind") && !live.startsWith("no"),
           `live process() surfaces the discharged answer: "${live}"`
         );
+
+        // ---- Relational (SVO) discharge over the triple ledger ----------
+
+        // (12) Relational modus ponens: variable rule fires on an asserted
+        // triple; the conclusion is a derived triple.
+        await say([
+          "if someone chases the fox then they like the owl.",
+          "the wolf chases the fox.",
+        ]);
+        const rel = ask("does the wolf like the owl?");
+        assert.ok(
+          rel && !rel.answer.startsWith("no"),
+          `relational MP affirms: "${rel?.answer}"`
+        );
+        assert.strictEqual(rel?.provenance, "rule-discharge");
+        assert.strictEqual(
+          ask("does the bear like the owl?"),
+          null,
+          "unbound entity stays silent"
+        );
+
+        // (13) Mixed conditions: attribute + relational, incl. a ground
+        // condition, with a GROUND conclusion (∃x binding).
+        await say([
+          "if someone chases the hen and they are sly then the hen is scared.",
+          "the ferret chases the hen.",
+          "the ferret is sly.",
+        ]);
+        assert.strictEqual(
+          ask("is the hen scared?")?.answer,
+          "the hen is scared",
+          "ground conclusion via existential binding"
+        );
+
+        // (14) Negated relational fact feeds the negated-question readout
+        // and blocks nothing else.
+        await say(["the crow does not trust the snake."]);
+        assert.ok(
+          ask("does the crow not trust the snake?")?.answer.startsWith(
+            "correct,"
+          ),
+          "negated triple affirms its negated question"
+        );
+        assert.strictEqual(
+          ask("does the crow trust the snake?")?.answer.startsWith("no,"),
+          true,
+          "negated triple denies the positive question"
+        );
+
+        // (14b) Reflexive derivation IS sound: a variable can unify with an
+        // entity named elsewhere in the rule ("if someone sees the lamb
+        // then they chase the goat" firing with subject=goat when the goat
+        // sees the lamb derives the self-loop chase(goat,goat)), and it
+        // must chain into further rules exactly like any other derived
+        // fact. Confirmed against gold: every reflexive relational question
+        // in data/benchmarks/ruletaker_sample.jsonl ("the cow visits the
+        // cow", "the tiger chases the tiger", ...) is gold=true. An earlier
+        // version of this suite pinned the OPPOSITE (a guard blocking
+        // reflexive derivation) - that guard was wrong and is gone; this
+        // case stays as a regression pin against reintroducing it.
+        await say([
+          "if someone sees the lamb then they chase the goat.",
+          "the goat sees the lamb.",
+          "if someone is loud and they chase the goat then they need the hay.",
+          "the goat is loud.",
+        ]);
+        assert.ok(
+          ask("does the goat chase the goat?")?.answer.includes("goat"),
+          "reflexive derivation is believed"
+        );
+        assert.strictEqual(
+          ask("does the goat need the hay?")?.answer,
+          "the goat need the hay",
+          "a reflexive premise chains into a second rule"
+        );
+
+        // ---- Closed-world mode (flagged; parse-completeness valve) ------
+
+        const cwaPhysics = DOPAT_CONFIG.PHYSICS as unknown as {
+          TEXT_GRAPH_CWA_ENABLED: boolean;
+        };
+        cwaPhysics.TEXT_GRAPH_CWA_ENABLED = true;
+        try {
+          // (15) NAF condition: "not blue" satisfied by non-derivability.
+          await say([
+            "if something is rough and not blue then it is dull.",
+            "kevin is rough.",
+          ]);
+          assert.strictEqual(
+            ask("is kevin dull?")?.answer,
+            "kevin is dull",
+            "CWA: negation-as-failure discharges the rule"
+          );
+
+          // (16) CWA denial: resolved, non-derivable, non-conflicted ->
+          // deny instead of silence.
+          assert.ok(
+            ask("is kevin blue?")?.answer.startsWith("no,"),
+            "CWA: non-derivable resolved question denies"
+          );
+
+          // (17) Parse-completeness valve: an unparsed sentence forces the
+          // whole theory back to open-world silence for CWA-only verdicts.
+          const unparsedBefore = system.textGroundedUnparsed;
+          groundTextIfEnabled("zzz qqq vvv", system, atomizer);
+          assert.ok(
+            system.textGroundedUnparsed > unparsedBefore,
+            "gibberish increments the unparsed counter"
+          );
+          assert.strictEqual(
+            ask("is kevin blue?"),
+            null,
+            "CWA denial disabled while the theory is incompletely read"
+          );
+          // NAF inside the closure is also off the table now: the rule
+          // needing "not blue" must no longer fire.
+          assert.strictEqual(
+            ask("is kevin dull?"),
+            null,
+            "NAF discharge disabled while the theory is incompletely read"
+          );
+        } finally {
+          cwaPhysics.TEXT_GRAPH_CWA_ENABLED = false;
+        }
+
+        // (18) OWA control after CWA section: same questions, flag off ->
+        // silence (the CWA verdicts above were mode-dependent, not leaks).
+        assert.strictEqual(ask("is kevin dull?"), null, "OWA: no NAF");
       } finally {
         physics.TEXT_GRAPH_INGESTION_ENABLED = prevIngest;
         physics.TEXT_GRAPH_QUERY_ENABLED = prevQuery;

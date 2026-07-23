@@ -51,6 +51,7 @@ The current pins live in `tests/benchmarks/metric_ab.baseline.json` under
 | 2026-07-19 | text-graph ingestion ON (grammar-grounded, PARITY §3.1 route a) | 36.2% | 93.8% | 4 | 32.9% | 41 |
 | 2026-07-21 | GraphQuery readout ON (PARITY §3.1 read side: directed asserted-only ledger) | 44.3% | 83.1% | 4 | 32.9% | 41 |
 | 2026-07-23 | rule discharge ON (PARITY §3.2: attribute-rule extraction + query-time OWA fixpoint closure) | 68.1% | 51.2% | 5 | 32.9% | 41 |
+| 2026-07-23 | + perception-gate scoping fix + relational discharge | **83.8%** | 33.8% | **0** | 32.9% | 41 |
 
 The 2026-07-21 pin is the fourth iteration of the read side, and the interim
 numbers are the covenant at work. The naive undirected ledger measured 54.8%
@@ -78,22 +79,75 @@ verdict-mapper coin flips on garbage answers, not capability loss. Fast-mode
 numbers are identical on both sides of the flag (the flag only touches the
 assertion-ingestion path).
 
-The 2026-07-23 pin (rule discharge, TEXT_GRAPH_RULE_DISCHARGE_ENABLED) was
-accepted via `--accept` over two flags (honest.ruletaker.d2 confFalse 0→1,
-honest.overall confFalse 4→5). The audit: all 5 confident falsehoods are
+The first 2026-07-23 pin (rule discharge, TEXT_GRAPH_RULE_DISCHARGE_ENABLED)
+was accepted via `--accept` over two flags (honest.ruletaker.d2 confFalse
+0→1, honest.overall confFalse 4→5). Audit: all 5 confident falsehoods were
 perception-path token-soup commitments on Rel* (verb-relational) items -
-GraphQuery is silent there by design (pair-scoped firewall), so the discharge
-closure never ran for any of them; a discharge answer is a clean canonical
-sentence (confidence 0.85, provenance "rule-discharge") and produced ZERO
-wrong commitments across all 160 items. The new rt.d2 offender
-(RelNoneg-D2-1879-6) was ablated single-item: its garbage answer is
-byte-identical with the discharge flag on and off - the +1 is the
-pre-existing mapper-coin-flip-on-garbage class shifted by the ingestion-side
-soundness fixes (generic re-classification off the asserted ledger + the
-bound-variable pronoun fix), not a mechanism falsehood. The gains are the
-d1+ rule-hop wall coming down: proofwriter d1 33.3%→75.0%, d2 33.3%→58.3%,
-d3 33.3%→83.3%, d5 33.3%→75.0% (confFalse 0 on d0–d3); ruletaker d1
-5%→50%, d2 15%→45%, d5 10%→50%. Remaining ruletaker false-recall is
-negation-as-failure territory (the flagged closed-world mode, PARITY §3.2
-stage 2); remaining relational (Rel*) items need relational rule support,
-deliberately out of stage-1 scope.
+GraphQuery was silent there by design (pair-scoped firewall), so the
+discharge closure never ran for any of them. The new rt.d2 offender
+(RelNoneg-D2-1879-6) was ablated single-item and found byte-identical with
+the discharge flag on and off, pointing at the perception path itself as
+the actual source - which the next fix addresses directly.
+
+**The second 2026-07-23 pin (superseding the first, same day) fixes the
+perception-path source and adds relational discharge - confFalse 5→0,
+balAcc 68.1%→83.8%, no regression flags, no `--accept` needed.** Two
+mechanisms:
+
+1. **Perception-gate scoping.** `perceiveCoherent` (the live query path) had
+   never run the Phase 2 emission gate - only `perceive()` had, and every
+   measured token-soup confident falsehood came through the ungated path.
+   Gating it outright regressed the number-line vault-recall suite (a
+   cache-hit answer failing a geometric coherence bar calibrated for raw
+   settling), so the gate is scoped to exactly the two untrusted-provenance
+   tiers where token soup actually originates - `"cluster"` and `"geodesic"`
+   (raw settling arrival with no symbolic/vault backing) - leaving vault,
+   reduction, formula, composition, and rule-discharge answers ungated (they
+   are constructor-guaranteed or crystallized-proof mechanisms, not
+   candidates needing geometric re-verification).
+2. **Relational (SVO) rule discharge.** Pair-exact triples
+   (`system.textGroundedTriples` / `textGroundedTriplesNeg`, keyed
+   `${subject}|${verb}|${object}`) are the sound complement to the
+   pairScoped edge exclusion: a triple is scoped to its own assertion, so it
+   can be affirmed/denied exactly without bridging assertions through the
+   shared verb node the way chaining did. `GroundRule`/`RuleAtom` gained an
+   optional `verb` field so relational conditions/conclusions ("if someone
+   chases the cat then they like the dog") extract and discharge exactly
+   like attribute rules, including mixed attribute+relational conditions and
+   ground-conclusion existential binding ("if someone chases the hen and
+   they are sly then the hen is scared"). Required an accompanying parser
+   fix: compromise mis-tags 3rd-person-singular verbs as plural nouns ("the
+   tiger chases the cat" → chases[Noun,Plural]), which had silently degraded
+   every such clause to a bare NP fragment - `recoverMistaggedVerb` detects
+   and recovers it.
+
+**A false start worth recording:** an intermediate version of this pin added
+a "reflexive-derivation guard" refusing to derive self-loops like
+`chase(tiger, tiger)` from variable unification ("if someone sees the cat
+then they chase the tiger" firing with subject=tiger), reasoning they were
+manufactured rather than intended. **That guard was wrong.** Checking gold
+labels directly: every reflexive relational question in
+`ruletaker_sample.jsonl` ("the cow visits the cow", "the tiger chases the
+tiger", "the squirrel eats the squirrel", ...) is gold=`true` - RuleTaker's
+official semantics genuinely derives them this way, and the guard was
+silently flipping correct derivations to wrong denials once combined with
+closed-world mode (confFalse 5→16 on the guarded+CWA measurement). The guard
+was removed; `tests/rule_discharge.test.ts` now pins the reflexive case as
+sound, with a regression note against reintroducing the guard without
+re-checking gold first.
+
+**Closed-world mode (PARITY §3.2 stage 2) is built but NOT enabled here.**
+`TEXT_GRAPH_CWA_ENABLED` exists (default false) with negation-as-failure and
+the parse-completeness safety valve, guarded in `tests/rule_discharge.test.ts`
+in isolation. A per-dataset harness toggle (RuleTaker=CWA, ProofWriter=OWA,
+matching each task's own world assumption) was tried and measured
+confFalse 5→16, concentrated in ruletaker.d2/d3/d5 - it has not cleared its
+own gate, so the harness leaves it off for every dataset per the covenant
+("ship flag-off and iterate off the diff"). This is why ruletaker false-
+recall (60-75% balAcc, not higher) is the visible residual in the pinned
+numbers: OWA correctly cannot deny a fact it merely fails to derive.
+
+Final per-family movement from the 44.3% baseline: proofwriter d0
+83.3%→100%, d1 41.7%→91.7%, d2 41.7%→100%, d3 41.7%→100%, d5 41.7%→91.7%
+(confFalse 0 throughout); ruletaker d0 55%→70%, d1 5%→60%, d2 15%→65%,
+d3 0%→75%, d5 10%→70% (confFalse 0 throughout, down from 1 each).

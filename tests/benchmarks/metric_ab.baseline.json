@@ -292,7 +292,7 @@
     "avgTimeFullGradMs": 136.82
   },
   "external": {
-    "date": "2026-07-23T15:25:39.662Z",
+    "date": "2026-07-23T17:40:41.496Z",
     "ruletaker": {
       "hop1": 0.6,
       "hop2": 0.75,
@@ -352,7 +352,7 @@
     }
   },
   "externalReal": {
-    "date": "2026-07-23T17:01:58.195Z",
+    "date": "2026-07-23T18:00:56.740Z",
     "fast": {
       "proofwriter.d0": {
         "balancedAccuracy": 0.25,
@@ -423,69 +423,69 @@
     },
     "honest": {
       "proofwriter.d0": {
-        "balancedAccuracy": 0.8333333333333334,
-        "abstentionRate": 0.5,
+        "balancedAccuracy": 1,
+        "abstentionRate": 0.3333333333333333,
         "confidentFalsehoods": 0,
         "n": 12
       },
       "proofwriter.d1": {
-        "balancedAccuracy": 0.75,
-        "abstentionRate": 0.5833333333333334,
+        "balancedAccuracy": 0.9166666666666666,
+        "abstentionRate": 0.4166666666666667,
         "confidentFalsehoods": 0,
         "n": 12
       },
       "proofwriter.d2": {
-        "balancedAccuracy": 0.5833333333333334,
-        "abstentionRate": 0.75,
+        "balancedAccuracy": 1,
+        "abstentionRate": 0.3333333333333333,
         "confidentFalsehoods": 0,
         "n": 12
       },
       "proofwriter.d3": {
-        "balancedAccuracy": 0.8333333333333334,
-        "abstentionRate": 0.5,
+        "balancedAccuracy": 1,
+        "abstentionRate": 0.3333333333333333,
         "confidentFalsehoods": 0,
         "n": 12
       },
       "proofwriter.d5": {
-        "balancedAccuracy": 0.75,
-        "abstentionRate": 0.5,
-        "confidentFalsehoods": 1,
+        "balancedAccuracy": 0.9166666666666666,
+        "abstentionRate": 0.4166666666666667,
+        "confidentFalsehoods": 0,
         "n": 12
       },
       "ruletaker.d0": {
-        "balancedAccuracy": 0.55,
-        "abstentionRate": 0.4,
-        "confidentFalsehoods": 1,
+        "balancedAccuracy": 0.7,
+        "abstentionRate": 0.3,
+        "confidentFalsehoods": 0,
         "n": 20
       },
       "ruletaker.d1": {
-        "balancedAccuracy": 0.5,
-        "abstentionRate": 0.45,
-        "confidentFalsehoods": 1,
+        "balancedAccuracy": 0.6,
+        "abstentionRate": 0.4,
+        "confidentFalsehoods": 0,
         "n": 20
       },
       "ruletaker.d2": {
-        "balancedAccuracy": 0.45,
-        "abstentionRate": 0.5,
-        "confidentFalsehoods": 1,
+        "balancedAccuracy": 0.6499999999999999,
+        "abstentionRate": 0.35,
+        "confidentFalsehoods": 0,
         "n": 20
       },
       "ruletaker.d3": {
-        "balancedAccuracy": 0.4,
-        "abstentionRate": 0.55,
-        "confidentFalsehoods": 1,
+        "balancedAccuracy": 0.75,
+        "abstentionRate": 0.25,
+        "confidentFalsehoods": 0,
         "n": 20
       },
       "ruletaker.d5": {
-        "balancedAccuracy": 0.5,
-        "abstentionRate": 0.5,
+        "balancedAccuracy": 0.7,
+        "abstentionRate": 0.3,
         "confidentFalsehoods": 0,
         "n": 20
       },
       "overall": {
-        "balancedAccuracy": 0.6809523809523809,
-        "abstentionRate": 0.5125,
-        "confidentFalsehoods": 5,
+        "balancedAccuracy": 0.8380952380952381,
+        "abstentionRate": 0.3375,
+        "confidentFalsehoods": 0,
         "n": 160
       }
     }

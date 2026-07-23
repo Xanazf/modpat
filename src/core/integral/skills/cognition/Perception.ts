@@ -113,6 +113,10 @@ export async function perceiveCoherent(
     probeMode?: boolean;
     maxIterations?: number;
     contextScopes?: Set<number>;
+    /** Apply the Phase 2 emission gate (same block as perceive()). The live
+     *  query path was measured emitting token-soup commitments precisely
+     *  because this path historically bypassed the gate. */
+    gated?: boolean;
   },
   deps: Cognition.PerceptionDeps,
   cache: Cognition.PerceptionCache,
@@ -125,6 +129,45 @@ export async function perceiveCoherent(
     cache
   );
   const coherence = Math.max(0, 1 - deps.lastInferentialEffort);
+  // Gate only the RAW settling fallback (cluster/geodesic): the measured
+  // token-soup confident falsehoods came from arriving at a sink with no
+  // symbolic mechanism behind it. Every other provenance is a constructor-
+  // guaranteed or crystallized-proof mechanism (vault recall, rule
+  // discharge, arithmetic composition, ...) that skips the settle/locomotion
+  // loop these fast-paths return before - so deps.lastInferentialEffort can
+  // be stale for them, and gateEmit's geometric pathCoherence bar was
+  // calibrated against physics-only settling, not against a cache hit.
+  // Re-litigating an already-verified derivation through it is redundant at
+  // best and miscalibrated at worst (measured: rejected a correct vault
+  // recall on the number-line corpus's minimal manifold).
+  const untrusted = r.provenance === "cluster" || r.provenance === "geodesic";
+  if (opts.gated && untrusted && r.ids.length > 0) {
+    const decoded = deps.atomizer
+      .decodeSequence(r.ids, deps.system)
+      .trim()
+      .toLowerCase();
+    if (decoded !== "unknown") {
+      deps.buildGridIndex();
+      const verdict = gateEmit(
+        ids,
+        r.ids,
+        deps.system,
+        deps.gridIndex,
+        deps.lastInferentialEffort,
+        { ruleDerived: false }
+      );
+      if (!verdict.emit) {
+        return {
+          ids: deps.atomizer.ingestSequence("unknown", deps.system),
+          coherence: 0,
+          iterations: 1,
+          learned: [],
+          diagnosis: "gated",
+          diagnostics: null,
+        };
+      }
+    }
+  }
   return {
     ids: r.ids,
     coherence,

@@ -474,6 +474,15 @@ async function runDatasetMode(
   let skippedPoison = 0;
 
   for (const ds of datasets) {
+    // PARITY §3.2 stage 2 (closed-world negation-as-failure) is measured
+    // SEPARATELY, not enabled here: a per-dataset CWA toggle was tried
+    // (RuleTaker=on, ProofWriter=off, matching each task's own world
+    // assumption) and measured honest.overall confidentFalsehoods 5 -> 16,
+    // concentrated in ruletaker.d2/d3/d5 - it has not cleared its own
+    // confFalse gate, so it stays off for this pinned run per the covenant
+    // ("ship flag-off and iterate off the diff"). CWA remains in the
+    // codebase behind TEXT_GRAPH_CWA_ENABLED (default false) for that
+    // future, separately-measured pass.
     const items = limit > 0 ? ds.items.slice(0, limit) : ds.items;
     for (const item of items) {
       if (checkpoint.poisoned.has(item.id)) {
@@ -528,6 +537,9 @@ async function runDatasetMode(
       );
     }
   }
+  (
+    DOPAT_CONFIG.PHYSICS as unknown as { TEXT_GRAPH_CWA_ENABLED: boolean }
+  ).TEXT_GRAPH_CWA_ENABLED = false;
 
   if (skippedPoison > 0)
     console.warn(

@@ -299,6 +299,27 @@ class System implements Root.ManifoldView {
   public readonly textGroundedRules: Grounding.TextRule[] = [];
 
   /**
+   * Pair-exact SVO ledgers (keys `${subject}|${verb}|${object}` precept ids),
+   * positive and negated separately. The sound complement to the pairScoped
+   * edge exclusion: a triple is scoped to its own assertion, so it can be
+   * affirmed/denied exactly without bridging assertions through the shared
+   * verb node. Cleaned in freeLocation.
+   */
+  public readonly textGroundedTriples = new Set<string>();
+  public readonly textGroundedTriplesNeg = new Set<string>();
+  /** Membership index for node resolution - see Integral.d.ts doc. */
+  public readonly textGroundedTripleParticipants = new Set<number>();
+
+  /**
+   * Parse-completeness counters (closed-world safety valve): CWA denial is
+   * permitted only while textGroundedUnparsed === 0 - a theory the parser
+   * could not fully read must fall back to open-world silence, or
+   * negation-as-failure manufactures falsehoods out of parse misses.
+   */
+  public textGroundedSentences = 0;
+  public textGroundedUnparsed = 0;
+
+  /**
    * Initializes the logical manifold and allocates the underlying ArrayBuffer.
    */
   constructor() {
@@ -573,11 +594,27 @@ class System implements Root.ManifoldView {
     // meaningful - drop it whole rather than leave a dangling condition.
     for (let i = this.textGroundedRules.length - 1; i >= 0; i--) {
       const r = this.textGroundedRules[i];
-      const touches = (a: { subject: number; predicate: number }) =>
-        a.subject === id || a.predicate === id;
+      const touches = (a: {
+        subject: number;
+        predicate: number;
+        verb?: number;
+      }) => a.subject === id || a.predicate === id || a.verb === id;
       if (touches(r.conclusion) || r.conditions.some(touches)) {
         this.textGroundedRules.splice(i, 1);
       }
+    }
+    // Same for triples referencing the freed precept.
+    if (this.textGroundedTripleParticipants.has(id)) {
+      const idStr = String(id);
+      for (const ledger of [
+        this.textGroundedTriples,
+        this.textGroundedTriplesNeg,
+      ]) {
+        for (const key of ledger) {
+          if (key.split("|").includes(idStr)) ledger.delete(key);
+        }
+      }
+      this.textGroundedTripleParticipants.delete(id);
     }
 
     // Zero out all physical properties to prevent stale data.

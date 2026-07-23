@@ -268,6 +268,22 @@ const DOPAT_CONFIG = {
      */
     TEXT_GRAPH_RULE_DISCHARGE_ENABLED: true,
     /**
+     * PARITY §3.2 stage 2 - the classical/closed-world negation distinction
+     * as an explicit mode. When on, the rule-discharge closure additionally
+     * treats a negated condition as satisfied when its positive is NOT
+     * derivable (negation-as-failure, evaluated after explicit support each
+     * iteration), and GraphQuery denies a fully-resolved, non-derivable,
+     * non-conflicted question instead of staying silent. Guarded by the
+     * parse-completeness safety valve: CWA denial is permitted only while
+     * system.textGroundedUnparsed === 0, so a theory the parser could not
+     * fully read falls back to open-world silence rather than manufacturing
+     * falsehoods out of parse misses. OFF by default: the world assumption
+     * is part of a task's definition (RuleTaker is closed-world, ProofWriter
+     * is open-world), so callers - e.g. the benchmark harness - set it per
+     * task, never globally.
+     */
+    TEXT_GRAPH_CWA_ENABLED: false,
+    /**
      * Phase 4.5 - the survey loop, wired into learnCycle. When on, each
      * learnCycle ends with a territory-correction tick: every registered
      * GroundTruthChannel (self-supplied arithmetic, KB-supplied closed-world)
