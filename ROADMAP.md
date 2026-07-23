@@ -115,6 +115,47 @@ text and pushed through the embedding bottleneck (`AstSeedWorker → ingestSeque
 and its edges are stored as **vault proofs** rather than **spatial adjacency**. The arc
 turns that captured structure into geometry.
 
+### Deduction and code are the same shape; induction is its mirror (theorized, 2026-07-23)
+
+PARITY §3.2's rule discharge (`GroundRule`: `conditions[] → conclusion`, built
+this session) and a code `if`/`else` (`test → consequent`) are the identical
+topological shape - condition(s) resolving to a conclusion. Verified this is
+NOT yet wired, not merely latent: `astExtract.ts` never visits `IfStatement`
+(control flow is invisible to the structural-grounding side, not flattened -
+absent); `AstGrounding.ts` has no `rules` concept at all; `Coder.ts`'s
+`Synthesizer` handles `IfStatement` only as template shape-matching (tag the
+test's identifiers as slot variables, crystallize `intent → "if (VAR_0 >
+VAR_1) {...}"`) - it never evaluates the condition, so it isn't discharge.
+The extraction pattern transfers directly (same move as `tryExtractConditional`,
+different token source), but the one real complication is that a RuleTaker
+fact is static ground truth while a code condition is about a *runtime*
+value - discharging it needs execution as the ground truth (the survey
+loop's behavioural-fidelity channel, already built for code, PARITY §3.5)
+rather than an asserted-fact ledger.
+
+The sharper claim: **induction is the same `GroundRule` triple solved for
+the other slot.** Deduction fixes `(rule, conditions)` and solves for
+`conclusion` (what §3.2 discharges). Induction fixes `(conditions,
+conclusion)` - observed across several example cases - and solves for the
+*rule* that explains them: rule learning / program synthesis-from-examples,
+expressed as the identical shape run in reverse. If code's control flow
+lived in this graph, code synthesis-from-examples (PARITY §3.5, the current
+long pole) would decompose into two pieces this repo already has an answer
+for: **induce** the `GroundRule` from example input/output pairs or
+execution traces (a new mechanism, the actual missing bridge - not "harder
+code generation" in the abstract), then **render** it to source text, which
+`Synthesizer`'s template instantiation already does well. Recognizing the
+if/else shape was never the hard part; inducing the right general rule from
+few examples is - reframing 3.5's gap as an induction problem rather than a
+generation problem is the point of this note.
+
+**Gate before building:** the same discipline as the degree-placement note
+above - confirm induction can recover a KNOWN simple rule (e.g. a single
+comparison threshold) from a handful of clean input/output examples before
+committing to wiring it through the unified graph and the Synthesizer. If it
+can't recover even the simple case cleanly, the mirror-image framing is
+elegant but not yet a mechanism.
+
 ---
 
 ## Phases
