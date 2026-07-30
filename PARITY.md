@@ -141,8 +141,43 @@ unsafe - every gap in the closure is indistinguishable from a genuinely
 underivable fact and converts straight into a confident falsehood.** CWA
 does not add a new way to be wrong about logic; it withdraws the margin that
 was concealing the closure's derivation gaps. Its true prerequisite is
-closure COMPLETENESS, not further soundness work. CWA therefore stays off by
-default and the pin is unmoved (confFalse 1 fails the covenant's red line).
+closure COMPLETENESS, not further soundness work.
+
+**Fourth update (2026-07-30, same day, measured): the break is closed and
+CWA clears its gate at 96.7% / confFalse 0.** Isolating the break found two
+defects, neither of them the stratification approximation that was the
+leading hypothesis, and both invisible under OWA because both cost silence
+there rather than correctness:
+
+1. **The `pairScoped` stamp was stripped on dedup** - one graph is built per
+   theory, so a single recurrence of the same edge in a role that did not set
+   the stamp re-opened the reified verb node for the whole ledger, letting
+   "the cat visits the cow" + "the cow is kind" affirm "the cat is kind".
+   Now monotone (`hypothetical` legitimately upgrades; `pairScoped` is
+   structural scope and cannot be upgraded by another sentence).
+2. **Entity aliasing across the LogicGraph delegation boundary** - delegated
+   single-clause statements intern raw regex captures (`bald eagle`) while
+   the grammatical pass interns the head noun (`eagle`), so one entity holds
+   two precepts. The closure derived `big(eagle)`; the question resolved to
+   `bald eagle`. 23/160 items (14%) contain a multi-word entity.
+
+The completeness gate (`entityAliased`) withholds CWA denial when the subject
+is aliased, on the denial branches only - OWA is unchanged. Result:
+
+| configuration | balAcc | abstain | confFalse |
+| ------------- | ------ | ------- | --------- |
+| OWA (pinned) | 83.8% | 33.8% | 0 |
+| CWA, ungated | 96.7% | 16.3% | 1 |
+| **CWA + gate** | **96.7%** | 16.9% | **0** |
+
+27 GAIN / 0 BROKE / 0 LOSS / 0 CHURN against the pin; ruletaker d3 at 100%.
+Two qualifications kept explicit: the gate bought the COVENANT, not accuracy
+(balAcc is 96.7% either way - a gold-false item scores zero recall whether
+answered wrongly or abstained), and the `pairScoped` fix moved nothing
+measurable on these 160 items beyond letting the chain derive. The default
+stays open-world and the pin is unmoved: the world assumption belongs to the
+task, not the engine. Aliasing is now SAFE, not FIXED - recovering that
+silence means reconciling the two noun-phrase conventions (§3.1 residual).
 
 ## 3. The gap inventory
 
@@ -405,6 +440,26 @@ on the rules themselves.** Wrong-if: a completeness-aware denial gate either
 fails to recover confFalse to 0, or recovers it only by abstaining back
 below ~90% balanced accuracy (i.e. the gate cannot separate "underivable"
 from "not yet derived", and the two are genuinely entangled at this depth).
+
+**Graded 2026-07-30, same session: CONFIRMED in outcome, WRONG in
+mechanism - a half hit, and the mechanism half is the instructive one.**
+The outcome bar was cleared exactly as stated: 96.7% balanced accuracy at
+confFalse 0, and it came from a denial-side gate rather than from more rule
+soundness. But the stated MECHANISM was wrong in both of its parts. The
+closure had already reached fixpoint with no unresolved negative dependency
+- that signal would have fired on nothing - and the real trigger was entity
+aliasing, a front-end defect (§3.1 territory) surfacing as a reasoning
+failure. A second, independent fix (the `pairScoped` stamp) was also
+required and was not anticipated at all.
+
+The lesson worth carrying: the prediction was framed entirely inside the
+reasoning engine, and the actual causes were both at the ingestion boundary.
+That is the same inversion §3.1 opened this document with - "the reasoning
+engine is not what loses; the reading is" - reappearing one layer down,
+where a reading defect had been masquerading as a closure-completeness
+question. A confirmed outcome reached through a wrong mechanism is not
+evidence the model of the system was right, and should not be counted as
+one.
 
 ## 6. Training curriculum (theorized)
 

@@ -938,7 +938,17 @@ async function run(): Promise<void> {
   console.log(`Baseline updated: ${BASELINE_PATH}`);
 }
 
-run().catch(e => {
-  console.error(e);
-  process.exit(1);
-});
+// The dataset path opens a DuckDB store, an atomizer and (optionally) GPU
+// resources PER ITEM, and their handles keep the event loop alive after the
+// last score is printed - a completed run would otherwise sit there looking
+// like a slow one. Same idiom as tests/runTests.ts: exit explicitly once the
+// work is done, in `finally` so it fires on both paths.
+let exitCode = 0;
+run()
+  .catch(e => {
+    console.error(e);
+    exitCode = 1;
+  })
+  .finally(() => {
+    process.exit(exitCode);
+  });

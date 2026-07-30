@@ -416,5 +416,108 @@ export async function runRuleDischargeTests(): Promise<void> {
         await store.close();
       }
     });
+
+    // ---- 3. Closed-world completeness guards (2026-07-30) ----------------
+    //
+    // Both defects below cost only SILENCE under open-world semantics, which
+    // is why they survived until CWA removed the margin and turned them into
+    // confident falsehoods. Each is pinned here so a regression cannot be
+    // rediscovered the expensive way (see data/benchmarks/README.md).
+
+    await it("does not chain through a reified verb node (pairScoped is sticky)", async () => {
+      const physics = DOPAT_CONFIG.PHYSICS as unknown as {
+        TEXT_GRAPH_INGESTION_ENABLED: boolean;
+        TEXT_GRAPH_QUERY_ENABLED: boolean;
+      };
+      const prevIngest = physics.TEXT_GRAPH_INGESTION_ENABLED;
+      const prevQuery = physics.TEXT_GRAPH_QUERY_ENABLED;
+      physics.TEXT_GRAPH_INGESTION_ENABLED = true;
+      physics.TEXT_GRAPH_QUERY_ENABLED = true;
+
+      const system = new System();
+      const atomizer = new LogicAtomizer();
+      await atomizer.init();
+      const store = new Store(system, atomizer, ":memory:");
+      await store.waitForInit();
+      try {
+        // The verb node is shared across assertions, so subject->verb->object
+        // chaining bridges unrelated facts. The stamp that forbids it used to
+        // be CLEARED whenever the same edge recurred in a role that did not
+        // set it - and one graph is built per THEORY, so a single recurrence
+        // anywhere re-opened the node for every sentence.
+        groundTextIfEnabled(
+          ["the cat visits the cow", "the cow is kind"],
+          system,
+          atomizer
+        );
+        assert.strictEqual(
+          resolveGraphQuery("is the cat kind?", system, atomizer),
+          null,
+          "cat -> visit -> cow -> kind must not affirm 'the cat is kind'"
+        );
+        // The assertion that IS in the ledger still answers - the guard must
+        // remove the bridge, not the facts.
+        assert.strictEqual(
+          resolveGraphQuery("is the cow kind?", system, atomizer)?.answer,
+          "the cow is kind",
+          "the asserted attribute still resolves"
+        );
+      } finally {
+        physics.TEXT_GRAPH_INGESTION_ENABLED = prevIngest;
+        physics.TEXT_GRAPH_QUERY_ENABLED = prevQuery;
+        await store.close();
+      }
+    });
+
+    await it("withholds CWA denial when the entity is aliased across precepts", async () => {
+      const physics = DOPAT_CONFIG.PHYSICS as unknown as {
+        TEXT_GRAPH_INGESTION_ENABLED: boolean;
+        TEXT_GRAPH_QUERY_ENABLED: boolean;
+        TEXT_GRAPH_RULE_DISCHARGE_ENABLED: boolean;
+        TEXT_GRAPH_CWA_ENABLED: boolean;
+      };
+      const prev = {
+        i: physics.TEXT_GRAPH_INGESTION_ENABLED,
+        q: physics.TEXT_GRAPH_QUERY_ENABLED,
+        d: physics.TEXT_GRAPH_RULE_DISCHARGE_ENABLED,
+      };
+      physics.TEXT_GRAPH_INGESTION_ENABLED = true;
+      physics.TEXT_GRAPH_QUERY_ENABLED = true;
+      physics.TEXT_GRAPH_RULE_DISCHARGE_ENABLED = true;
+
+      const system = new System();
+      const atomizer = new LogicAtomizer();
+      await atomizer.init();
+      const store = new Store(system, atomizer, ":memory:");
+      await store.waitForInit();
+      try {
+        // A multi-word entity lands on TWO precepts: LogicGraph delegation
+        // interns the full noun phrase for copula surface ("bald eagle"),
+        // the grammatical pass interns the head noun for SVO ("eagle"). The
+        // closure then holds only half the entity's record, so denial from
+        // non-derivability is denial from a split ledger, not from the
+        // theory. Silence is the only sound verdict until the split is fixed.
+        groundTextIfEnabled(
+          ["the bald eagle visits the cat", "the bald eagle is red"],
+          system,
+          atomizer
+        );
+        physics.TEXT_GRAPH_CWA_ENABLED = true;
+        try {
+          assert.strictEqual(
+            resolveGraphQuery("is the bald eagle big?", system, atomizer),
+            null,
+            "aliased subject must not be denied under CWA"
+          );
+        } finally {
+          physics.TEXT_GRAPH_CWA_ENABLED = false;
+        }
+      } finally {
+        physics.TEXT_GRAPH_INGESTION_ENABLED = prev.i;
+        physics.TEXT_GRAPH_QUERY_ENABLED = prev.q;
+        physics.TEXT_GRAPH_RULE_DISCHARGE_ENABLED = prev.d;
+        await store.close();
+      }
+    });
   });
 }

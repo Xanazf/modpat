@@ -192,6 +192,28 @@ class DedupGraphBuilder extends GraphBuilder {
    */
   hypothetical = false;
 
+  /**
+   * Why `pairScoped` is STICKY while `hypothetical` upgrades.
+   *
+   * The two stamps look alike but are different kinds of claim, and treating
+   * them alike was a soundness leak (measured 2026-07-30, the single CWA
+   * break RelNeg-D5-254-12 - see data/benchmarks/README.md):
+   *
+   * - `hypothetical` is about TRUTH PROVENANCE: "this edge came from rule
+   *   content, not an assertion". A later asserted occurrence genuinely
+   *   outranks it - the fact really is asserted - so clearing it is right.
+   * - `pairScoped` is about STRUCTURAL SCOPE: "this edge is one half of a
+   *   reified SVO, so chaining THROUGH it bridges unrelated assertions".
+   *   No other sentence can make that safe. A second occurrence of the same
+   *   (from,to,kind) in a different role does not turn the shared verb node
+   *   into a legitimate transit point; it just means the pair recurs.
+   *
+   * Because one graph is built per THEORY (all sentences share `seenEdges`),
+   * clearing the stamp let a single unstamped recurrence anywhere in the
+   * theory re-open the verb node for the whole ledger - which is exactly how
+   * "the cat visits the cow" + "the cow is kind" came to affirm "the cat is
+   * kind" via `cat -> visit -> cow -> kind`.
+   */
   override edge(
     from: number,
     to: number,
@@ -204,7 +226,7 @@ class DedupGraphBuilder extends GraphBuilder {
     const seen = this.seenEdges.get(key);
     if (seen) {
       if (!this.hypothetical) delete seen.hypothetical;
-      if (!pairScoped) delete seen.pairScoped;
+      if (pairScoped) seen.pairScoped = true;
       return;
     }
     super.edge(from, to, kind, weight);
@@ -220,7 +242,8 @@ class DedupGraphBuilder extends GraphBuilder {
     const seen = this.seenContrasts.get(key);
     if (seen) {
       if (!this.hypothetical) delete seen.hypothetical;
-      if (!pairScoped) delete seen.pairScoped;
+      // Sticky, for the same reason as edges - see the note above.
+      if (pairScoped) seen.pairScoped = true;
       return;
     }
     super.contrast(a, b);

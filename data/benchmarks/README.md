@@ -257,18 +257,87 @@ derivation gaps. That is why it trades 27 gains for 1 break rather than
 being uniformly good or bad, and it means CWA's true prerequisite is
 closure COMPLETENESS, not more closure soundness.
 
-**Disposition: CWA stays OFF by default and the pin is unmoved.** confFalse
-1 > 0 fails the covenant's red line ("the characteristic failure must remain
-silence"), and the harness exits 1 on it, as designed. The reproduction:
+## 2026-07-30 (later) - the break is closed; CWA clears its gate
+
+Two defects, both invisible under open-world semantics because both produce
+silence there and only turn into falsehood once CWA removes the margin.
+
+**1. The `pairScoped` stamp was being stripped** (`TextGraph.ts`). One graph
+is built per THEORY, so `seenEdges` spans every sentence; the dedup branch
+cleared `pairScoped` whenever the same `(from,to,kind)` recurred in a role
+that did not set it, re-opening the reified verb node for the whole ledger.
+Measured effect: `cat -> visit -> cow -> kind` made "the cat visits the cow"
++ "the cow is kind" affirm **"the cat is kind"**. The stamp is now monotone.
+`hypothetical` keeps its upgrade semantics - the two are different kinds of
+claim: `hypothetical` is truth provenance (an asserted occurrence really does
+outrank a rule mention), `pairScoped` is structural scope (no other sentence
+can make chaining through a shared verb node safe).
+
+**2. Entity aliasing across the delegation boundary.** `buildGraphFromText`
+delegates single-clause statements to LogicGraph, whose `relationOrContrast`
+interns raw regex captures ("the bald eagle is not big" -> `bald eagle`),
+while content-verb SVO falls through to the grammatical pass, where
+`collectNpGroups` interns the HEAD NOUN (`eagle`). Two parsers, two noun-
+phrase conventions, one entity, two precepts. The closure correctly derived
+`big(eagle)`; the question resolved to `bald eagle`; non-derivability there
+meant nothing about the theory. 23/160 items (14%) contain a multi-word
+entity, so this is a class, not a one-off - it is simply invisible under OWA,
+where it costs silence instead of correctness.
+
+**The completeness gate** (`entityAliased`, GraphQuery) withholds CWA denial
+when another allocated ledger precept plausibly denotes the same entity. It
+is applied ONLY on the denial branches, so open-world behaviour is unchanged.
+This is the general principle stated above made operational: denial-from-
+absence is sound only if the closure saw everything the theory knows about
+the subject, and a split entity guarantees it did not.
+
+Measured, honest mode, all 160 items:
+
+| configuration | balAcc | abstain | confFalse |
+| ------------- | ------ | ------- | --------- |
+| OWA (pinned) | 83.8% | 33.8% | 0 |
+| CWA, ungated | 96.7% | 16.3% | 1 |
+| **CWA + completeness gate** | **96.7%** | 16.9% | **0** |
+
+Per depth: ruletaker d0/d1/d2 95%, d3 **100%**, d5 90%; proofwriter
+unchanged as the control. Per item vs the OWA pin: **27 GAIN, 0 BROKE,
+0 LOSS, 0 CHURN**. No regression flags, no `--accept`.
+
+Two honest qualifications. (a) The gate did not buy ACCURACY - balanced
+accuracy is 96.7% with or without it, because a gold-`false` item scores zero
+recall whether it is answered wrongly or abstained. It bought the COVENANT,
+which is the whole difference between shippable and not. (b) The
+`pairScoped` fix produced no measurable movement on these 160 items beyond
+letting the chain derive; its value is removing a latent unsoundness class
+this corpus happens not to probe. Neither should be credited with more than
+it did.
+
+Still open: the gate makes aliasing SAFE, not FIXED. Those 14% of items
+remain split across precepts and are now silent rather than wrong. Recovering
+that abstention means reconciling the two noun-phrase conventions - either
+narrowing LogicGraph delegation to genuinely symbolic surface, or routing its
+captures through the same NP-head extraction the grammatical pass uses.
+
+**Disposition: CWA now clears the covenant's red line** (confFalse 0) and is
+enabled per dataset by `--cwa`. The default remains open-world and the pin is
+unmoved, because the world assumption belongs to the task, not the engine -
+ProofWriter is genuinely open-world and must keep abstaining. The
+reproduction:
 
 ```bash
 tsx tests/benchmarks/external_benchmarks.ts --datasets \
   --checkpoint data/benchmarks/baseline_owa.checkpoint.jsonl --no-pin
 tsx tests/benchmarks/external_benchmarks.ts --datasets \
-  --checkpoint data/benchmarks/cwa.checkpoint.jsonl --cwa
+  --checkpoint data/benchmarks/cwa_gated.checkpoint.jsonl --cwa
 tsx scripts/dev/checkpoint_analysis.ts \
-  data/benchmarks/baseline_owa.checkpoint.jsonl data/benchmarks/cwa.checkpoint.jsonl
+  data/benchmarks/baseline_owa.checkpoint.jsonl \
+  data/benchmarks/cwa_gated.checkpoint.jsonl
+# single-item isolation of the break, with the closure dumped:
+tsx scripts/dev/probe_cwa_break.ts
 ```
+
+(`cwa.checkpoint.jsonl` is the pre-fix run, retained so the 1 -> 0 confFalse
+move stays auditable per item.)
 
 Final per-family movement from the 44.3% baseline: proofwriter d0
 83.3%→100%, d1 41.7%→91.7%, d2 41.7%→100%, d3 41.7%→100%, d5 41.7%→91.7%
