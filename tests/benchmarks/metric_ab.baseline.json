@@ -352,7 +352,7 @@
     }
   },
   "externalReal": {
-    "date": "2026-07-23T18:05:30.588Z",
+    "date": "2026-07-30T18:35:49.047Z",
     "fast": {
       "proofwriter.d0": {
         "balancedAccuracy": 0.25,
@@ -477,14 +477,14 @@
         "n": 20
       },
       "ruletaker.d5": {
-        "balancedAccuracy": 0.7,
-        "abstentionRate": 0.3,
+        "balancedAccuracy": 0.75,
+        "abstentionRate": 0.25,
         "confidentFalsehoods": 0,
         "n": 20
       },
       "overall": {
-        "balancedAccuracy": 0.8380952380952381,
-        "abstentionRate": 0.3375,
+        "balancedAccuracy": 0.8428571428571429,
+        "abstentionRate": 0.33125,
         "confidentFalsehoods": 0,
         "n": 160
       }

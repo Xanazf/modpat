@@ -113,56 +113,6 @@ export function questionToProposition(text: string): string | null {
 // Ledger-chain verification
 // ---------------------------------------------------------------------------
 
-/**
- * Completeness guard for closed-world denial (PARITY §3.2 stage 2).
- *
- * Negation-as-failure concludes FALSE from absence, so it is sound only if
- * the closure saw everything the theory knows about the queried subject.
- * One measured way that fails is ENTITY ALIASING: the same surface entity
- * lands on more than one precept, because a copula subject keeps its full
- * noun phrase ("the bald eagle is red" -> `bald eagle`) while the same
- * entity as an SVO subject reduces to its head noun ("the bald eagle visits
- * the cat" -> `eagle`). Knowledge is then split across precepts the closure
- * treats as unrelated, and a question landing on the sparse half is
- * "not derivable" for a reason that has nothing to do with the theory.
- *
- * Measured 2026-07-30 (RelNeg-D5-254-12, the single CWA break): the closure
- * correctly derived `big(eagle)` while the question resolved to
- * `bald eagle`, and CWA turned the gap into a confident falsehood. Under
- * open-world semantics the same split is harmless - it yields silence - so
- * this guard is applied ONLY on the denial branch and OWA behaviour is
- * unchanged.
- *
- * Returns true when a DIFFERENT allocated ledger precept plausibly denotes
- * the same entity, i.e. denial must be withheld in favour of silence.
- */
-function entityAliased(
-  label: string,
-  resolved: number,
-  system: Root.ManifoldView,
-  atomizer: Atomic.Engine
-): boolean {
-  const words = label.trim().split(/\s+/);
-  if (words.length < 2) return false;
-  // Progressively shorter suffixes: "the bald eagle" -> "bald eagle", "eagle".
-  for (let i = 1; i < words.length; i++) {
-    const alias = words.slice(i).join(" ");
-    const scope = atomizer.getSymbolScope(alias, false);
-    if (scope <= 0) continue;
-    for (const id of system.getIdsByScope(scope)) {
-      if (id === resolved || !system.isAllocated(id)) continue;
-      if (
-        system.textGroundedEdges.has(id) ||
-        system.textGroundedContrasts.has(id) ||
-        system.textGroundedTripleParticipants.has(id)
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 /** BFS over an explicit adjacency ledger; returns hop count from `from` to
  *  `to`, or -1 when unreachable within MAX_HOPS. */
 function ledgerReach(
@@ -523,14 +473,19 @@ export function resolveGraphQuery(
       }
       // Closed-world mode: both entities are resolved in the ledger, the
       // theory is fully parsed, and the positive is not derivable => false.
-      // Completeness guard: if the subject is aliased across precepts, the
-      // closure never saw the whole theory about it, so non-derivability
-      // carries no information - stay silent (see entityAliased).
-      if (
-        cwaDeny &&
-        b >= 0 &&
-        !entityAliased(graph.nodes[aNode].label, a, system, atomizer)
-      ) {
+      //
+      // Denial-from-absence is sound only if the closure saw everything the
+      // theory knows about this subject. The measured way that failed was
+      // ENTITY ALIASING (one entity interned under two labels, its knowledge
+      // split across precepts); that is now prevented at the source by
+      // head-noun normalisation in GraphBuilder.ensure (LogicGraph.npHead),
+      // so a subject resolved here carries the whole record. An
+      // alias-detecting guard was tried at this branch first and removed once
+      // the normalisation landed: with single-word Term labels it could never
+      // fire, and an unreachable safety net is worse than a documented
+      // absence. If NP normalisation is ever narrowed, this is the branch
+      // that stops being sound - see data/benchmarks/README.md.
+      if (cwaDeny && b >= 0) {
         usedDerived = true;
         return -1;
       }
@@ -561,13 +516,9 @@ export function resolveGraphQuery(
         if (!assertedDeny) usedDerived = true;
         return -1;
       }
-      // Same completeness guard as verify(): an aliased subject OR object
-      // means the closure saw only part of the entity's relational record.
-      if (
-        cwaDeny &&
-        !entityAliased(graph.nodes[t.subject].label, s, system, atomizer) &&
-        !entityAliased(graph.nodes[t.object].label, o, system, atomizer)
-      ) {
+      // Same soundness condition as verify()'s CWA branch, same reason it
+      // holds: head-noun normalisation keeps one entity on one precept.
+      if (cwaDeny) {
         usedDerived = true;
         return -1;
       }

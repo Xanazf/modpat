@@ -48,6 +48,59 @@ function arithOp(tok: string): string | null {
   return ARITH_SYMBOL[tok.toLowerCase()] ?? null;
 }
 
+/**
+ * Reduces a multi-word noun phrase to its HEAD (the last word - English NPs
+ * are right-headed), so that one entity interns to one label no matter which
+ * parser saw it.
+ *
+ * This exists because two parsers feed this same builder with different noun-
+ * phrase conventions, and they disagreed (measured 2026-07-30, PARITY §3.2):
+ * `buildGraphFromText` delegates single-clause statements to LogicGraph,
+ * whose regexes hand `ensure` a RAW SPAN ("the bald eagle is red" -> subject
+ * span "the bald eagle" -> lemma -> `bald eagle`), while its own grammatical
+ * pass hands `ensure` a single token, because `collectNpGroups` already takes
+ * the last content token of the span (`eagle`). The same animal therefore got
+ * two precepts, the theory's knowledge split across them, and a question
+ * landing on the sparse half was "not derivable" for reasons unrelated to the
+ * theory - harmless silence under open-world semantics, a confident falsehood
+ * once closed-world denial was switched on.
+ *
+ * Normalising HERE rather than at either call site is deliberate: `ensure` is
+ * the one place both parsers meet (TextGraph's DedupGraphBuilder extends this
+ * class), so the conventions cannot drift apart again.
+ *
+ * Known cost, accepted: the modifier is discarded, so "bald eagle" and
+ * "golden eagle" would collide as `eagle`. The deduction corpora name one
+ * animal of each kind per theory, so it is lossless there, and agreeing on
+ * the head noun beats disagreeing about the phrase. The lossless end state is
+ * to keep both labels and relate them by subsumption (derive downward from
+ * `eagle` to `bald eagle`, never upward) - that is its own mechanism, not a
+ * normalisation, and is deliberately not attempted here.
+ *
+ * Applies to Term nodes only: Operator labels are built as space-free strings
+ * ("(3+4)") and Literals are excluded upstream by `parseNumericLabel`.
+ *
+ * Only a SIMPLE noun phrase has a single head, so spans containing a
+ * coordinator or a preposition are left alone. Reducing them picks the wrong
+ * word and, worse, makes a junk span collide with a real entity: delegation
+ * hands `ensure` the whole subject span of "cats or dogs are pets", whose last
+ * word is `dogs` - reducing it to `dog` collided with the node the
+ * grammatical pass distributes to, and dedup then swallowed that disjunct's
+ * softened w0.5 edge (caught by text_graph.test.ts's coordination guard).
+ *
+ * The test runs on the RAW span, not the lemmatised one: `lemma()` filters
+ * through compromise's `.nouns()`, which drops the coordinator entirely, so
+ * "cats or dogs" reaches this function already looking like a simple NP.
+ */
+const NP_NON_SIMPLE = /\b(?:and|or|nor|of|in|on|at|to|for|with|from|by)\b/;
+
+function npHead(raw: string, label: string, kind: NodeKind): string {
+  if (kind !== NodeKind.Term) return label;
+  const words = label.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || NP_NON_SIMPLE.test(raw.toLowerCase())) return label;
+  return words[words.length - 1];
+}
+
 export class GraphBuilder {
   private idByLabel = new Map<string, number>();
   readonly nodes: Grounding.GroundNode[] = [];
@@ -58,7 +111,10 @@ export class GraphBuilder {
    *  unless a later, more specific kind is supplied. Numerics are always Literal. */
   ensure(rawLabel: string, kind: NodeKind): number {
     const numeric = parseNumericLabel(rawLabel);
-    const label = numeric !== null ? rawLabel.trim() : lemma(rawLabel);
+    const label =
+      numeric !== null
+        ? rawLabel.trim()
+        : npHead(rawLabel, lemma(rawLabel), kind);
     if (!label) return -1;
     let id = this.idByLabel.get(label);
     if (id === undefined) {

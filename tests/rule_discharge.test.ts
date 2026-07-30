@@ -469,7 +469,7 @@ export async function runRuleDischargeTests(): Promise<void> {
       }
     });
 
-    await it("withholds CWA denial when the entity is aliased across precepts", async () => {
+    await it("interns a multi-word entity to ONE precept across both parsers", async () => {
       const physics = DOPAT_CONFIG.PHYSICS as unknown as {
         TEXT_GRAPH_INGESTION_ENABLED: boolean;
         TEXT_GRAPH_QUERY_ENABLED: boolean;
@@ -491,27 +491,56 @@ export async function runRuleDischargeTests(): Promise<void> {
       const store = new Store(system, atomizer, ":memory:");
       await store.waitForInit();
       try {
-        // A multi-word entity lands on TWO precepts: LogicGraph delegation
-        // interns the full noun phrase for copula surface ("bald eagle"),
-        // the grammatical pass interns the head noun for SVO ("eagle"). The
-        // closure then holds only half the entity's record, so denial from
-        // non-derivability is denial from a split ledger, not from the
-        // theory. Silence is the only sound verdict until the split is fixed.
+        // A multi-word entity used to land on TWO precepts: LogicGraph
+        // delegation interned the full noun phrase for copula surface
+        // ("bald eagle") while the grammatical pass interned the head noun
+        // for SVO ("eagle"), splitting the theory's knowledge across precepts
+        // the closure treats as unrelated. Head-noun normalisation in
+        // GraphBuilder.ensure keeps both parsers on one label.
+        //
+        // The copula sentence is the one that used to intern the full phrase,
+        // and the SVO sentence the head noun; asking via the copula surface
+        // must now see what the SVO sentence asserted.
         groundTextIfEnabled(
-          ["the bald eagle visits the cat", "the bald eagle is red"],
+          ["the bald eagle chases the cat", "the bald eagle is red"],
           system,
           atomizer
         );
-        physics.TEXT_GRAPH_CWA_ENABLED = true;
-        try {
-          assert.strictEqual(
-            resolveGraphQuery("is the bald eagle big?", system, atomizer),
-            null,
-            "aliased subject must not be denied under CWA"
-          );
-        } finally {
-          physics.TEXT_GRAPH_CWA_ENABLED = false;
-        }
+        // Declarative surfaces deliberately: aux-fronted questions with a
+        // MULTI-WORD subject are canonicalized wrongly by
+        // questionToProposition ("is the bald eagle red?" -> "the bald is
+        // eagle red"), because its subject/predicate split is non-greedy and
+        // stops at the first word. That is a separate, pre-existing defect
+        // (do-support escapes it by dropping the auxiliary rather than
+        // re-seating it) and the deduction corpora ask declaratively, so it
+        // is out of scope here - but it must not be allowed to masquerade as
+        // an aliasing failure, hence this note.
+        assert.strictEqual(
+          resolveGraphQuery("the bald eagle is red?", system, atomizer)?.answer,
+          "the bald eagle is red",
+          "copula-interned fact resolves under the canonical head"
+        );
+        assert.strictEqual(
+          resolveGraphQuery("the bald eagle chases the cat?", system, atomizer)
+            ?.answer,
+          "the bald eagle chases the cat",
+          "SVO-interned fact resolves under the same head"
+        );
+        // Both facts landing on one precept is the invariant; assert it
+        // directly so a regression cannot hide behind a phrasing change.
+        const eagleIds = [
+          ...system.getIdsByScope(atomizer.getSymbolScope("eagle", false)),
+        ].filter(
+          id =>
+            system.isAllocated(id) &&
+            (system.textGroundedEdges.has(id) ||
+              system.textGroundedTripleParticipants.has(id))
+        );
+        assert.strictEqual(
+          eagleIds.length,
+          1,
+          "the entity occupies exactly one ledger precept"
+        );
       } finally {
         physics.TEXT_GRAPH_INGESTION_ENABLED = prev.i;
         physics.TEXT_GRAPH_QUERY_ENABLED = prev.q;

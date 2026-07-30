@@ -312,11 +312,70 @@ letting the chain derive; its value is removing a latent unsoundness class
 this corpus happens not to probe. Neither should be credited with more than
 it did.
 
-Still open: the gate makes aliasing SAFE, not FIXED. Those 14% of items
-remain split across precepts and are now silent rather than wrong. Recovering
-that abstention means reconciling the two noun-phrase conventions - either
-narrowing LogicGraph delegation to genuinely symbolic surface, or routing its
-captures through the same NP-head extraction the grammatical pass uses.
+## 2026-07-30 (later still) - aliasing FIXED at the source
+
+The gate above made aliasing safe; this makes it not happen. Both parsers
+already share one `ensure` (TextGraph's `DedupGraphBuilder extends`
+LogicGraph's `GraphBuilder`), so the divergence was purely in what string
+each passed in. **`GraphBuilder.ensure` now reduces a multi-word Term label
+to its head** (`npHead`, LogicGraph.ts), which is the convention the
+grammatical pass already used via `collectNpGroups`. One entity, one label,
+enforced at the single point both parsers meet - they cannot drift apart
+again.
+
+Chosen over the alternative of narrowing LogicGraph delegation, because the
+"subsumes LogicGraph on every sweep corpus" guard compares
+`buildGraphFromText` against `buildGraphFromLogic` BY LABEL: removing
+delegation would let the two label sets diverge and break it, while changing
+`ensure` moves both sides identically. The sweep corpora are all single-word
+entities, so the reduction is a no-op there.
+
+Two refinements the guards forced, both worth keeping:
+
+- **Coordinated spans are exempt.** Delegation hands `ensure` the whole
+  subject span of "cats or dogs are pets"; reducing it to `dog` collided with
+  the node the grammatical pass distributes to, and dedup then swallowed that
+  disjunct's softened w0.5 edge. Only a SIMPLE noun phrase has one head, so
+  spans containing a coordinator or preposition are left alone.
+- **The simple-NP test runs on the RAW span**, not the lemmatised one:
+  `lemma()` filters through compromise's `.nouns()`, which drops the
+  coordinator, so "cats or dogs" arrives already looking simple.
+
+Measured, honest mode, 160 items:
+
+| configuration | balAcc | abstain | confFalse |
+| ------------- | ------ | ------- | --------- |
+| OWA before | 83.8% | 33.8% | 0 |
+| **OWA after (new pin)** | **84.3%** | 33.1% | 0 |
+| CWA + gate (previous) | 96.7% | 16.9% | 0 |
+| **CWA after** | **97.6%** | 15.6% | 0 |
+
+ruletaker d3 AND d5 now 100%; d0/d1/d2 95%. Against the OWA pin the full
+per-item picture is **29 GAIN, 0 BROKE, 0 LOSS, 0 CHURN**.
+
+**Sizing correction, on the record:** 23/160 items (14%) contain a multi-word
+entity, and that figure was offered as an upper bound on what the fix might
+recover. It recovered **2**. The split only mattered where a derivation had
+to cross both halves; everywhere else the sparse half was never consulted.
+The 14% was a measure of exposure, not of harm, and should not be cited as
+the fix's value.
+
+**The `entityAliased` gate was removed, not kept as a safety net.** With
+single-word Term labels it can never fire, so it was unreachable code whose
+guard test could not be written honestly. Per the repo's own rule - a
+superseded path with no capability delta is deleted, not archived - it is
+gone, and the CWA denial branch in GraphQuery now documents that its
+soundness rests on the normalisation instead.
+
+**Separate defect found and NOT fixed here:** `questionToProposition`
+mis-canonicalizes aux-fronted questions with a multi-word subject - "is the
+bald eagle red?" becomes "the bald is eagle red", because its
+subject/predicate split is non-greedy and stops at the first word. Do-support
+escapes it (it drops the auxiliary rather than re-seating it), and the
+deduction corpora ask declaratively, so nothing here is affected. Fixing it
+needs real NP parsing, not a greedier regex: greedy would break
+"is felix a mammal". Pinned as a note in `tests/rule_discharge.test.ts` so it
+cannot later be mistaken for an aliasing regression.
 
 **Disposition: CWA now clears the covenant's red line** (confFalse 0) and is
 enabled per dataset by `--cwa`. The default remains open-world and the pin is

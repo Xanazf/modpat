@@ -1,0 +1,320 @@
+{"kind":"attempt","id":"AttNeg-D0-1924-4"}
+{"kind":"result","id":"AttNeg-D0-1924-4","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"AttNeg-D0-2816-1"}
+{"kind":"result","id":"AttNeg-D0-2816-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"deny","honestVerdict":"affirm","honestAnswer":"gary is cold","unparsed":0,"sentences":22}
+{"kind":"attempt","id":"AttNeg-D0-3759-1"}
+{"kind":"result","id":"AttNeg-D0-3759-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"fiona is white","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"AttNeg-D0-3811-2"}
+{"kind":"result","id":"AttNeg-D0-3811-2","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"no, bob is not green","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNeg-D0-5246-2"}
+{"kind":"result","id":"AttNeg-D0-5246-2","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"affirm","honestVerdict":"deny","honestAnswer":"erin is cold","unparsed":0,"sentences":24}
+{"kind":"attempt","id":"AttNeg-D0-6474-1"}
+{"kind":"result","id":"AttNeg-D0-6474-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"erin is cold","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"AttNeg-D0-6903-1"}
+{"kind":"result","id":"AttNeg-D0-6903-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"gary is smart","unparsed":0,"sentences":5}
+{"kind":"attempt","id":"AttNoneg-D0-2910-4"}
+{"kind":"result","id":"AttNoneg-D0-2910-4","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"AttNoneg-D0-612-1"}
+{"kind":"result","id":"AttNoneg-D0-612-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"dave is nice","unparsed":0,"sentences":14}
+{"kind":"attempt","id":"AttNoneg-D0-7039-4"}
+{"kind":"result","id":"AttNoneg-D0-7039-4","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"AttNoneg-D0-808-1"}
+{"kind":"result","id":"AttNoneg-D0-808-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"bob is red","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"RelNeg-D0-1472-2"}
+{"kind":"result","id":"RelNeg-D0-1472-2","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"the squirrel does need the cat","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"RelNeg-D0-1660-1"}
+{"kind":"result","id":"RelNeg-D0-1660-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"correct, the tiger does not eat the mouse","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"RelNeg-D0-4838-3"}
+{"kind":"result","id":"RelNeg-D0-4838-3","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":6}
+{"kind":"attempt","id":"RelNeg-D0-5710-2"}
+{"kind":"result","id":"RelNeg-D0-5710-2","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"bear is nice","unparsed":0,"sentences":7}
+{"kind":"attempt","id":"RelNoneg-D0-1614-2"}
+{"kind":"result","id":"RelNoneg-D0-1614-2","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"lion is nice","unparsed":0,"sentences":4}
+{"kind":"attempt","id":"RelNoneg-D0-3007-1"}
+{"kind":"result","id":"RelNoneg-D0-3007-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the dog needs the tiger","unparsed":0,"sentences":8}
+{"kind":"attempt","id":"RelNoneg-D0-5843-1"}
+{"kind":"result","id":"RelNoneg-D0-5843-1","ds":"ruletaker","depth":0,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the cat is young","unparsed":0,"sentences":16}
+{"kind":"attempt","id":"RelNoneg-D0-5843-4"}
+{"kind":"result","id":"RelNoneg-D0-5843-4","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":16}
+{"kind":"attempt","id":"RelNoneg-D0-6051-4"}
+{"kind":"result","id":"RelNoneg-D0-6051-4","ds":"ruletaker","depth":0,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNeg-D1-1542-3"}
+{"kind":"result","id":"AttNeg-D1-1542-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":16}
+{"kind":"attempt","id":"AttNeg-D1-1903-4"}
+{"kind":"result","id":"AttNeg-D1-1903-4","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"AttNeg-D1-3325-3"}
+{"kind":"result","id":"AttNeg-D1-3325-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"correct, dave is not quiet","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"AttNoneg-D1-1166-3"}
+{"kind":"result","id":"AttNoneg-D1-1166-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"gary is rough","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"AttNoneg-D1-1201-3"}
+{"kind":"result","id":"AttNoneg-D1-1201-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"bob is white","unparsed":0,"sentences":5}
+{"kind":"attempt","id":"AttNoneg-D1-1523-6"}
+{"kind":"result","id":"AttNoneg-D1-1523-6","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"AttNoneg-D1-1830-3"}
+{"kind":"result","id":"AttNoneg-D1-1830-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"dave is round","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"AttNoneg-D1-1990-4"}
+{"kind":"result","id":"AttNoneg-D1-1990-4","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"anne is green","unparsed":0,"sentences":22}
+{"kind":"attempt","id":"AttNoneg-D1-2870-4"}
+{"kind":"result","id":"AttNoneg-D1-2870-4","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"gary is rough","unparsed":0,"sentences":24}
+{"kind":"attempt","id":"AttNoneg-D1-2943-4"}
+{"kind":"result","id":"AttNoneg-D1-2943-4","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"erin is green","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNoneg-D1-558-3"}
+{"kind":"result","id":"AttNoneg-D1-558-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"harry is blue","unparsed":0,"sentences":7}
+{"kind":"attempt","id":"RelNeg-D1-1410-4"}
+{"kind":"result","id":"RelNeg-D1-1410-4","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":8}
+{"kind":"attempt","id":"RelNoneg-D1-1345-5"}
+{"kind":"result","id":"RelNoneg-D1-1345-5","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNoneg-D1-1387-3"}
+{"kind":"result","id":"RelNoneg-D1-1387-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the cow visits the cow","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"RelNoneg-D1-2169-6"}
+{"kind":"result","id":"RelNoneg-D1-2169-6","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"RelNoneg-D1-2479-3"}
+{"kind":"result","id":"RelNoneg-D1-2479-3","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the rabbit needs the bald eagle","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"RelNoneg-D1-2509-5"}
+{"kind":"result","id":"RelNoneg-D1-2509-5","ds":"ruletaker","depth":1,"gold":"true","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"RelNoneg-D1-2991-4"}
+{"kind":"result","id":"RelNoneg-D1-2991-4","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"tiger is nice","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"RelNoneg-D1-8-4"}
+{"kind":"result","id":"RelNoneg-D1-8-4","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"the cat does chase the lion","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"RelNoneg-D1-961-6"}
+{"kind":"result","id":"RelNoneg-D1-961-6","ds":"ruletaker","depth":1,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"AttNeg-D2-173-6"}
+{"kind":"result","id":"AttNeg-D2-173-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"anne is blue","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"AttNeg-D2-1905-6"}
+{"kind":"result","id":"AttNeg-D2-1905-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNeg-D2-286-6"}
+{"kind":"result","id":"AttNeg-D2-286-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"erin is cold","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"AttNeg-D2-677-5"}
+{"kind":"result","id":"AttNeg-D2-677-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"deny","honestVerdict":"affirm","honestAnswer":"fiona is green","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"AttNoneg-D2-1181-5"}
+{"kind":"result","id":"AttNoneg-D2-1181-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"dave is green","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"AttNoneg-D2-1706-6"}
+{"kind":"result","id":"AttNoneg-D2-1706-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"dave is kind","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"AttNoneg-D2-1724-9"}
+{"kind":"result","id":"AttNoneg-D2-1724-9","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":8}
+{"kind":"attempt","id":"AttNoneg-D2-352-6"}
+{"kind":"result","id":"AttNoneg-D2-352-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"anne is kind","unparsed":0,"sentences":6}
+{"kind":"attempt","id":"AttNoneg-D2-408-7"}
+{"kind":"result","id":"AttNoneg-D2-408-7","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":6}
+{"kind":"attempt","id":"AttNoneg-D2-64-6"}
+{"kind":"result","id":"AttNoneg-D2-64-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"bob is red","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNeg-D2-1089-5"}
+{"kind":"result","id":"RelNeg-D2-1089-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":1,"sentences":18}
+{"kind":"attempt","id":"RelNeg-D2-160-5"}
+{"kind":"result","id":"RelNeg-D2-160-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":13}
+{"kind":"attempt","id":"RelNeg-D2-424-6"}
+{"kind":"result","id":"RelNeg-D2-424-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"RelNoneg-D2-118-8"}
+{"kind":"result","id":"RelNoneg-D2-118-8","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNoneg-D2-1251-5"}
+{"kind":"result","id":"RelNoneg-D2-1251-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the squirrel eats the squirrel","unparsed":0,"sentences":14}
+{"kind":"attempt","id":"RelNoneg-D2-158-6"}
+{"kind":"result","id":"RelNoneg-D2-158-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"the eagle does need the bear","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"RelNoneg-D2-1879-6"}
+{"kind":"result","id":"RelNoneg-D2-1879-6","ds":"ruletaker","depth":2,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"the tiger does need the cat","unparsed":0,"sentences":20}
+{"kind":"attempt","id":"RelNoneg-D2-2002-5"}
+{"kind":"result","id":"RelNoneg-D2-2002-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the mouse is rough","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNoneg-D2-25-5"}
+{"kind":"result","id":"RelNoneg-D2-25-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the tiger chases the tiger","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"RelNoneg-D2-68-5"}
+{"kind":"result","id":"RelNoneg-D2-68-5","ds":"ruletaker","depth":2,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the lion visits the lion","unparsed":0,"sentences":24}
+{"kind":"attempt","id":"AttNeg-D3-1378-7"}
+{"kind":"result","id":"AttNeg-D3-1378-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":13}
+{"kind":"attempt","id":"AttNeg-D3-422-8"}
+{"kind":"result","id":"AttNeg-D3-422-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"fiona is blue","unparsed":0,"sentences":16}
+{"kind":"attempt","id":"AttNeg-D3-518-8"}
+{"kind":"result","id":"AttNeg-D3-518-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"harry is green","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"AttNeg-D3-712-11"}
+{"kind":"result","id":"AttNeg-D3-712-11","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"AttNoneg-D3-145-8"}
+{"kind":"result","id":"AttNoneg-D3-145-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"charlie is nice","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNoneg-D3-1824-7"}
+{"kind":"result","id":"AttNoneg-D3-1824-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"harry is cold","unparsed":0,"sentences":13}
+{"kind":"attempt","id":"AttNoneg-D3-476-7"}
+{"kind":"result","id":"AttNoneg-D3-476-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"dave is smart","unparsed":0,"sentences":7}
+{"kind":"attempt","id":"AttNoneg-D3-894-7"}
+{"kind":"result","id":"AttNoneg-D3-894-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"bob is white","unparsed":0,"sentences":8}
+{"kind":"attempt","id":"AttNoneg-D3-908-8"}
+{"kind":"result","id":"AttNoneg-D3-908-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"anne is kind","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"RelNeg-D3-1331-8"}
+{"kind":"result","id":"RelNeg-D3-1331-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"RelNeg-D3-1333-7"}
+{"kind":"result","id":"RelNeg-D3-1333-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNeg-D3-36-8"}
+{"kind":"result","id":"RelNeg-D3-36-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":7}
+{"kind":"attempt","id":"RelNeg-D3-441-8"}
+{"kind":"result","id":"RelNeg-D3-441-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"bear is rough","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"RelNoneg-D3-1035-7"}
+{"kind":"result","id":"RelNoneg-D3-1035-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the squirrel is cold","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"RelNoneg-D3-1046-8"}
+{"kind":"result","id":"RelNoneg-D3-1046-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"dog is nice","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"RelNoneg-D3-1437-7"}
+{"kind":"result","id":"RelNoneg-D3-1437-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the squirrel visits the mouse","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"RelNoneg-D3-261-7"}
+{"kind":"result","id":"RelNoneg-D3-261-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the rabbit is young","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"RelNoneg-D3-575-8"}
+{"kind":"result","id":"RelNoneg-D3-575-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"the mouse does see the mouse","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"RelNoneg-D3-646-8"}
+{"kind":"result","id":"RelNoneg-D3-646-8","ds":"ruletaker","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"the dog does need the dog","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNoneg-D3-933-7"}
+{"kind":"result","id":"RelNoneg-D3-933-7","ds":"ruletaker","depth":3,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the rabbit visits the rabbit","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"AttNeg-D5-1101-11"}
+{"kind":"result","id":"AttNeg-D5-1101-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"AttNeg-D5-15-12"}
+{"kind":"result","id":"AttNeg-D5-15-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"affirm","honestVerdict":"deny","honestAnswer":"harry is furry","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"AttNeg-D5-329-12"}
+{"kind":"result","id":"AttNeg-D5-329-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"AttNeg-D5-949-11"}
+{"kind":"result","id":"AttNeg-D5-949-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"deny","honestVerdict":"affirm","honestAnswer":"fiona is quiet","unparsed":0,"sentences":20}
+{"kind":"attempt","id":"AttNoneg-D5-1029-12"}
+{"kind":"result","id":"AttNoneg-D5-1029-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"bob is young","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"AttNoneg-D5-1352-11"}
+{"kind":"result","id":"AttNoneg-D5-1352-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"erin is green","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"AttNoneg-D5-1354-12"}
+{"kind":"result","id":"AttNoneg-D5-1354-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"erin is white","unparsed":0,"sentences":23}
+{"kind":"attempt","id":"AttNoneg-D5-166-12"}
+{"kind":"result","id":"AttNoneg-D5-166-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"fiona is young","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"AttNoneg-D5-374-11"}
+{"kind":"result","id":"AttNoneg-D5-374-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"gary is smart","unparsed":0,"sentences":16}
+{"kind":"attempt","id":"AttNoneg-D5-377-12"}
+{"kind":"result","id":"AttNoneg-D5-377-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"erin is kind","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNeg-D5-254-12"}
+{"kind":"result","id":"RelNeg-D5-254-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":21}
+{"kind":"attempt","id":"RelNeg-D5-41-11"}
+{"kind":"result","id":"RelNeg-D5-41-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the bear sees the bear","unparsed":1,"sentences":13}
+{"kind":"attempt","id":"RelNeg-D5-425-12"}
+{"kind":"result","id":"RelNeg-D5-425-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":14}
+{"kind":"attempt","id":"RelNeg-D5-586-12"}
+{"kind":"result","id":"RelNeg-D5-586-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"no, eagle is not blue","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNeg-D5-824-11"}
+{"kind":"result","id":"RelNeg-D5-824-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"RelNoneg-D5-1026-11"}
+{"kind":"result","id":"RelNoneg-D5-1026-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the bear visits the cat","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"RelNoneg-D5-640-11"}
+{"kind":"result","id":"RelNoneg-D5-640-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the cow visits the lion","unparsed":0,"sentences":20}
+{"kind":"attempt","id":"RelNoneg-D5-821-11"}
+{"kind":"result","id":"RelNoneg-D5-821-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the rabbit is young","unparsed":0,"sentences":20}
+{"kind":"attempt","id":"RelNoneg-D5-826-11"}
+{"kind":"result","id":"RelNoneg-D5-826-11","ds":"ruletaker","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the lion is red","unparsed":0,"sentences":21}
+{"kind":"attempt","id":"RelNoneg-D5-839-12"}
+{"kind":"result","id":"RelNoneg-D5-839-12","ds":"ruletaker","depth":5,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"the lion does chase the tiger","unparsed":0,"sentences":20}
+{"kind":"attempt","id":"AttNeg-OWA-D0-1998-Q2"}
+{"kind":"result","id":"AttNeg-OWA-D0-1998-Q2","ds":"proofwriter","depth":0,"gold":"false","fastVerdict":"affirm","honestVerdict":"deny","honestAnswer":"charlie is cold","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"AttNeg-OWA-D0-3951-Q2"}
+{"kind":"result","id":"AttNeg-OWA-D0-3951-Q2","ds":"proofwriter","depth":0,"gold":"false","fastVerdict":"affirm","honestVerdict":"deny","honestAnswer":"gary is kind","unparsed":0,"sentences":8}
+{"kind":"attempt","id":"AttNeg-OWA-D0-903-Q3"}
+{"kind":"result","id":"AttNeg-OWA-D0-903-Q3","ds":"proofwriter","depth":0,"gold":"unknown","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":22}
+{"kind":"attempt","id":"AttNoneg-OWA-D0-3583-Q1"}
+{"kind":"result","id":"AttNoneg-OWA-D0-3583-Q1","ds":"proofwriter","depth":0,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"anne is round","unparsed":0,"sentences":5}
+{"kind":"attempt","id":"AttNoneg-OWA-D0-5551-Q3"}
+{"kind":"result","id":"AttNoneg-OWA-D0-5551-Q3","ds":"proofwriter","depth":0,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"RelNeg-OWA-D0-1708-Q3"}
+{"kind":"result","id":"RelNeg-OWA-D0-1708-Q3","ds":"proofwriter","depth":0,"gold":"unknown","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":2,"sentences":17}
+{"kind":"attempt","id":"RelNeg-OWA-D0-1798-Q3"}
+{"kind":"result","id":"RelNeg-OWA-D0-1798-Q3","ds":"proofwriter","depth":0,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"RelNeg-OWA-D0-1897-Q2"}
+{"kind":"result","id":"RelNeg-OWA-D0-1897-Q2","ds":"proofwriter","depth":0,"gold":"false","fastVerdict":"affirm","honestVerdict":"deny","honestAnswer":"no, the squirrel does not see the dog","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNeg-OWA-D0-938-Q1"}
+{"kind":"result","id":"RelNeg-OWA-D0-938-Q1","ds":"proofwriter","depth":0,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the tiger is green","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"RelNoneg-OWA-D0-4028-Q2"}
+{"kind":"result","id":"RelNoneg-OWA-D0-4028-Q2","ds":"proofwriter","depth":0,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"eagle is big","unparsed":0,"sentences":4}
+{"kind":"attempt","id":"RelNoneg-OWA-D0-4941-Q1"}
+{"kind":"result","id":"RelNoneg-OWA-D0-4941-Q1","ds":"proofwriter","depth":0,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the tiger sees the cat","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"RelNoneg-OWA-D0-5993-Q1"}
+{"kind":"result","id":"RelNoneg-OWA-D0-5993-Q1","ds":"proofwriter","depth":0,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the cow likes the bald eagle","unparsed":0,"sentences":13}
+{"kind":"attempt","id":"AttNeg-OWA-D1-2951-Q3"}
+{"kind":"result","id":"AttNeg-OWA-D1-2951-Q3","ds":"proofwriter","depth":1,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"charlie is kind","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"AttNeg-OWA-D1-2974-Q4"}
+{"kind":"result","id":"AttNeg-OWA-D1-2974-Q4","ds":"proofwriter","depth":1,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"erin is green","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"AttNeg-OWA-D1-603-Q8"}
+{"kind":"result","id":"AttNeg-OWA-D1-603-Q8","ds":"proofwriter","depth":1,"gold":"unknown","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"AttNoneg-OWA-D1-1086-Q3"}
+{"kind":"result","id":"AttNoneg-OWA-D1-1086-Q3","ds":"proofwriter","depth":1,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"anne is quiet","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"AttNoneg-OWA-D1-1576-Q3"}
+{"kind":"result","id":"AttNoneg-OWA-D1-1576-Q3","ds":"proofwriter","depth":1,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"harry is nice","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"AttNoneg-OWA-D1-407-Q7"}
+{"kind":"result","id":"AttNoneg-OWA-D1-407-Q7","ds":"proofwriter","depth":1,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":13}
+{"kind":"attempt","id":"AttNoneg-OWA-D1-643-Q7"}
+{"kind":"result","id":"AttNoneg-OWA-D1-643-Q7","ds":"proofwriter","depth":1,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":8}
+{"kind":"attempt","id":"AttNoneg-OWA-D1-984-Q4"}
+{"kind":"result","id":"AttNoneg-OWA-D1-984-Q4","ds":"proofwriter","depth":1,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"gary is cold","unparsed":0,"sentences":4}
+{"kind":"attempt","id":"RelNoneg-OWA-D1-1237-Q4"}
+{"kind":"result","id":"RelNoneg-OWA-D1-1237-Q4","ds":"proofwriter","depth":1,"gold":"false","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"RelNoneg-OWA-D1-2335-Q6"}
+{"kind":"result","id":"RelNoneg-OWA-D1-2335-Q6","ds":"proofwriter","depth":1,"gold":"unknown","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"RelNoneg-OWA-D1-2733-Q4"}
+{"kind":"result","id":"RelNoneg-OWA-D1-2733-Q4","ds":"proofwriter","depth":1,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"the squirrel does chase the bear","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"RelNoneg-OWA-D1-484-Q3"}
+{"kind":"result","id":"RelNoneg-OWA-D1-484-Q3","ds":"proofwriter","depth":1,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the tiger sees the tiger","unparsed":0,"sentences":23}
+{"kind":"attempt","id":"AttNeg-OWA-D2-2017-Q7"}
+{"kind":"result","id":"AttNeg-OWA-D2-2017-Q7","ds":"proofwriter","depth":2,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNoneg-OWA-D2-180-Q8"}
+{"kind":"result","id":"AttNoneg-OWA-D2-180-Q8","ds":"proofwriter","depth":2,"gold":"unknown","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"AttNoneg-OWA-D2-353-Q10"}
+{"kind":"result","id":"AttNoneg-OWA-D2-353-Q10","ds":"proofwriter","depth":2,"gold":"unknown","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNoneg-OWA-D2-353-Q6"}
+{"kind":"result","id":"AttNoneg-OWA-D2-353-Q6","ds":"proofwriter","depth":2,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"harry is green","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNoneg-OWA-D2-822-Q6"}
+{"kind":"result","id":"AttNoneg-OWA-D2-822-Q6","ds":"proofwriter","depth":2,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"bob is white","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"AttNoneg-OWA-D2-869-Q5"}
+{"kind":"result","id":"AttNoneg-OWA-D2-869-Q5","ds":"proofwriter","depth":2,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"harry is smart","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"RelNeg-OWA-D2-1317-Q5"}
+{"kind":"result","id":"RelNeg-OWA-D2-1317-Q5","ds":"proofwriter","depth":2,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the rabbit visits the rabbit","unparsed":1,"sentences":13}
+{"kind":"attempt","id":"RelNeg-OWA-D2-2064-Q5"}
+{"kind":"result","id":"RelNeg-OWA-D2-2064-Q5","ds":"proofwriter","depth":2,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the rabbit needs the cow","unparsed":0,"sentences":8}
+{"kind":"attempt","id":"RelNeg-OWA-D2-728-Q5"}
+{"kind":"result","id":"RelNeg-OWA-D2-728-Q5","ds":"proofwriter","depth":2,"gold":"true","fastVerdict":"deny","honestVerdict":"affirm","honestAnswer":"correct, the rabbit does not need the mouse","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"RelNoneg-OWA-D2-1780-Q6"}
+{"kind":"result","id":"RelNoneg-OWA-D2-1780-Q6","ds":"proofwriter","depth":2,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"tiger is cold","unparsed":0,"sentences":16}
+{"kind":"attempt","id":"RelNoneg-OWA-D2-1820-Q9"}
+{"kind":"result","id":"RelNoneg-OWA-D2-1820-Q9","ds":"proofwriter","depth":2,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":24}
+{"kind":"attempt","id":"RelNoneg-OWA-D2-2035-Q6"}
+{"kind":"result","id":"RelNoneg-OWA-D2-2035-Q6","ds":"proofwriter","depth":2,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"rabbit is round","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"AttNeg-OWA-D3-248-Q16"}
+{"kind":"result","id":"AttNeg-OWA-D3-248-Q16","ds":"proofwriter","depth":3,"gold":"unknown","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":10}
+{"kind":"attempt","id":"AttNeg-OWA-D3-257-Q8"}
+{"kind":"result","id":"AttNeg-OWA-D3-257-Q8","ds":"proofwriter","depth":3,"gold":"false","fastVerdict":"abstain","honestVerdict":"deny","honestAnswer":"fiona is cold","unparsed":0,"sentences":7}
+{"kind":"attempt","id":"AttNeg-OWA-D3-368-Q8"}
+{"kind":"result","id":"AttNeg-OWA-D3-368-Q8","ds":"proofwriter","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"gary is nice","unparsed":0,"sentences":16}
+{"kind":"attempt","id":"AttNeg-OWA-D3-983-Q7"}
+{"kind":"result","id":"AttNeg-OWA-D3-983-Q7","ds":"proofwriter","depth":3,"gold":"true","fastVerdict":"deny","honestVerdict":"affirm","honestAnswer":"charlie is rough","unparsed":0,"sentences":9}
+{"kind":"attempt","id":"AttNoneg-OWA-D3-6-Q7"}
+{"kind":"result","id":"AttNoneg-OWA-D3-6-Q7","ds":"proofwriter","depth":3,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"gary is nice","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"AttNoneg-OWA-D3-717-Q7"}
+{"kind":"result","id":"AttNoneg-OWA-D3-717-Q7","ds":"proofwriter","depth":3,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"harry is quiet","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"AttNoneg-OWA-D3-924-Q7"}
+{"kind":"result","id":"AttNoneg-OWA-D3-924-Q7","ds":"proofwriter","depth":3,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"anne is white","unparsed":0,"sentences":15}
+{"kind":"attempt","id":"RelNeg-OWA-D3-1216-Q8"}
+{"kind":"result","id":"RelNeg-OWA-D3-1216-Q8","ds":"proofwriter","depth":3,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"the mouse does see the mouse","unparsed":0,"sentences":11}
+{"kind":"attempt","id":"RelNeg-OWA-D3-193-Q8"}
+{"kind":"result","id":"RelNeg-OWA-D3-193-Q8","ds":"proofwriter","depth":3,"gold":"false","fastVerdict":"affirm","honestVerdict":"deny","honestAnswer":"no, tiger is not green","unparsed":0,"sentences":21}
+{"kind":"attempt","id":"RelNeg-OWA-D3-275-Q9"}
+{"kind":"result","id":"RelNeg-OWA-D3-275-Q9","ds":"proofwriter","depth":3,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":18}
+{"kind":"attempt","id":"RelNoneg-OWA-D3-1525-Q12"}
+{"kind":"result","id":"RelNoneg-OWA-D3-1525-Q12","ds":"proofwriter","depth":3,"gold":"unknown","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":12}
+{"kind":"attempt","id":"RelNoneg-OWA-D3-852-Q15"}
+{"kind":"result","id":"RelNoneg-OWA-D3-852-Q15","ds":"proofwriter","depth":3,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":20}
+{"kind":"attempt","id":"AttNeg-OWA-D5-206-Q12"}
+{"kind":"result","id":"AttNeg-OWA-D5-206-Q12","ds":"proofwriter","depth":5,"gold":"false","fastVerdict":"affirm","honestVerdict":"deny","honestAnswer":"no, dave is not red","unparsed":0,"sentences":13}
+{"kind":"attempt","id":"AttNeg-OWA-D5-799-Q12"}
+{"kind":"result","id":"AttNeg-OWA-D5-799-Q12","ds":"proofwriter","depth":5,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"bob is blue","unparsed":0,"sentences":17}
+{"kind":"attempt","id":"AttNeg-OWA-D5-91-Q22"}
+{"kind":"result","id":"AttNeg-OWA-D5-91-Q22","ds":"proofwriter","depth":5,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"AttNoneg-OWA-D5-1229-Q12"}
+{"kind":"result","id":"AttNoneg-OWA-D5-1229-Q12","ds":"proofwriter","depth":5,"gold":"false","fastVerdict":"deny","honestVerdict":"deny","honestAnswer":"dave is young","unparsed":0,"sentences":24}
+{"kind":"attempt","id":"AttNoneg-OWA-D5-1399-Q11"}
+{"kind":"result","id":"AttNoneg-OWA-D5-1399-Q11","ds":"proofwriter","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"dave is red","unparsed":0,"sentences":22}
+{"kind":"attempt","id":"AttNoneg-OWA-D5-205-Q11"}
+{"kind":"result","id":"AttNoneg-OWA-D5-205-Q11","ds":"proofwriter","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"erin is red","unparsed":0,"sentences":23}
+{"kind":"attempt","id":"RelNeg-OWA-D5-1042-Q12"}
+{"kind":"result","id":"RelNeg-OWA-D5-1042-Q12","ds":"proofwriter","depth":5,"gold":"false","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"RelNeg-OWA-D5-318-Q22"}
+{"kind":"result","id":"RelNeg-OWA-D5-318-Q22","ds":"proofwriter","depth":5,"gold":"unknown","fastVerdict":"affirm","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":25}
+{"kind":"attempt","id":"RelNeg-OWA-D5-458-Q11"}
+{"kind":"result","id":"RelNeg-OWA-D5-458-Q11","ds":"proofwriter","depth":5,"gold":"true","fastVerdict":"abstain","honestVerdict":"affirm","honestAnswer":"the cow needs the cow","unparsed":0,"sentences":19}
+{"kind":"attempt","id":"RelNoneg-OWA-D5-1023-Q21"}
+{"kind":"result","id":"RelNoneg-OWA-D5-1023-Q21","ds":"proofwriter","depth":5,"gold":"unknown","fastVerdict":"deny","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":22}
+{"kind":"attempt","id":"RelNoneg-OWA-D5-815-Q11"}
+{"kind":"result","id":"RelNoneg-OWA-D5-815-Q11","ds":"proofwriter","depth":5,"gold":"true","fastVerdict":"affirm","honestVerdict":"affirm","honestAnswer":"the cat likes the cat","unparsed":0,"sentences":23}
+{"kind":"attempt","id":"RelNoneg-OWA-D5-839-Q24"}
+{"kind":"result","id":"RelNoneg-OWA-D5-839-Q24","ds":"proofwriter","depth":5,"gold":"unknown","fastVerdict":"abstain","honestVerdict":"abstain","honestAnswer":"unknown","unparsed":0,"sentences":20}

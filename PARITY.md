@@ -176,8 +176,42 @@ Two qualifications kept explicit: the gate bought the COVENANT, not accuracy
 answered wrongly or abstained), and the `pairScoped` fix moved nothing
 measurable on these 160 items beyond letting the chain derive. The default
 stays open-world and the pin is unmoved: the world assumption belongs to the
-task, not the engine. Aliasing is now SAFE, not FIXED - recovering that
-silence means reconciling the two noun-phrase conventions (§3.1 residual).
+task, not the engine.
+
+**Fifth update (2026-07-30, same day, measured): aliasing fixed at the
+source; the deduction family stands at 97.6% / confFalse 0.** Both parsers
+already shared one `ensure` (TextGraph's builder extends LogicGraph's), so
+the fix is one line at that seam: multi-word Term labels reduce to their head
+noun - the convention the grammatical pass already used. Chosen over
+narrowing LogicGraph delegation because the subsumption guard compares the
+two builders BY LABEL, so changing `ensure` moves both sides together while
+removing delegation would let them diverge. Coordinated spans are exempt
+(only a simple NP has one head), tested on the raw span because `lemma()`
+drops the coordinator.
+
+| configuration | balAcc | abstain | confFalse |
+| ------------- | ------ | ------- | --------- |
+| OWA (new pin) | 84.3% | 33.1% | 0 |
+| **CWA** | **97.6%** | 15.6% | 0 |
+
+ruletaker d3 and d5 at 100%; 29 GAIN / 0 BROKE / 0 LOSS / 0 CHURN against the
+pin. The `entityAliased` gate was DELETED rather than kept: with single-word
+labels it is unreachable, and an untestable safety net is worse than a
+documented absence.
+
+**Sizing correction, on the record:** the 14% of items containing a
+multi-word entity was offered as an upper bound on what this fix might
+recover. It recovered 2 items. That figure measured exposure, not harm - the
+split only cost anything where a derivation had to cross both halves - and
+should not be cited as the fix's value.
+
+Residual deduction distance is now 15.6% abstention with zero error:
+proofwriter d1/d5 at 91.7%, ruletaker d0/d1/d2 at 95%. A separate front-end
+defect was found and deliberately not fixed here: `questionToProposition`
+mis-canonicalizes aux-fronted questions with multi-word subjects ("is the
+bald eagle red?" -> "the bald is eagle red"); it needs real NP parsing rather
+than a greedier regex, and the corpora ask declaratively so nothing measured
+here depends on it.
 
 ## 3. The gap inventory
 
