@@ -147,6 +147,129 @@ own gate, so the harness leaves it off for every dataset per the covenant
 recall (60-75% balAcc, not higher) is the visible residual in the pinned
 numbers: OWA correctly cannot deny a fact it merely fails to derive.
 
+> **⚠ The confFalse 5→16 measurement above is CONFOUNDED - do not cite it as
+> evidence about CWA.** It was taken against a tree that still contained
+> BOTH defects fixed later the same day in `87fca2a`: (1) the
+> reflexive-derivation guard, proven WRONG against gold labels, which by
+> this file's own account was "silently flipping correct derivations to
+> wrong denials **once combined with closed-world mode**" - i.e. the guard's
+> damage was *measured through* the CWA run and attributed to CWA; and (2)
+> the ungated `perceiveCoherent` path that produced all 5 confident
+> falsehoods in that run's own baseline. The `5` and the `16` are both
+> pre-fix numbers. See the 2026-07-30 re-measurement below.
+
+## 2026-07-30 - audit baseline, valve reach, and the CWA re-measurement
+
+Three measurements against `f39f5e2` (PARITY §5 next-steps 1-3), all with
+per-item checkpoints so later diffs need no re-run.
+
+**1. Audit baseline (`baseline_owa.checkpoint.jsonl`).** The pinned
+configuration re-run with `--checkpoint --no-pin`. It reproduced the pin
+**exactly** - all ten families plus overall, 83.8% / 33.8% / confFalse 0,
+byte-identical aggregates. The pipeline is deterministic across runs at this
+configuration, and there is now a committed per-item reference for every
+future diff (previously the audit trail was aggregates only, so explaining a
+regression required a full re-run to reconstruct "before").
+
+Residual composition, which the family aggregates cannot show:
+
+| bucket | n | abstain | confFalse |
+| ------ | - | ------- | --------- |
+| proofwriter gold=true | 20 | 0 | 0 |
+| proofwriter gold=false | 20 | 2 | 0 |
+| proofwriter gold=unknown | 20 | 20 (correct - abstention IS the gold) | 0 |
+| ruletaker gold=true | 50 | 13 | 0 |
+| ruletaker gold=false | 50 | 19 | 0 |
+
+Two consequences. ProofWriter is effectively solved (58/60; its 33.3%
+abstention floor *is* the gold-unknown third answered correctly). And on
+RuleTaker, balanced accuracy equals `1 − abstentionRate` at every depth,
+which is only possible because **every committed answer on all 100 items is
+correct** - the deduction residual is 34 items of pure silence and zero
+error.
+
+**2. Parse-completeness valve reach.** CWA denial is double-gated on
+`TEXT_GRAPH_CWA_ENABLED && textGroundedUnparsed === 0`, so a theory with one
+unreadable sentence is CWA-ineligible regardless of the flag. Measured
+per item (now recorded in every checkpoint): **156/160 eligible (97.5%)** -
+ruletaker 98/100, proofwriter 58/60 - and **19/19** of the CWA-target class
+(ruletaker, gold=false, abstained) is eligible. The valve is not what limits
+closed-world mode; its ceiling is essentially the whole corpus. Had this
+come out low, the next item would have been parser coverage (PARITY §3.1
+residual) rather than CWA.
+
+**3. CWA re-measured on the fixed tree (`cwa.checkpoint.jsonl`).** Same
+per-dataset toggle as the reverted attempt - RuleTaker closed-world,
+ProofWriter open-world - now behind `--cwa` (which implies `--no-pin`, so an
+exploratory run can never move the pin). Honest mode:
+
+| | balAcc | abstain | confFalse |
+| - | ------ | ------- | --------- |
+| OWA (pinned) | 83.8% | 33.8% | 0 |
+| **CWA (RuleTaker only)** | **96.7%** | **16.3%** | **1** |
+
+Per depth, ruletaker: d0 70→95%, d1 60→95%, d2 65→95%, d3 75→**100%**,
+d5 70→90%. ProofWriter is byte-identical across the two runs - the correct
+control, confirming the toggle is scoped to the dataset whose task
+definition is closed-world.
+
+Per-item classification (`scripts/dev/checkpoint_analysis.ts`, OWA→CWA):
+**27 GAIN** (silence→correct), **1 BROKE**, **0 LOSS**, 0 CHURN, 0 FIX.
+
+**The confFalse 5→16 characterization is refuted.** On a tree without the
+wrong reflexivity guard and without the ungated perception path, the same
+mechanism yields +12.9pp balanced accuracy at **one** confident falsehood,
+not eleven more. Nearly all of the reverted attempt's damage belonged to the
+two defects it was measured through.
+
+**The one break, and why it is the interesting result.**
+`RelNeg-D5-254-12` (gold=false, "The bald eagle is not big") went
+abstain→affirm with GraphQuery's negated-question denial surface
+("correct, bald eagle is not big"), i.e. CWA denied `big(bald eagle)` as
+non-derivable. It IS derivable, at depth 5:
+
+```
+  cow does not visit cat            (asserted)
+  -> cat needs dog                  (if cow does not visit cat then cat needs dog)
+  -> dog is kind                    (if something needs the dog then the dog is kind)
+  -> dog needs cat                  (if something is kind then it needs the cat)
+  -> dog needs bald eagle           (if something needs the cat AND the cat is not
+                                     kind then it needs the bald eagle)   <-- NAF here
+  -> bald eagle is big              (if the dog is kind and the dog needs the bald
+                                     eagle then the bald eagle is big)
+```
+
+The chain needs negation-as-failure on "the cat is not kind" as an
+INTERMEDIATE step feeding a positive conclusion - nested NAF, which is
+exactly where the closure's stratification approximation (alternating
+`firePass(false)` / `firePass(true)`, GraphQuery.ts) is weakest. Leading
+hypothesis, not yet isolated; `MAX_RULE_ITERATIONS = 16` is not the limit
+(the chain is 5 hops).
+
+**The structural lesson, which outlives this item:** under open-world
+semantics incompleteness is SAFE - a derivation the engine cannot complete
+becomes silence, and silence is scored as abstention. Under closed-world
+semantics incompleteness is UNSAFE - every gap in the closure is
+indistinguishable from a fact that is genuinely underivable, so it converts
+directly into a confident falsehood. CWA does not add a new way to be
+wrong about logic; it removes the safety margin that was hiding the
+derivation gaps. That is why it trades 27 gains for 1 break rather than
+being uniformly good or bad, and it means CWA's true prerequisite is
+closure COMPLETENESS, not more closure soundness.
+
+**Disposition: CWA stays OFF by default and the pin is unmoved.** confFalse
+1 > 0 fails the covenant's red line ("the characteristic failure must remain
+silence"), and the harness exits 1 on it, as designed. The reproduction:
+
+```bash
+tsx tests/benchmarks/external_benchmarks.ts --datasets \
+  --checkpoint data/benchmarks/baseline_owa.checkpoint.jsonl --no-pin
+tsx tests/benchmarks/external_benchmarks.ts --datasets \
+  --checkpoint data/benchmarks/cwa.checkpoint.jsonl --cwa
+tsx scripts/dev/checkpoint_analysis.ts \
+  data/benchmarks/baseline_owa.checkpoint.jsonl data/benchmarks/cwa.checkpoint.jsonl
+```
+
 Final per-family movement from the 44.3% baseline: proofwriter d0
 83.3%→100%, d1 41.7%→91.7%, d2 41.7%→100%, d3 41.7%→100%, d5 41.7%→91.7%
 (confFalse 0 throughout); ruletaker d0 55%→70%, d1 5%→60%, d2 15%→65%,

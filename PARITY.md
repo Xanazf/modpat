@@ -105,6 +105,45 @@ and was reverted, so it needs more work before it can claim ruletaker's
 remaining false-recall gap; relational rules cover SVO but not
 prepositional/multi-clause relations.
 
+**Third update (2026-07-30, measured): the residual is pure silence, and
+the CWA regression that motivated the last prediction was an artifact.**
+Three runs against `f39f5e2`, all with per-item checkpoints
+(`data/benchmarks/*.checkpoint.jsonl`, analysed by
+`scripts/dev/checkpoint_analysis.ts`):
+
+1. **The pinned configuration reproduces exactly** - all ten families plus
+   overall, 83.8% / 33.8% / 0, byte-identical. Decomposing the residual by
+   gold class shows balanced accuracy equals `1 − abstentionRate` at every
+   RuleTaker depth, which is only possible because **every committed answer
+   on all 100 RuleTaker items is correct**. ProofWriter is effectively
+   solved (58/60; its 33.3% abstention floor IS the gold-unknown third,
+   answered correctly). The whole deduction gap is 34 items of silence and
+   zero error.
+2. **The parse-completeness valve is not the limit.** CWA denial is
+   double-gated on `textGroundedUnparsed === 0`; measured, the valve is open
+   on 156/160 items (97.5%) and on 19/19 of the CWA-target class.
+3. **CWA re-measured: 83.8% → 96.7% balAcc, abstention 33.8% → 16.3%,
+   confFalse 0 → 1** (27 items silence→correct, 1 break, 0 losses;
+   ProofWriter byte-identical as the control). The old "confFalse 5→16" is
+   **refuted as a characterization of CWA**: that measurement was taken
+   through two defects fixed hours later at `87fca2a` - the reflexive-
+   derivation guard proven wrong against gold (whose damage this repo's own
+   notes describe as appearing "once combined with closed-world mode") and
+   the ungated `perceiveCoherent` path that produced all 5 of that run's
+   baseline confident falsehoods.
+
+The single break (`RelNeg-D5-254-12`) is diagnostic rather than incidental:
+CWA denied a fact that IS derivable at depth 5 via a chain whose fourth hop
+needs negation-as-failure as an INTERMEDIATE step. Which yields the finding
+that should govern the next iteration: **under OWA, incompleteness is safe -
+a derivation the engine cannot finish becomes silence. Under CWA it is
+unsafe - every gap in the closure is indistinguishable from a genuinely
+underivable fact and converts straight into a confident falsehood.** CWA
+does not add a new way to be wrong about logic; it withdraws the margin that
+was concealing the closure's derivation gaps. Its true prerequisite is
+closure COMPLETENESS, not further soundness work. CWA therefore stays off by
+default and the pin is unmoved (confFalse 1 fails the covenant's red line).
+
 ## 3. The gap inventory
 
 Ordered by how much distance each item covers. Size classes: **mechanism**
@@ -180,9 +219,19 @@ confirmed against gold labels, see data/benchmarks/README.md; asking never
 creates). Guarded in `tests/rule_discharge.test.ts` (18 cases). Honest
 external: 44.3%→83.8% balAcc, confFalse 4→0 (§2 second update). Still
 missing here: relations beyond simple SVO (prepositional, multi-clause), the
-closed-world negation-as-failure mode (stage 2, built but not enabled -
-its harness toggle regressed confFalse to 16 and was reverted), existentials,
-nested quantifiers, proof by cases.
+closed-world negation-as-failure mode (stage 2, built but not enabled),
+existentials, nested quantifiers, proof by cases.
+
+**Stage 2 status (2026-07-30, measured):** CWA is re-measured on the fixed
+tree at **96.7% balAcc / 16.3% abstention / confFalse 1** (from 83.8 / 33.8
+/ 0), i.e. 27 items of silence converted to correct answers against a single
+break. The previously-recorded "confFalse 5→16" is refuted as evidence about
+CWA - it was measured through the reflexive-derivation guard and the ungated
+perception path, both fixed at `87fca2a` (§2 third update). It remains OFF
+by default: one confident falsehood fails the covenant's red line. The
+blocker is now identified and narrow - closure incompleteness converting
+into denial, where OWA would have converted it into silence - so the next
+move is a completeness-aware denial gate, not more rule soundness.
 
 ### 3.3 Disjunction physics (prediction 2, OPEN)
 
@@ -335,6 +384,27 @@ cycle to the OWA relational discharge (this session), CWA is a harder
 mechanism than the stage-1 pattern suggests and should be scoped as its own
 multi-iteration effort, not a flag-flip.** Wrong-if: a CWA re-attempt lands
 confFalse-0 within roughly the same cadence as this session's OWA work.
+
+**Graded 2026-07-30: NOT falsified, but only just, and its premise was
+wrong.** The wrong-if did not fire - the re-attempt landed confFalse **1**,
+not 0, so on its literal terms the prediction stands and CWA is not a
+flag-flip. But it should be recorded that the prediction was made on
+evidence (confFalse 5→16) that has since been shown to be an artifact of two
+unrelated defects (§2 third update), and the honest re-measurement is
++12.9pp balanced accuracy at a single break with 27 gains and zero losses.
+"Harder than a flag-flip" is confirmed; "a multi-iteration effort" is not -
+the failure is one diagnosable class (closure incompleteness surfacing as
+denial), not a mechanism in doubt. The next prediction should be scoped to
+that class, not to CWA as a whole.
+
+Successor prediction, on the record: **the deduction family closes to ≥95%
+balanced accuracy at confFalse 0 by making CWA denial completeness-aware -
+denying only when the closure reached fixpoint with no unresolved negative
+dependency for the queried subject - rather than by further soundness work
+on the rules themselves.** Wrong-if: a completeness-aware denial gate either
+fails to recover confFalse to 0, or recovers it only by abstaining back
+below ~90% balanced accuracy (i.e. the gate cannot separate "underivable"
+from "not yet derived", and the two are genuinely entangled at this depth).
 
 ## 6. Training curriculum (theorized)
 

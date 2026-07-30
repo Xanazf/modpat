@@ -374,7 +374,22 @@ async function runFastItem(item: DatasetItem): Promise<string> {
   }
 }
 
-async function runHonestItem(item: DatasetItem): Promise<string> {
+/**
+ * Honest-path result plus the closed-world safety-valve reading for this
+ * item's theory. CWA denial is gated on `textGroundedUnparsed === 0`
+ * (GraphQuery), so a theory with even one sentence the parser could not land
+ * is CWA-INELIGIBLE no matter how the flag is set - the counters are
+ * reported per item so the valve's actual reach is measured, not assumed.
+ */
+interface HonestItemResult {
+  answer: string;
+  /** Sentences the grounding path could not land (0 => CWA-eligible). */
+  unparsed: number;
+  /** Sentences offered to the grounding path. */
+  sentences: number;
+}
+
+async function runHonestItem(item: DatasetItem): Promise<HonestItemResult> {
   const system = new System();
   const atomizer = new LogicAtomizer();
   await atomizer.init();
@@ -388,7 +403,17 @@ async function runHonestItem(item: DatasetItem): Promise<string> {
       await traveler.process(sentence.toLowerCase());
     }
     const query = `${item.question.toLowerCase().replace(/\.\s*$/, "")}?`;
-    return (await traveler.process(query)).toLowerCase().trim();
+    const answer = (await traveler.process(query)).toLowerCase().trim();
+    // Read the valve counters BEFORE the store closes. Note these count the
+    // theory sentences only if the question itself grounded nothing; the
+    // question is processed through the same path, so a question the parser
+    // cannot read also makes the theory ineligible - which is correct, the
+    // valve is about what the engine could read in total.
+    return {
+      answer,
+      unparsed: system.textGroundedUnparsed,
+      sentences: system.textGroundedSentences,
+    };
   } finally {
     await store.close();
   }
@@ -411,6 +436,10 @@ interface CheckpointResult {
   fastVerdict: Verdict;
   honestVerdict: Verdict;
   honestAnswer: string;
+  /** Parse-completeness valve reading; absent in checkpoints written before
+   *  the instrumentation landed (treated as unknown, not as eligible). */
+  unparsed?: number;
+  sentences?: number;
 }
 
 function loadCheckpoint(path: string): {
@@ -439,7 +468,9 @@ function loadCheckpoint(path: string): {
 async function runDatasetMode(
   dir: string,
   limit: number,
-  checkpointPath: string | null
+  checkpointPath: string | null,
+  cwa: boolean,
+  pin: boolean
 ): Promise<void> {
   runScoringSelftest();
 
@@ -471,18 +502,44 @@ async function runDatasetMode(
 
   const fastScored = new Map<string, ScoredItem[]>();
   const honestScored = new Map<string, ScoredItem[]>();
+  /** Per-item parse-completeness valve readings (PARITY §3.2 stage 2 reach). */
+  const valve: {
+    ds: string;
+    depth: number;
+    unparsed: number;
+    sentences?: number;
+  }[] = [];
   let skippedPoison = 0;
 
   for (const ds of datasets) {
-    // PARITY §3.2 stage 2 (closed-world negation-as-failure) is measured
-    // SEPARATELY, not enabled here: a per-dataset CWA toggle was tried
-    // (RuleTaker=on, ProofWriter=off, matching each task's own world
-    // assumption) and measured honest.overall confidentFalsehoods 5 -> 16,
-    // concentrated in ruletaker.d2/d3/d5 - it has not cleared its own
-    // confFalse gate, so it stays off for this pinned run per the covenant
-    // ("ship flag-off and iterate off the diff"). CWA remains in the
-    // codebase behind TEXT_GRAPH_CWA_ENABLED (default false) for that
-    // future, separately-measured pass.
+    // PARITY §3.2 stage 2 (closed-world negation-as-failure), per dataset.
+    //
+    // The world assumption is part of a task's DEFINITION: RuleTaker's gold
+    // has no `unknown` class at all (its false items are false exactly by
+    // negation-as-failure), ProofWriter's OWA split does. So CWA is set to
+    // match each dataset rather than globally - RuleTaker on, ProofWriter
+    // off - and only under `--cwa`; the default run stays open-world so the
+    // pinned baseline keeps measuring the same thing it always did.
+    //
+    // HISTORY, load-bearing: a prior per-dataset toggle measured honest
+    // overall confFalse 5 -> 16 and was reverted. That measurement is
+    // CONFOUNDED and must not be cited as evidence about CWA: it was taken
+    // against a tree that still had (a) the reflexive-derivation guard later
+    // proven WRONG against gold labels, which "silently flipp[ed] correct
+    // derivations to wrong denials once combined with closed-world mode"
+    // (data/benchmarks/README.md - the same 5 -> 16 run), and (b) the
+    // ungated `perceiveCoherent` path that produced all 5 of that tree's
+    // baseline confident falsehoods. Both were fixed at 87fca2a, which took
+    // the baseline to confFalse 0. CWA has not been measured since.
+    if (cwa) {
+      const on = ds.name === "ruletaker";
+      (
+        DOPAT_CONFIG.PHYSICS as unknown as { TEXT_GRAPH_CWA_ENABLED: boolean }
+      ).TEXT_GRAPH_CWA_ENABLED = on;
+      console.log(
+        `  [cwa] ${ds.name}: closed-world ${on ? "ON" : "OFF"} (dataset's own world assumption)`
+      );
+    }
     const items = limit > 0 ? ds.items.slice(0, limit) : ds.items;
     for (const item of items) {
       if (checkpoint.poisoned.has(item.id)) {
@@ -494,9 +551,13 @@ async function runDatasetMode(
       let fastVerdict: Verdict;
       let honestVerdict: Verdict;
       let honestAnswer: string;
+      let unparsed: number | undefined;
+      let sentences: number | undefined;
       const prior = checkpoint.results.get(item.id);
       if (prior) {
         ({ fastVerdict, honestVerdict, honestAnswer } = prior);
+        unparsed = prior.unparsed;
+        sentences = prior.sentences;
       } else {
         if (checkpointPath)
           appendFileSync(
@@ -506,7 +567,10 @@ async function runDatasetMode(
         const negated = questionNegated(item.question);
         const keyword = keywordOf(item.question);
         const fastAnswer = await runFastItem(item);
-        honestAnswer = await runHonestItem(item);
+        const honest = await runHonestItem(item);
+        honestAnswer = honest.answer;
+        unparsed = honest.unparsed;
+        sentences = honest.sentences;
         fastVerdict = mapAnswerToVerdict(fastAnswer, keyword, negated);
         honestVerdict = mapAnswerToVerdict(honestAnswer, keyword, negated);
         if (checkpointPath) {
@@ -519,9 +583,14 @@ async function runDatasetMode(
             fastVerdict,
             honestVerdict,
             honestAnswer,
+            unparsed,
+            sentences,
           };
           appendFileSync(checkpointPath, `${JSON.stringify(rec)}\n`);
         }
+      }
+      if (unparsed !== undefined) {
+        valve.push({ ds: ds.name, depth: item.depth, unparsed, sentences });
       }
 
       const family = `${ds.name}.d${item.depth}`;
@@ -562,6 +631,36 @@ async function runDatasetMode(
     fast: collect(fastScored),
     honest: collect(honestScored),
   };
+
+  // Parse-completeness valve reach (PARITY §3.2 stage 2 diagnostic). CWA
+  // denial is double-gated on TEXT_GRAPH_CWA_ENABLED && unparsed === 0, so
+  // this measures the CEILING of closed-world mode independently of whether
+  // its logic is right: an item whose theory did not fully land can never be
+  // denied, flag or no flag. A low eligible-rate here means the next item is
+  // parser coverage (PARITY §3.1 residual), not CWA.
+  if (valve.length > 0) {
+    console.log("\n  -- parse-completeness valve (CWA eligibility) --");
+    const byFamily = new Map<string, { n: number; eligible: number }>();
+    for (const v of valve) {
+      const key = `${v.ds}.d${v.depth}`;
+      const rec = byFamily.get(key) ?? { n: 0, eligible: 0 };
+      rec.n++;
+      if (v.unparsed === 0) rec.eligible++;
+      byFamily.set(key, rec);
+    }
+    let totN = 0;
+    let totEligible = 0;
+    for (const [family, r] of [...byFamily.entries()].sort()) {
+      totN += r.n;
+      totEligible += r.eligible;
+      console.log(
+        `  ${family.padEnd(16)} eligible=${String(r.eligible).padStart(3)}/${String(r.n).padEnd(3)} (${((r.eligible / r.n) * 100).toFixed(1)}%)`
+      );
+    }
+    console.log(
+      `  ${"overall".padEnd(16)} eligible=${String(totEligible).padStart(3)}/${String(totN).padEnd(3)} (${((totEligible / totN) * 100).toFixed(1)}%)`
+    );
+  }
 
   for (const mode of ["fast", "honest"] as const) {
     console.log(`\n  -- ${mode} --`);
@@ -624,10 +723,15 @@ async function runDatasetMode(
     );
   }
 
-  if (limit <= 0) {
+  if (limit <= 0 && pin) {
     baseline.externalReal = scores;
     writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
     console.log(`Baseline updated: ${BASELINE_PATH}`);
+  } else if (!pin) {
+    // --no-pin: an EXPLORATORY run (e.g. --cwa) reads the pin to report its
+    // diff but must never overwrite it; the pin moves only on a deliberate
+    // default-configuration run.
+    console.log("\n--no-pin exploratory run - baseline NOT updated.");
   } else {
     console.log(`\n--limit ${limit} smoke run - baseline NOT updated.`);
   }
@@ -673,7 +777,18 @@ async function run(): Promise<void> {
     const ckIdx = process.argv.indexOf("--checkpoint");
     const checkpointPath =
       ckIdx >= 0 ? (process.argv[ckIdx + 1] ?? null) : null;
-    await runDatasetMode(dir, Number.isNaN(limit) ? 0 : limit, checkpointPath);
+    // --cwa: closed-world per dataset (RuleTaker on, ProofWriter off).
+    // --no-pin: report the diff vs the pin without overwriting it. Implied by
+    // --cwa, since a CWA run is by definition not the default configuration.
+    const cwa = process.argv.includes("--cwa");
+    const pin = !cwa && !process.argv.includes("--no-pin");
+    await runDatasetMode(
+      dir,
+      Number.isNaN(limit) ? 0 : limit,
+      checkpointPath,
+      cwa,
+      pin
+    );
     return;
   }
 
