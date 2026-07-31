@@ -375,7 +375,8 @@ escapes it (it drops the auxiliary rather than re-seating it), and the
 deduction corpora ask declaratively, so nothing here is affected. Fixing it
 needs real NP parsing, not a greedier regex: greedy would break
 "is felix a mammal". Pinned as a note in `tests/rule_discharge.test.ts` so it
-cannot later be mistaken for an aliasing regression.
+cannot later be mistaken for an aliasing regression. **(Fixed 2026-07-31 -
+see below.)**
 
 **Disposition: CWA now clears the covenant's red line** (confFalse 0) and is
 enabled per dataset by `--cwa`. The default remains open-world and the pin is
@@ -402,3 +403,49 @@ Final per-family movement from the 44.3% baseline: proofwriter d0
 83.3%→100%, d1 41.7%→91.7%, d2 41.7%→100%, d3 41.7%→100%, d5 41.7%→91.7%
 (confFalse 0 throughout); ruletaker d0 55%→70%, d1 5%→60%, d2 15%→65%,
 d3 0%→75%, d5 10%→70% (confFalse 0 throughout, down from 1 each).
+
+---
+
+## 2026-07-31 - `questionToProposition` split, and a measurement that moved nothing
+
+The aux-fronting defect flagged above is fixed: the subject/predicate split
+now reads compromise's POS tags instead of counting words. Recorded here
+because the *measurement* is the point.
+
+**Nothing moved, and that was the prediction.** Before starting, all 160 items
+were checked for aux-fronted question surfaces: **0 of 160**. RuleTaker and
+ProofWriter both phrase questions as declaratives ("Anne is nice."). Both
+configurations re-measured after the fix:
+
+| configuration | balAcc | abstain | confFalse |
+|---|---|---|---|
+| OWA | 84.3% | 33.1% | 0 |
+| CWA | 97.6% | 15.6% | 0 |
+
+Byte-identical to the pin - the re-run changed only the baseline file's
+timestamp, which was reverted rather than committed. This is a
+live-conversational-path fix that the external benchmark is structurally
+incapable of scoring, in either direction. It could not have caught the defect
+and cannot confirm the fix; the guard tests do that, sweeping every question
+surface in `tests/`.
+
+**Worth keeping in view:** a benchmark that cannot see a defect is not
+evidence the defect is absent. The 0/160 was measured, not assumed, and it is
+the reason this work was scoped as a correctness fix rather than sold as a
+score improvement.
+
+Verification actually used:
+
+```bash
+# every question surface in the test corpus, swept for corruption
+yarn test          # canonicalization guard in tests/text_graph.test.ts
+                   # + aux-fronted multi-word subject in tests/rule_discharge.test.ts
+# and the null result above:
+tsx tests/benchmarks/external_benchmarks.ts --datasets data/benchmarks --no-pin
+tsx tests/benchmarks/external_benchmarks.ts --datasets data/benchmarks --cwa
+```
+
+Two tagger failures found by sweeping surfaces rather than by reasoning, both
+now guarded: mid-string articles mis-tag (`"felix an animal"` tags `an` as a
+Noun), so articles are matched by surface; and a subject can itself mis-tag
+(`"bob rich"` tags `bob` an imperative Verb), so position is the fallback.

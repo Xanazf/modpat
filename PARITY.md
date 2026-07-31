@@ -206,12 +206,48 @@ split only cost anything where a derivation had to cross both halves - and
 should not be cited as the fix's value.
 
 Residual deduction distance is now 15.6% abstention with zero error:
-proofwriter d1/d5 at 91.7%, ruletaker d0/d1/d2 at 95%. A separate front-end
-defect was found and deliberately not fixed here: `questionToProposition`
-mis-canonicalizes aux-fronted questions with multi-word subjects ("is the
-bald eagle red?" -> "the bald is eagle red"); it needs real NP parsing rather
-than a greedier regex, and the corpora ask declaratively so nothing measured
-here depends on it.
+proofwriter d1/d5 at 91.7%, ruletaker d0/d1/d2 at 95%.
+
+### Update, 2026-07-31: aux-fronted questions with multi-word subjects
+
+The front-end defect noted above as deliberately unfixed - `questionToProposition`
+canonicalizing "is the bald eagle red?" to "the bald is eagle red" - is fixed.
+Its subject/predicate split counted words (a lazy quantifier took the shortest
+leading NP); it now reads compromise's tags, the same tagger both graph parsers
+already trust. The rule is the maximal leading determiner/adjective/noun run,
+where a determiner may only OPEN the run, cut at the run's RIGHTMOST head -
+the same right-headedness `npHead` uses to intern one entity to one precept,
+applied to the split rather than to the label.
+
+**This measured exactly zero on the benchmark, as predicted before the work
+started.** All 160 items ask declaratively ("Anne is nice."); 0 are
+aux-fronted. OWA stayed at 84.3% / 33.1% / confFalse 0 and CWA at 97.6% /
+15.6% / confFalse 0, byte-identical to the pin. It is a live-conversational-path
+fix, verified by guard tests over every question surface in the test corpus,
+and it is worth recording that the benchmark was incapable of catching either
+the defect or the fix.
+
+**What the tags actually cost, on the record.** Two failures were found by
+sweeping surfaces, not by reasoning, and both are the tagger being wrong
+rather than the rule being wrong:
+
+- Mid-string articles are mis-tagged - "felix an animal" tags `an` as a bare
+  Noun, "felix the animal" tags `the` as Noun,ProperNoun,Person. Articles are
+  matched by SURFACE now; they are a closed class of three, which is the kind
+  of lexicon this module already permits.
+- The subject itself can be mis-tagged: "bob rich" reads `rich` as a
+  comparative and so tags `bob` an imperative Verb, leaving no head at all.
+  Position is the fallback - after an auxiliary, the next token is the subject
+  however it got tagged. That reproduces the old regex exactly, so it degrades
+  only where tags were already untrustworthy.
+
+Two residuals, both accepted and neither a regression: a three-noun surface
+("are fire trucks vehicles") is genuinely ambiguous under tags alone, and
+compound-noun subjects still cut at the rightmost head. Resolving either needs
+the tokens to reach `parseClause` **un-round-tripped** - folding aux-fronting
+into the clause parser, so questions and statements share one NP chunker
+instead of meeting through a string. That is the honest end state and this is
+not it; the string round-trip is the actual smell, and it survives.
 
 ## 3. The gap inventory
 

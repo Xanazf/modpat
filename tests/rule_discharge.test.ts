@@ -506,19 +506,21 @@ export async function runRuleDischargeTests(): Promise<void> {
           system,
           atomizer
         );
-        // Declarative surfaces deliberately: aux-fronted questions with a
-        // MULTI-WORD subject are canonicalized wrongly by
-        // questionToProposition ("is the bald eagle red?" -> "the bald is
-        // eagle red"), because its subject/predicate split is non-greedy and
-        // stops at the first word. That is a separate, pre-existing defect
-        // (do-support escapes it by dropping the auxiliary rather than
-        // re-seating it) and the deduction corpora ask declaratively, so it
-        // is out of scope here - but it must not be allowed to masquerade as
-        // an aliasing failure, hence this note.
         assert.strictEqual(
           resolveGraphQuery("the bald eagle is red?", system, atomizer)?.answer,
           "the bald eagle is red",
           "copula-interned fact resolves under the canonical head"
+        );
+        // The same fact via the AUX-FRONTED surface. This used to be a
+        // separate defect stacked on top of the aliasing one: the
+        // subject/predicate split stopped at the first word, so the question
+        // canonicalized to "the bald is eagle red" and asked about nothing.
+        // Both halves of "one entity, one precept" - the label and the split -
+        // are needed for a multi-word entity to survive a real question.
+        assert.strictEqual(
+          resolveGraphQuery("is the bald eagle red?", system, atomizer)?.answer,
+          "the bald eagle is red",
+          "aux-fronted question with a multi-word subject resolves too"
         );
         assert.strictEqual(
           resolveGraphQuery("the bald eagle chases the cat?", system, atomizer)

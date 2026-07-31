@@ -430,6 +430,54 @@ export async function runTextGraphTests(): Promise<void> {
         ["can felix fly?", "felix can fly"],
         ["what is felix?", null],
         ["who owns felix?", null],
+
+        // ---- subject/predicate split (multi-word subjects) ---------------
+        //
+        // The auxiliary must be re-seated after the WHOLE subject NP. A split
+        // that stops at the first word yields "the bald is eagle red"; one
+        // that runs greedily yields "felix a is mammal". The rule is the
+        // maximal determiner/adjective/noun run cut at its RIGHTMOST head,
+        // and each case below pins one clause of it.
+        ["is the bald eagle red?", "the bald eagle is red"],
+        ["is the big kind cow young?", "the big kind cow is young"],
+        ["was the old dog tired?", "the old dog was tired"],
+        // A determiner may only OPEN the run - "a" starts the predicate
+        // nominal, which is what keeps "felix" from swallowing it.
+        ["is felix a nice person?", "felix is a nice person"],
+        // Cut at the RIGHTMOST head, not the first: the tagger mis-tags
+        // "round" as a Noun, so a first-noun cut would give "the round".
+        ["is the round green thing kind?", "the round green thing is kind"],
+        // Run exhausts the remainder -> back off one head, or there is
+        // nothing left to predicate ("fly" mis-tags as a ProperNoun surname).
+        ["is the fire truck red?", "the fire truck is red"],
+        // Pronoun subjects carry the Noun tag and need no special case.
+        ["is it red?", "it is red"],
+        // Modal keeps the auxiliary; do-support drops it, so the do-support
+        // path never has to find the boundary at all.
+        [
+          "can the bald eagle chase the mouse?",
+          "the bald eagle can chase the mouse",
+        ],
+        [
+          "does the bald eagle chase the mouse?",
+          "the bald eagle chase the mouse",
+        ],
+        // ---- tagger-noise regressions ------------------------------------
+        //
+        // Both of these were found by sweeping the surfaces, not by reasoning,
+        // and both fail if the split trusts compromise's tags too far.
+        //
+        // Mid-string articles are mis-tagged ("felix an animal" tags `an` as a
+        // bare Noun), so the run must reject them by SURFACE or it swallows
+        // the article and yields "felix an is animal".
+        ["is felix an animal?", "felix is an animal"],
+        // The subject itself can be mis-tagged: "bob rich" reads `rich` as a
+        // comparative and so tags `bob` an imperative Verb, leaving no head at
+        // all. Position is the fallback - the token after the aux is the
+        // subject however it got tagged.
+        ["is bob rich?", "bob is rich"],
+        // Unsplittable -> silence, never a mis-parsed proposition.
+        ["is the red?", null],
       ];
       for (const [q, want] of cases) {
         assert.strictEqual(
