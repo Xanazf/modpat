@@ -34,6 +34,13 @@ import { GraphBuilder, parseRelation } from "./LogicGraph";
 export interface TextGraphOptions {
   /** Run LogicGraph's symbolic grammar per statement (default true). */
   delegateLogicGrammar?: boolean;
+  /**
+   * Parse the input as a QUESTION: aux-fronted clauses are rotated into
+   * declarative token order before parsing (default false). Off on the
+   * ingestion path so a statement can never be rewritten before being
+   * asserted - see `parseClause`.
+   */
+  interrogative?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +262,197 @@ class DedupGraphBuilder extends GraphBuilder {
 }
 
 // ---------------------------------------------------------------------------
+// Interrogative word order
+// ---------------------------------------------------------------------------
+//
+// A yes/no question is a declarative with its auxiliary fronted, so the parser
+// only has to put the auxiliary back where the statement grammar expects it.
+// Doing that HERE, on tagged tokens, rather than on the raw string upstream,
+// is what lets questions and statements share one noun-phrase convention:
+// after rotation the clause reaches `parseClause` and `collectNpGroups`
+// looking exactly like the statement it is asking about.
+//
+// The string-surgery version this replaced (GraphQuery.questionToProposition,
+// 2026-07-31) had to tag the remainder with the auxiliary already stripped,
+// which is a worse sentence to tag than the original: "bob rich" reads `rich`
+// as a comparative and so tags `bob` an imperative Verb, leaving no subject at
+// all, while "is bob rich" tags `bob` Noun,Person correctly. Keeping the
+// auxiliary through tagging removed that whole failure class, and with it the
+// positional fallback that used to paper over it.
+
+/** Auxiliaries that can front an English yes/no question. */
+const FRONTED_AUX = new Set([
+  "is",
+  "are",
+  "was",
+  "were",
+  "can",
+  "could",
+  "does",
+  "do",
+  "did",
+  "will",
+  "would",
+  "should",
+  "must",
+]);
+/** Do-support is pure question marking and carries no content: it is dropped
+ *  rather than re-seated ("does the mouse visit the cat" -> "the mouse visit
+ *  the cat"; the parser lemmatizes the verb anyway). */
+const DO_SUPPORT = new Set(["does", "do", "did"]);
+/** Articles, by SURFACE. Deliberately not read off the Determiner tag: the
+ *  tagger only labels one reliably in sentence-initial position and guesses at
+ *  a name-like run mid-string ("felix an animal" tags `an` a bare Noun,
+ *  "felix the animal" tags `the` Noun,ProperNoun,Person). Closed class. */
+const ARTICLE_SURFACES = new Set(["the", "a", "an"]);
+/** Tokens a subject noun phrase may be built from. */
+const NP_BODY_TAGS = ["Adjective", "Noun", "Value", "Acronym"];
+/** Tokens that can be a noun phrase's HEAD - what the phrase is about. */
+const NP_HEAD_TAGS = ["Noun", "Value", "Acronym"];
+
+/**
+ * Index of the leading subject NP's head in `toks`, or -1 when there is none.
+ *
+ * The noun phrase is the maximal leading run of determiner/adjective/noun, in
+ * which a determiner may only OPEN the run - that clause is what separates a
+ * subject from a predicate nominal, since in "felix a mammal" the `a` starts a
+ * new phrase and the subject must stop before it.
+ *
+ * The head is the run's RIGHTMOST, because English noun phrases are
+ * right-headed - the same property `npHead` (LogicGraph.ts) uses to intern one
+ * entity to one precept, here deciding a boundary instead of a label. Taking
+ * the FIRST noun instead breaks on real corpus surfaces, because the tagger
+ * mis-tags leading attributes: "the round green thing" tags `round` as
+ * Noun,Singular, so a first-noun cut would yield "the round".
+ *
+ * When the run reaches the end there is no predicate left, so the head backs
+ * off by one: "are roses organisms" is roses / organisms, not a subject with
+ * nothing said about it.
+ */
+function subjectHeadIndex(toks: Tok[]): number {
+  const heads: number[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (
+      ARTICLE_SURFACES.has(t.normal) ||
+      hasTag(t, "Determiner") ||
+      hasTag(t, "Possessive")
+    ) {
+      if (i > 0) break;
+      continue;
+    }
+    if (!NP_BODY_TAGS.some(tag => hasTag(t, tag))) break;
+    if (NP_HEAD_TAGS.some(tag => hasTag(t, tag))) heads.push(i);
+  }
+  // Positional fallback. An aux-fronted clause has a subject by construction,
+  // and it is the constituent right after the auxiliary - so when the tags
+  // deny there is a noun phrase there at all, position is the better witness.
+  // Measured, not hypothetical: "can fish swim" tags `fish` Verb,PresentTense
+  // (the interrogative order misleads the tagger), leaving no head; the
+  // rotation to "fish can swim" is what recovers the Noun reading, and it
+  // cannot happen unless the boundary is found first.
+  if (heads.length === 0) heads.push(0);
+
+  const head =
+    heads[heads.length - 1] === toks.length - 1
+      ? (heads[heads.length - 2] ?? -1)
+      : heads[heads.length - 1];
+  if (head < 0) return -1;
+  // A subject made only of articles is not a noun phrase. Reachable because
+  // the tagger guesses at bare fragments: "the red" tags BOTH words Noun.
+  return toks.slice(0, head + 1).every(t => ARTICLE_SURFACES.has(t.normal))
+    ? -1
+    : head;
+}
+
+/**
+ * Rotates an aux-fronted clause into declarative token order, or returns null
+ * when the clause is not aux-fronted (every statement) or cannot be split.
+ *
+ * Null means the caller leaves the tokens alone, and for a question that means
+ * silence - an unsplittable surface must not become a confidently mis-parsed
+ * proposition.
+ */
+function deFrontInterrogative(toks: Tok[]): Tok[] | null {
+  if (toks.length < 3 || !FRONTED_AUX.has(toks[0].normal)) return null;
+  const aux = toks[0];
+  const rest = toks.slice(1);
+
+  // A content verb later in the clause IS the subject/predicate boundary, so
+  // most questions need no noun-phrase heuristic at all: only the copula case,
+  // where the fronted auxiliary is itself the verb, has to find where the
+  // subject ends.
+  const verbIdx = rest.findIndex(isVerbTok);
+  let rotated: Tok[];
+  if (verbIdx > 0) {
+    rotated = DO_SUPPORT.has(aux.normal)
+      ? rest
+      : [...rest.slice(0, verbIdx), aux, ...rest.slice(verbIdx)];
+  } else {
+    const head = subjectHeadIndex(rest);
+    if (head < 0) return null;
+    rotated = [...rest.slice(0, head + 1), aux, ...rest.slice(head + 1)];
+  }
+  return retag(rotated);
+}
+
+/**
+ * Re-tags a rotated clause, because compromise is ORDER-SENSITIVE and the tags
+ * carried over from interrogative order are stale.
+ *
+ * This is not incidental tidying - it is measurable, and it runs in both
+ * directions (2026-07-31):
+ *
+ *   "can fish swim"  tags `fish` Verb   | "fish can swim"  tags it Noun
+ *   "can felix fly"  tags `fly`  Noun   | "felix can fly"  tags it Verb
+ *
+ * The tagger is trained on declarative English, so a rotated clause is a
+ * BETTER sentence to tag than the question it came from, which in turn is
+ * better than the aux-stripped remainder the previous string-surgery version
+ * had to work with. Rotating without re-tagging would have parsed "can fish
+ * swim" with `fish` as its verb - a silently wrong graph behind a correct-
+ * looking surface.
+ *
+ * The boundary is still found on the QUESTION's tags, where the auxiliary is
+ * present to anchor the parse; only the parse that follows uses the fresh
+ * ones. Falls back to the rotated tokens if re-tokenizing does not yield
+ * exactly one sentence.
+ */
+function retag(rotated: Tok[]): Tok[] {
+  const fresh = tokenize(renderToks(rotated));
+  return fresh.length === 1 && fresh[0].length > 0 ? fresh[0] : rotated;
+}
+
+/** Renders tokens back to a surface (empty normals are tagger artefacts). */
+function renderToks(toks: Tok[]): string {
+  return toks
+    .map(t => t.normal)
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * The declarative rendering of a question surface - the ANSWER surface, and
+ * the only thing the query path still needs a string for.
+ *
+ * Returns the input unchanged when it is already declarative, and null when it
+ * is aux-fronted but unsplittable. It rotates with the SAME `deFrontInterrogative`
+ * the parser uses, so the surface an answer echoes and the graph that answer
+ * was verified against cannot disagree about where the subject ended.
+ */
+export function declarativeSurface(text: string): string | null {
+  const s = text.trim().replace(/[.!?]+$/, "");
+  if (!s) return null;
+  const sentences = tokenize(s);
+  // Multi-sentence input is not a single question; hand it back untouched.
+  if (sentences.length !== 1 || sentences[0].length === 0) return s;
+  const toks = sentences[0];
+  if (!FRONTED_AUX.has(toks[0].normal)) return s;
+  const rotated = deFrontInterrogative(toks);
+  return rotated ? renderToks(rotated) : null;
+}
+
+// ---------------------------------------------------------------------------
 // Grammatical clause parsing
 // ---------------------------------------------------------------------------
 
@@ -297,10 +495,20 @@ function collectNpGroups(
  * clause head (the node other clauses link to), or -1 for an empty clause.
  */
 function parseClause(
-  toks: Tok[],
+  rawToks: Tok[],
   b: DedupGraphBuilder,
-  kind: EdgeKind
+  kind: EdgeKind,
+  interrogative = false
 ): number {
+  // Interrogative word order is undone HERE so everything below - verb
+  // location, NP chunking, negation, reification - runs on one token order.
+  // Gated rather than unconditional: `buildGraphFromText` is the INGESTION
+  // path too, and a statement that happened to open with an auxiliary would
+  // otherwise be silently rewritten before being asserted. No corpus sentence
+  // does (0 of 2291 benchmark theory sentences), but the failure would be
+  // silent knowledge corruption, and "asking never creates" is a standing
+  // invariant of the query path - so the caller states which one it is.
+  const toks = (interrogative && deFrontInterrogative(rawToks)) || rawToks;
   const negated = toks.some(t => hasTag(t, "Negative"));
 
   // Main verb: first non-modal/aux Verb. A copula followed by a tensed verb
@@ -712,7 +920,8 @@ function tryExtractAttributeRule(toks: Tok[], b: DedupGraphBuilder): boolean {
 function parseGrammatical(
   b: DedupGraphBuilder,
   sentences: Tok[][],
-  kind: EdgeKind
+  kind: EdgeKind,
+  interrogative = false
 ): void {
   for (const toks of sentences) {
     const clauses = splitClauses(toks);
@@ -728,7 +937,12 @@ function parseGrammatical(
       clauses.some(c => c.pivot === "then");
     let prevHead = -1;
     for (const clause of clauses) {
-      const head = parseClause(stripLeadingPivot(clause.toks), b, kind);
+      const head = parseClause(
+        stripLeadingPivot(clause.toks),
+        b,
+        kind,
+        interrogative
+      );
       if (head >= 0 && prevHead >= 0) {
         // Clause linking: "if A then B" / "A so B" -> A's head references
         // B's head; "B because A" reverses. Plain and/but/or add no link.
@@ -759,6 +973,7 @@ export function buildGraphFromText(
   opts: TextGraphOptions = {}
 ): Grounding.GroundGraph {
   const delegate = opts.delegateLogicGrammar ?? true;
+  const interrogative = opts.interrogative ?? false;
   const b = new DedupGraphBuilder();
 
   const lines = Array.isArray(text) ? text : [text];
@@ -785,9 +1000,15 @@ export function buildGraphFromText(
     // would intern subject "it the ground"), so multi-clause surface goes to
     // the grammatical pass alone. The sweep corpora are single-clause
     // symbolic statements, so subsumption is unaffected by the gate.
+    // Interrogatives never delegate: LogicGraph's regexes are declarative-order
+    // by construction, so an aux-fronted surface either declines (no inner
+    // copula to anchor "<x> is <y>") or matches across the fronted auxiliary
+    // and interns nonsense. Rotation happens in token space, downstream of
+    // here, so there is nothing for the symbolic grammar to see.
     const singleClause =
       sentences.length === 1 && splitClauses(sentences[0]).length === 1;
-    const delegated = delegate && singleClause && parseRelation(b, s, kind);
+    const delegated =
+      delegate && !interrogative && singleClause && parseRelation(b, s, kind);
 
     // When delegation cleanly matched, the grammatical pass runs only for
     // NP-coordination distribution ("a and b are c" -> a->c, b->c); running
@@ -797,7 +1018,7 @@ export function buildGraphFromText(
       toks.some(t => t.normal === "and" || t.normal === "or")
     );
     if (!delegated || hasCoordination) {
-      parseGrammatical(b, remaining, kind);
+      parseGrammatical(b, remaining, kind, interrogative);
     }
   };
 

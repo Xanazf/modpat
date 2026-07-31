@@ -209,6 +209,49 @@ export async function runTextGraphTests(): Promise<void> {
       ]);
     });
 
+    await it("parses aux-fronted questions in token space, and only when asked", async () => {
+      // The parser undoes interrogative word order itself, so a question
+      // reaches the SAME clause logic and the SAME NP chunker as the statement
+      // it asks about - no declarative string has to be manufactured upstream
+      // for the graph to be built.
+      const q = buildGraphFromText("is the bald eagle red", {
+        interrogative: true,
+      });
+      assert.ok(
+        hasEdge(q, "eagle", "red"),
+        "copula question yields the same edge as its statement"
+      );
+      assert.deepStrictEqual(
+        buildGraphFromText("the bald eagle is red").edges.map(e => [
+          labelOf(q, e.from),
+          labelOf(q, e.to),
+        ]),
+        q.edges.map(e => [labelOf(q, e.from), labelOf(q, e.to)]),
+        "question and statement produce the identical edge set"
+      );
+
+      // The flag is the whole safety story: buildGraphFromText is the
+      // INGESTION path too, and a statement opening with an auxiliary must
+      // never be silently rewritten before being asserted.
+      assert.ok(
+        !hasEdge(buildGraphFromText("is the bald eagle red"), "eagle", "red"),
+        "without the flag an aux-fronted surface is NOT de-fronted"
+      );
+
+      // Rotation invalidates the tags, so the rotated clause is re-tagged:
+      // "can fish swim" tags `fish` as a Verb and would parse with `fish` as
+      // the clause's verb; "fish can swim" tags it Noun. Without the re-tag
+      // this edge is absent and the failure hides behind a correct surface.
+      assert.ok(
+        hasEdge(
+          buildGraphFromText("can fish swim", { interrogative: true }),
+          "fish",
+          "swim"
+        ),
+        "rotated clause is re-tagged in declarative order"
+      );
+    });
+
     await it("normalizes numerals into Literal nodes with numeric set", async () => {
       const g = buildGraphFromText("water boils at one hundred degrees");
       const hundred = nodeByLabel(g, "100");

@@ -249,6 +249,63 @@ into the clause parser, so questions and statements share one NP chunker
 instead of meeting through a string. That is the honest end state and this is
 not it; the string round-trip is the actual smell, and it survives.
 
+### Update, same day: aux-fronting folded into `parseClause`
+
+Done - with one correction to the paragraph above, which was wrong about why.
+
+`parseClause` now undoes interrogative word order itself, on tagged tokens,
+behind `TextGraphOptions.interrogative`. A question reaches the same clause
+logic and the same `collectNpGroups` as the statement it asks about, and
+`buildGraphFromText("is the bald eagle red", { interrogative: true })` produces
+an edge set identical to the statement's (guarded). `resolveGraphQuery` parses
+the QUESTION now; the declarative string it still produces is the answer
+surface only, and comes from the same rotation, so the surface an answer
+echoes and the graph it was verified against cannot drift apart.
+
+The flag is not timidity. `buildGraphFromText` is the ingestion path, and a
+statement opening with an auxiliary would otherwise be silently rewritten
+before being asserted - silent knowledge corruption, against a standing "asking
+never creates" invariant. No corpus sentence does this (0 of 2291 benchmark
+theory sentences, measured), which is an argument for the gate being free, not
+for omitting it.
+
+**Where the previous entry was wrong: the string round-trip was not a smell,
+and removing it made the parse worse.** compromise is ORDER-SENSITIVE, and
+rotation leaves the tags stale:
+
+| surface | `fish` | `fly` |
+| --- | --- | --- |
+| `can fish swim` | **Verb** | - |
+| `fish can swim` | Noun | - |
+| `can felix fly` | - | **Noun** |
+| `felix can fly` | - | Verb |
+
+The tagger is trained on declarative English, so a rotated clause is a *better*
+sentence to tag than the question it came from - which is in turn better than
+the aux-stripped remainder the string version had to use. Rotating without
+re-tagging parses "can fish swim" with `fish` as the verb: a silently wrong
+graph behind a correct-looking surface. So the rotation now re-tags, and the
+re-parse is load-bearing rather than incidental. The ranking that actually
+holds is **rotated declarative > full interrogative > decapitated remainder**,
+and the three implementations of this function have now occupied all three
+rungs, in that order.
+
+Two claims from the previous entry are retracted:
+
+- "the tokens must reach `parseClause` un-round-tripped" - they must reach it
+  RE-TAGGED, which is the opposite.
+- "keeping the aux through tagging removed that whole failure class, and with
+  it the positional fallback" - the fallback is load-bearing. "can fish swim"
+  tags `fish` a Verb, so the tags deny there is a subject at all, and only
+  position finds the boundary that makes the rotation (and hence the recovery)
+  possible. I removed it on that reasoning and the sweep caught it.
+
+Measured: OWA 84.3%/33.1%/confFalse 0, CWA 97.6%/15.6%/confFalse 0, **0 BROKE /
+0 GAIN / 0 LOSS / 0 CHURN** per item. Behaviour-preserving, as a refactor
+should be. The two residuals above are unchanged - three-noun ambiguity and
+compound-noun subjects survive, and now demonstrably cannot be fixed by moving
+the boundary logic around, only by a real NP parser.
+
 ## 3. The gap inventory
 
 Ordered by how much distance each item covers. Size classes: **mechanism**

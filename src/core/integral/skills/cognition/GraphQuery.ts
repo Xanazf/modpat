@@ -38,9 +38,11 @@
  */
 
 import { DOPAT_CONFIG } from "@config";
-import { buildGraphFromText } from "@core_s/grounding/TextGraph";
+import {
+  buildGraphFromText,
+  declarativeSurface,
+} from "@core_s/grounding/TextGraph";
 import logger from "@utils/SpectralLogger";
-import nlp from "compromise";
 
 /** Chain hop budget: taxonomy depth 3 + slack. */
 const MAX_HOPS = 8;
@@ -69,143 +71,17 @@ const LEAD_SCAFFOLDS: RegExp[] = [
   /^so\s+/,
 ];
 const TAIL_SCAFFOLD = /,?\s*(?:right|correct|yes|no)\s*$/;
-const AUX_FRONT =
-  /^(is|are|was|were|can|could|does|do|did|will|would|should|must)\s+(.+)$/;
 
 /**
- * Tokens a subject noun phrase may be built from. A Determiner only opens a
- * phrase (see `splitSubjectNp`); Adjective/Noun/Value continue one.
+ * Strips the closed-class interrogative scaffolding, leaving the question
+ * itself with its word order UNTOUCHED. Null when the surface is out of scope
+ * (wh-questions).
+ *
+ * This is all that is genuinely a string operation: recognising the fixed
+ * frames a question can be wrapped in. Word order is grammar, and belongs to
+ * the parser - see `deFrontInterrogative` in TextGraph.
  */
-const NP_BODY_TAGS = ["Adjective", "Noun", "Value", "Acronym"];
-/** Tokens that can be an NP's HEAD - the noun the phrase is about. */
-const NP_HEAD_TAGS = ["Noun", "Value", "Acronym"];
-/**
- * Articles, by surface. Closed-class, and deliberately not read off the
- * Determiner tag - see `splitSubjectNp`, where the tagger's mid-string
- * mislabelling is what makes the surface the reliable signal.
- */
-const ARTICLE_SURFACES = new Set(["the", "a", "an"]);
-
-/**
- * Splits an aux-fronted question's remainder into [subject NP, predicate].
- *
- * The subject boundary cannot be found by counting words. The previous
- * implementation took the SHORTEST leading NP (a lazy `(?:\s+\w+)*?` quantifier),
- * which is right for "felix a mammal" -> `felix` / `a mammal` but wrong for
- * every multi-word subject: "the bald eagle red" split as `the bald` / `eagle
- * red`, canonicalizing "is the bald eagle red?" to "the bald is eagle red"
- * (measured 2026-07-30). Making the quantifier greedy just inverts the failure.
- *
- * So use the tags instead - compromise is already the tagger BOTH graph parsers
- * trust, so the question path now reads word classes the same way the statement
- * path does. Two rules:
- *
- *   1. The NP is the maximal leading run of determiner/adjective/noun, where a
- *      determiner may only OPEN the run. That second clause is what separates
- *      subject from predicate nominal: in "felix a mammal" the `a` starts a new
- *      phrase, so the subject stops before it.
- *   2. The subject ends at the run's RIGHTMOST head noun - English NPs are
- *      right-headed. Cutting at the FIRST noun instead fails on real corpus
- *      surfaces, because the tagger mis-tags leading attributes as nouns:
- *      "the round green thing" tags `round` as Noun,Singular, and a
- *      first-noun cut yields `the round` / `green thing kind`. This is the same
- *      right-headedness `npHead` (LogicGraph.ts) relies on to intern one entity
- *      to one precept, now applied to the split rather than the label.
- *
- * When the run consumes the whole remainder there is no predicate left, so the
- * cut falls back to the previous head: "roses organisms" is `roses` /
- * `organisms`, not a five-word subject with nothing said about it. (This also
- * rescues tagger noise - "felix fly" tags `fly` as a ProperNoun surname.)
- *
- * Returns null when no head is found, or when only one head exists and it
- * cannot be both subject and predicate. Null means silence, which is the
- * correct failure here: an unsplittable surface must not become a confidently
- * mis-parsed proposition.
- *
- * Known residual, accepted: a three-noun surface ("are fire trucks vehicles")
- * is genuinely ambiguous under tags alone - `fire trucks` / `vehicles` is right
- * here and would be wrong for a different sentence with identical tags.
- * Resolving it needs the tokens to reach the clause parser un-round-tripped
- * (PARITY: fold aux-fronting into parseClause), not a better regex.
- */
-function splitSubjectNp(rest: string): [string, string] | null {
-  const terms = (nlp(rest).json({ terms: { tags: true, normal: true } })[0]
-    ?.terms ?? []) as { normal?: string; tags?: string[] }[];
-  const toks = terms.map(t => ({
-    normal: (t.normal ?? "").toLowerCase(),
-    tags: t.tags ?? [],
-  }));
-  if (toks.length < 2) return null;
-
-  const heads: number[] = [];
-  let end = 0;
-  for (; end < toks.length; end++) {
-    const tags = toks[end].tags;
-    // Articles are matched by SURFACE, not by tag: the tagger only reliably
-    // labels one in sentence-initial position, and mid-string it guesses at a
-    // name-like run instead - "felix an animal" tags `an` as a bare Noun, and
-    // "felix the animal" tags `the` Noun,ProperNoun,Person. Keying on the tag
-    // there let the run swallow the article and split as `felix an` /
-    // `animal`, yielding "felix an is animal". They are a closed class of
-    // three, which is exactly the kind of lexicon this module does permit.
-    const opensPhrase =
-      ARTICLE_SURFACES.has(toks[end].normal) ||
-      tags.includes("Determiner") ||
-      tags.includes("Possessive");
-    // A determiner is only admissible as the run's first token; anywhere else
-    // it begins the predicate nominal.
-    if (opensPhrase) {
-      if (end > 0) break;
-      continue;
-    }
-    if (!NP_BODY_TAGS.some(tag => tags.includes(tag))) break;
-    if (NP_HEAD_TAGS.some(tag => tags.includes(tag))) heads.push(end);
-  }
-  // No head at all means the tagger mis-read the subject itself, not that the
-  // surface is unsplittable: "bob rich" tags `bob` as an imperative Verb,
-  // because `rich` reads as a comparative and pulls the parse into a verb
-  // phrase. Fall back on POSITION - in an aux-fronted question the token right
-  // after the auxiliary is the subject whatever it got tagged. This reproduces
-  // the old regex's behaviour exactly (a one-word subject), which is the right
-  // degradation: it only ever fires where the tags are already untrustworthy,
-  // and it cannot mis-place a multi-word boundary because it never claims one.
-  if (heads.length === 0) heads.push(0);
-
-  // Rightmost head, backing off when it would leave the predicate empty.
-  let head = heads[heads.length - 1];
-  if (head === toks.length - 1) {
-    if (heads.length < 2) return null;
-    head = heads[heads.length - 2];
-  }
-
-  const subjectToks = toks.slice(0, head + 1);
-  // A subject made only of articles is not a noun phrase. This is reachable
-  // despite the head test above because the tagger guesses at bare fragments:
-  // "the red" tags BOTH words Noun (no Determiner at all), so the back-off
-  // above hands `the` back as a head. It grounds to nothing downstream (lemma
-  // strips the article, ensure rejects the empty label), so this only makes an
-  // already-safe failure explicit rather than incidental.
-  if (subjectToks.every(t => ARTICLE_SURFACES.has(t.normal))) return null;
-
-  const subject = subjectToks
-    .map(t => t.normal)
-    .join(" ")
-    .trim();
-  const predicate = toks
-    .slice(head + 1)
-    .map(t => t.normal)
-    .join(" ")
-    .trim();
-  return subject && predicate ? [subject, predicate] : null;
-}
-
-/**
- * Converts a yes/no question surface to a declarative proposition, or null
- * when the surface is not a yes/no question this resolver should touch
- * (wh-questions, imperatives, already-statements without inversion are
- * returned as-is when declarative, null when out of scope).
- */
-export function questionToProposition(text: string): string | null {
+function stripScaffolds(text: string): string | null {
   let q = text
     .trim()
     .toLowerCase()
@@ -217,23 +93,24 @@ export function questionToProposition(text: string): string | null {
   // "would X count as Y" -> "X is Y"
   q = q.replace(/^would\s+(.+?)\s+count as\s+/, (_m, s: string) => `${s} is `);
   if (/^(what|who|where|when|why|how|which|whose)\b/.test(q)) return null;
+  return q;
+}
 
-  const aux = q.match(AUX_FRONT);
-  if (!aux) return q; // already declarative ("felix is a mammal", "the grass grows")
-
-  const [, auxWord, rest] = aux;
-  // For do-support the auxiliary is dropped entirely rather than re-seated
-  // ("does felix like water" -> "felix like water"; the grammar parser
-  // lemmatizes the verb anyway), so the word order is already declarative and
-  // the subject boundary never has to be found.
-  if (auxWord === "does" || auxWord === "do" || auxWord === "did") return rest;
-
-  // Everything else re-seats the auxiliary after the subject NP, which means
-  // finding where that NP ends: "is felix a mammal" -> "felix is a mammal",
-  // "can felix fly" -> "felix can fly".
-  const np = splitSubjectNp(rest);
-  if (!np) return null;
-  return `${np[0]} ${auxWord} ${np[1]}`;
+/**
+ * Converts a yes/no question surface to a declarative proposition, or null
+ * when the surface is not a yes/no question this resolver should touch
+ * (wh-questions, imperatives, already-statements without inversion are
+ * returned as-is when declarative, null when out of scope).
+ *
+ * The word order is undone by `declarativeSurface` (TextGraph), on tagged
+ * tokens, with the SAME rotation `parseClause` applies when it parses the
+ * question into a graph. The resolver no longer builds its graph from this
+ * string - it parses the question directly - so this is the ANSWER surface,
+ * and the shared rotation is what stops the two from disagreeing.
+ */
+export function questionToProposition(text: string): string | null {
+  const q = stripScaffolds(text);
+  return q === null ? null : declarativeSurface(q);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,10 +368,17 @@ export function resolveGraphQuery(
   atomizer: Atomic.Engine
 ): GraphQueryResult | null {
   try {
-    const proposition = questionToProposition(text);
+    const question = stripScaffolds(text);
+    if (question === null) return null;
+    // The declarative rendering is needed for the ANSWER surface only. The
+    // graph is parsed from the QUESTION itself, with the auxiliary still
+    // fronted, because `parseClause` undoes the inversion in token space -
+    // so the surface an answer echoes and the graph it was verified against
+    // come from one string through one rotation, and cannot drift apart.
+    const proposition = declarativeSurface(question);
     if (!proposition) return null;
 
-    const graph = buildGraphFromText(proposition);
+    const graph = buildGraphFromText(question, { interrogative: true });
     if (graph.nodes.length < 2) return null;
     const contrasts = graph.contrasts ?? [];
     if (graph.edges.length === 0 && contrasts.length === 0) return null;
