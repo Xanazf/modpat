@@ -191,6 +191,17 @@ declare namespace Grounding {
      * shape). Placement uses it normally; the query ledger skips it.
      */
     pairScoped?: boolean;
+    /**
+     * True for a subsumption edge derived from a LABEL rather than asserted by
+     * a sentence ("bald eagle" -> "eagle"; `GraphBuilder.ensure`). The claim is
+     * definitionally true and sound to walk, so the ledger uses it normally -
+     * but it is not EVIDENCE that any sentence was understood, and the
+     * parse-completeness valve must not count it. Gibberish still interns as a
+     * phrase, and "zzz qqq vvv" -> "vvv" would otherwise make an unreadable
+     * sentence look parsed, opening closed-world denial on a theory the parser
+     * never actually read (measured 2026-07-31).
+     */
+    definitional?: boolean;
   }
 
   /**

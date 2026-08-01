@@ -530,18 +530,91 @@ export async function runRuleDischargeTests(): Promise<void> {
         );
         // Both facts landing on one precept is the invariant; assert it
         // directly so a regression cannot hide behind a phrasing change.
-        const eagleIds = [
-          ...system.getIdsByScope(atomizer.getSymbolScope("eagle", false)),
-        ].filter(
-          id =>
-            system.isAllocated(id) &&
-            (system.textGroundedEdges.has(id) ||
-              system.textGroundedTripleParticipants.has(id))
-        );
+        const ledgerIds = (label: string): number[] =>
+          [
+            ...system.getIdsByScope(atomizer.getSymbolScope(label, false)),
+          ].filter(
+            id =>
+              system.isAllocated(id) &&
+              (system.textGroundedEdges.has(id) ||
+                system.textGroundedTripleParticipants.has(id))
+          );
         assert.strictEqual(
-          eagleIds.length,
+          ledgerIds("bald eagle").length,
           1,
           "the entity occupies exactly one ledger precept"
+        );
+      } finally {
+        physics.TEXT_GRAPH_INGESTION_ENABLED = prev.i;
+        physics.TEXT_GRAPH_QUERY_ENABLED = prev.q;
+        physics.TEXT_GRAPH_RULE_DISCHARGE_ENABLED = prev.d;
+        await store.close();
+      }
+    });
+
+    await it("keeps two entities that share a head noun apart", async () => {
+      const physics = DOPAT_CONFIG.PHYSICS as unknown as Record<
+        string,
+        boolean
+      >;
+      const prev = {
+        i: physics.TEXT_GRAPH_INGESTION_ENABLED,
+        q: physics.TEXT_GRAPH_QUERY_ENABLED,
+        d: physics.TEXT_GRAPH_RULE_DISCHARGE_ENABLED,
+      };
+      physics.TEXT_GRAPH_INGESTION_ENABLED = true;
+      physics.TEXT_GRAPH_QUERY_ENABLED = true;
+      physics.TEXT_GRAPH_RULE_DISCHARGE_ENABLED = true;
+
+      const system = new System();
+      const atomizer = new LogicAtomizer();
+      await atomizer.init();
+      const store = new Store(system, atomizer, ":memory:");
+      await store.waitForInit();
+      try {
+        // The modifier is what distinguishes the birds, and interning only the
+        // head pooled them: the ledger held eagle->red AND eagle->blue for what
+        // the text says are two animals. Silence under open-world semantics,
+        // a confident falsehood under closed-world denial.
+        groundTextIfEnabled(
+          ["the bald eagle is red", "the golden eagle is blue"],
+          system,
+          atomizer
+        );
+        assert.strictEqual(
+          resolveGraphQuery("is the bald eagle red?", system, atomizer)?.answer,
+          "the bald eagle is red",
+          "each bird keeps its own facts"
+        );
+        assert.ok(
+          !resolveGraphQuery(
+            "is the bald eagle blue?",
+            system,
+            atomizer
+          )?.answer.startsWith("the bald eagle is blue"),
+          "the OTHER bird's colour does not transfer"
+        );
+        // Subsumption is the compensation for not collapsing: the phrase still
+        // reaches its head, so a taxonomy asserted about eagles remains
+        // reachable from either bird. Direction is specific -> general only.
+        const g = buildGraphFromText("the bald eagle is red");
+        const sub = g.edges.find(
+          e =>
+            g.nodes[e.from].label === "bald eagle" &&
+            g.nodes[e.to].label === "eagle"
+        );
+        assert.ok(sub, "a modified NP subsumes under its head");
+        assert.ok(
+          sub?.definitional,
+          "the subsumption edge is stamped definitional, not asserted"
+        );
+        // ...and being label-derived, it is not evidence the sentence parsed:
+        // multi-word gibberish must still open the parse-completeness valve.
+        const before = system.textGroundedUnparsed;
+        groundTextIfEnabled("zzz qqq vvv", system, atomizer);
+        assert.ok(
+          system.textGroundedUnparsed > before,
+          "a definitional edge does not make gibberish look parsed"
         );
       } finally {
         physics.TEXT_GRAPH_INGESTION_ENABLED = prev.i;

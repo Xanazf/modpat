@@ -49,44 +49,46 @@ function arithOp(tok: string): string | null {
 }
 
 /**
- * Reduces a multi-word noun phrase to its HEAD (the last word - English NPs
- * are right-headed), so that one entity interns to one label no matter which
- * parser saw it.
+ * A modified noun phrase KEEPS its modifier and gains a subsumption edge to
+ * its head: "the bald eagle is red" interns `bald eagle` plus an edge
+ * `bald eagle -> eagle`. English NPs are right-headed, so the head is the last
+ * word, and the edge direction is the one the ledger already uses for
+ * membership ("felix is a cat" -> felix -> cat): the specific references the
+ * general, never the reverse.
  *
- * This exists because two parsers feed this same builder with different noun-
- * phrase conventions, and they disagreed (measured 2026-07-30, PARITY §3.2):
- * `buildGraphFromText` delegates single-clause statements to LogicGraph,
- * whose regexes hand `ensure` a RAW SPAN ("the bald eagle is red" -> subject
- * span "the bald eagle" -> lemma -> `bald eagle`), while its own grammatical
- * pass hands `ensure` a single token, because `collectNpGroups` already takes
- * the last content token of the span (`eagle`). The same animal therefore got
- * two precepts, the theory's knowledge split across them, and a question
- * landing on the sparse half was "not derivable" for reasons unrelated to the
- * theory - harmless silence under open-world semantics, a confident falsehood
- * once closed-world denial was switched on.
+ * This replaces a normalisation that COLLAPSED the phrase to its head
+ * (2026-07-30 - 2026-07-31). The collapse existed because two parsers feed
+ * this same builder and disagreed: `buildGraphFromText` delegates single-clause
+ * statements to LogicGraph, whose regexes hand `ensure` a RAW SPAN ("the bald
+ * eagle" -> lemma -> `bald eagle`), while its own grammatical pass handed over
+ * a single token, because `collectNpGroups` took only the last content token
+ * (`eagle`). The same animal got two precepts, the theory's knowledge split
+ * across them, and a question landing on the sparse half was "not derivable"
+ * for reasons unrelated to the theory.
  *
- * Normalising HERE rather than at either call site is deliberate: `ensure` is
- * the one place both parsers meet (TextGraph's DedupGraphBuilder extends this
- * class), so the conventions cannot drift apart again.
+ * Collapsing was the cheap way to make them agree, and it cost the modifier:
+ * "the bald eagle is red. the golden eagle is blue." pooled BOTH birds onto
+ * `eagle`, so the ledger held eagle->red and eagle->blue for what the text says
+ * are two animals. Harmless silence under open-world semantics; a confident
+ * falsehood under closed-world denial, which is now the high-scoring
+ * configuration. The parsers agree on the FULL PHRASE instead (collectNpGroups
+ * emits the modified span), which is the same fix in the opposite direction -
+ * and lossless, so nothing downstream has to guess what was discarded.
  *
- * Known cost, accepted: the modifier is discarded, so "bald eagle" and
- * "golden eagle" would collide as `eagle`. The deduction corpora name one
- * animal of each kind per theory, so it is lossless there, and agreeing on
- * the head noun beats disagreeing about the phrase. The lossless end state is
- * to keep both labels and relate them by subsumption (derive downward from
- * `eagle` to `bald eagle`, never upward) - that is its own mechanism, not a
- * normalisation, and is deliberately not attempted here.
+ * Doing it HERE rather than at either call site is deliberate for the same
+ * reason the collapse was: `ensure` is the one place both parsers meet
+ * (TextGraph's DedupGraphBuilder extends this class), so the conventions
+ * cannot drift apart again, and delegation gets the subsumption edge without
+ * knowing it exists.
  *
  * Applies to Term nodes only: Operator labels are built as space-free strings
  * ("(3+4)") and Literals are excluded upstream by `parseNumericLabel`.
  *
  * Only a SIMPLE noun phrase has a single head, so spans containing a
- * coordinator or a preposition are left alone. Reducing them picks the wrong
- * word and, worse, makes a junk span collide with a real entity: delegation
- * hands `ensure` the whole subject span of "cats or dogs are pets", whose last
- * word is `dogs` - reducing it to `dog` collided with the node the
- * grammatical pass distributes to, and dedup then swallowed that disjunct's
- * softened w0.5 edge (caught by text_graph.test.ts's coordination guard).
+ * coordinator or a preposition get no edge - their last word is not what they
+ * are about. Delegation hands `ensure` the whole subject span of "cats or dogs
+ * are pets", whose last word is `dogs`; relating that span to `dog` would
+ * assert a subsumption the sentence never made.
  *
  * The test runs on the RAW span, not the lemmatised one: `lemma()` filters
  * through compromise's `.nouns()`, which drops the coordinator entirely, so
@@ -94,10 +96,12 @@ function arithOp(tok: string): string | null {
  */
 const NP_NON_SIMPLE = /\b(?:and|or|nor|of|in|on|at|to|for|with|from|by)\b/;
 
-function npHead(raw: string, label: string, kind: NodeKind): string {
-  if (kind !== NodeKind.Term) return label;
+/** The head of a simple modified NP, or null when there is no modifier to
+ *  relate ("eagle") or the span is not a simple NP ("cats or dogs"). */
+function npHead(raw: string, label: string, kind: NodeKind): string | null {
+  if (kind !== NodeKind.Term) return null;
   const words = label.split(/\s+/).filter(Boolean);
-  if (words.length < 2 || NP_NON_SIMPLE.test(raw.toLowerCase())) return label;
+  if (words.length < 2 || NP_NON_SIMPLE.test(raw.toLowerCase())) return null;
   return words[words.length - 1];
 }
 
@@ -111,28 +115,48 @@ export class GraphBuilder {
    *  unless a later, more specific kind is supplied. Numerics are always Literal. */
   ensure(rawLabel: string, kind: NodeKind): number {
     const numeric = parseNumericLabel(rawLabel);
-    const label =
-      numeric !== null
-        ? rawLabel.trim()
-        : npHead(rawLabel, lemma(rawLabel), kind);
+    const label = numeric !== null ? rawLabel.trim() : lemma(rawLabel);
     if (!label) return -1;
-    let id = this.idByLabel.get(label);
-    if (id === undefined) {
-      id = this.nodes.length;
-      this.idByLabel.set(label, id);
-      this.nodes.push({
-        id,
-        label,
-        kind: numeric !== null ? NodeKind.Literal : kind,
-        numeric,
-      });
+    const known = this.idByLabel.get(label);
+    if (known !== undefined) return known;
+
+    const id = this.nodes.length;
+    this.idByLabel.set(label, id);
+    this.nodes.push({
+      id,
+      label,
+      kind: numeric !== null ? NodeKind.Literal : kind,
+      numeric,
+    });
+
+    // Relate a modified NP to its head ON CREATION only, so the edge is added
+    // exactly once however many times the phrase is mentioned. Interning the
+    // head first would recurse forever were the head itself multi-word; it
+    // never is, being one word by construction.
+    if (numeric === null) {
+      const head = npHead(rawLabel, label, kind);
+      if (head) {
+        const headId = this.ensure(head, kind);
+        const before = this.definitional;
+        this.definitional = true;
+        this.edge(id, headId, EdgeKind.Reference);
+        this.definitional = before;
+      }
     }
     return id;
   }
 
+  /**
+   * While true, created edges are stamped `definitional` - derived from a
+   * label, not asserted by a sentence (see GroundEdge.definitional).
+   */
+  protected definitional = false;
+
   edge(from: number, to: number, kind: EdgeKind, weight = 1): void {
     if (from < 0 || to < 0 || from === to) return;
-    this.edges.push({ from, to, kind, weight });
+    const e: Grounding.GroundEdge = { from, to, kind, weight };
+    if (this.definitional) e.definitional = true;
+    this.edges.push(e);
   }
 
   /** Records a signed stance relation (negation as opposition, not absence). */

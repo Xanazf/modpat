@@ -80,10 +80,16 @@ export function groundTextIfEnabled(
   system.textGroundedSentences++;
   try {
     const graph = buildGraphFromText(text);
-    if (
-      graph.nodes.length < 2 ||
-      graph.edges.length + (graph.contrasts?.length ?? 0) < 1
-    ) {
+    // Definitional edges are excluded from the evidence test: they come from a
+    // LABEL ("bald eagle" -> "eagle"), not from anything the sentence said, so
+    // counting them would let any multi-word gibberish look parsed. "zzz qqq
+    // vvv" interns as a phrase and gets an edge to "vvv" - without this the
+    // valve would open on a theory the parser never read, which is exactly the
+    // state closed-world denial must not run in (measured 2026-07-31).
+    const asserted =
+      graph.edges.filter(e => !e.definitional).length +
+      (graph.contrasts?.length ?? 0);
+    if (graph.nodes.length < 2 || asserted < 1) {
       // Nothing landed: this input is invisible to the ledger, so the
       // closed-world valve must know the theory is incompletely read.
       system.textGroundedUnparsed++;

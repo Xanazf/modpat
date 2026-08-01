@@ -218,14 +218,12 @@ export async function runTextGraphTests(): Promise<void> {
         interrogative: true,
       });
       assert.ok(
-        hasEdge(q, "eagle", "red"),
+        hasEdge(q, "bald eagle", "red"),
         "copula question yields the same edge as its statement"
       );
+      const s = buildGraphFromText("the bald eagle is red");
       assert.deepStrictEqual(
-        buildGraphFromText("the bald eagle is red").edges.map(e => [
-          labelOf(q, e.from),
-          labelOf(q, e.to),
-        ]),
+        s.edges.map(e => [labelOf(s, e.from), labelOf(s, e.to)]),
         q.edges.map(e => [labelOf(q, e.from), labelOf(q, e.to)]),
         "question and statement produce the identical edge set"
       );
@@ -234,7 +232,11 @@ export async function runTextGraphTests(): Promise<void> {
       // INGESTION path too, and a statement opening with an auxiliary must
       // never be silently rewritten before being asserted.
       assert.ok(
-        !hasEdge(buildGraphFromText("is the bald eagle red"), "eagle", "red"),
+        !hasEdge(
+          buildGraphFromText("is the bald eagle red"),
+          "bald eagle",
+          "red"
+        ),
         "without the flag an aux-fronted surface is NOT de-fronted"
       );
 

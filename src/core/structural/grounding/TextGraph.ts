@@ -233,6 +233,10 @@ class DedupGraphBuilder extends GraphBuilder {
     const seen = this.seenEdges.get(key);
     if (seen) {
       if (!this.hypothetical) delete seen.hypothetical;
+      // A sentence that actually asserts the subsumption ("the bald eagle is
+      // an eagle") outranks the one derived from the label, exactly as an
+      // asserted duplicate outranks a hypothetical one.
+      if (!this.definitional) delete seen.definitional;
       if (pairScoped) seen.pairScoped = true;
       return;
     }
@@ -464,8 +468,32 @@ interface NpGroup {
 }
 
 /**
+ * Interns one NP group and returns its node id, or -1 for an empty span.
+ *
+ * The span keeps its MODIFIERS ("the bald eagle" -> `bald eagle`), where it
+ * used to intern only the last content token (`eagle`). Two parsers feed the
+ * same builder and have to agree on one label for one entity; they now agree
+ * on the full phrase rather than on the head, so the modifier is not discarded
+ * and two birds of the same kind stay two precepts. `GraphBuilder.ensure`
+ * relates the phrase to its head by subsumption, so nothing has to be
+ * re-derived from the label later.
+ *
+ * A span with a non-noun head keeps just that token: adjective complements
+ * ("felix is red") and Value tokens are not noun phrases, and joining them
+ * would invent an entity out of a predicate.
+ */
+function ensureNp(span: Tok[], b: GraphBuilder): number {
+  if (span.length === 0) return -1;
+  const head = span[span.length - 1];
+  if (span.length === 1 || !hasTag(head, "Noun"))
+    return b.ensure(head.normal, NodeKind.Term);
+  return b.ensure(span.map(t => t.normal).join(" "), NodeKind.Term);
+}
+
+/**
  * Collects coordinated NP heads from a token span: groups are separated by
- * and/or; each group's head is its LAST content token ("the red cat" -> cat).
+ * and/or; each group interns as its full content span ("the red cat" ->
+ * `red cat`, with `red cat -> cat` added by `ensure`).
  */
 function collectNpGroups(
   toks: Tok[],
@@ -474,19 +502,21 @@ function collectNpGroups(
 ): NpGroup {
   const heads: number[] = [];
   let disjunctive = false;
-  let current: Tok | null = null;
+  let span: Tok[] = [];
+  const flush = (): void => {
+    const id = ensureNp(span, b);
+    if (id >= 0) heads.push(id);
+    span = [];
+  };
   for (const t of toks) {
     if (t.normal === "and" || t.normal === "or" || hasTag(t, "Conjunction")) {
       if (t.normal === "or") disjunctive = true;
-      if (current) {
-        heads.push(b.ensure(current.normal, NodeKind.Term));
-        current = null;
-      }
+      flush();
       continue;
     }
-    if (isContent(t, afterVerb)) current = t;
+    if (isContent(t, afterVerb)) span.push(t);
   }
-  if (current) heads.push(b.ensure(current.normal, NodeKind.Term));
+  flush();
   return { heads, disjunctive };
 }
 
@@ -693,17 +723,24 @@ function isNegTok(t: Tok): boolean {
 }
 
 /**
- * Parses a "[not] PRED-NP" span into its negation flag + head predicate node
- * (head-last, matching the fact side's collectNpGroups convention - "a bald
- * eagle" -> eagle). Any token that is not negation/determiner glue must be
+ * Parses a "[not] PRED-NP" span into its negation flag + predicate node, using
+ * the SAME NP convention as the fact side (`ensureNp` - "a bald eagle" ->
+ * `bald eagle`). Any token that is not negation/determiner glue must be
  * content; prepositions, verbs, and bound-variable words reject the rule.
+ *
+ * Rules are the THIRD parser feeding this builder, after delegation and the
+ * grammatical pass, and it has to agree with them about what an entity is
+ * called. When it interned only the head while they kept the phrase, rules
+ * about "the bald eagle" discharged onto a precept no assertion used, and six
+ * relational items went silent - "if someone is rough then they need the bald
+ * eagle" could not connect to "the rabbit is rough" (measured 2026-07-31).
  */
 function parsePredicateSpan(
   span: Tok[],
   b: DedupGraphBuilder
 ): { predicate: number; negated: boolean } | null {
   let negated = false;
-  let head: Tok | null = null;
+  const np: Tok[] = [];
   for (const t of span) {
     if (isNegTok(t)) {
       negated = true;
@@ -712,16 +749,16 @@ function parsePredicateSpan(
     if (!t.normal || hasTag(t, "Determiner")) continue;
     if (VAR_SUBJECTS.has(t.normal)) return null;
     if (!isContent(t, true)) return null;
-    head = t;
+    np.push(t);
   }
-  if (!head) return null;
-  return { predicate: b.ensure(head.normal, NodeKind.Term), negated };
+  if (np.length === 0) return null;
+  return { predicate: ensureNp(np, b), negated };
 }
 
 /**
- * Parses a rule-chunk subject span (head-last NP, or a bound-variable word):
- * ground node id, -1 for the variable, `inherited` when elided, or null when
- * the span contains anything else.
+ * Parses a rule-chunk subject span (an NP under the same convention as the
+ * fact side, or a bound-variable word): ground node id, -1 for the variable,
+ * `inherited` when elided, or null when the span contains anything else.
  */
 function parseRuleSubject(
   span: Tok[],
@@ -729,7 +766,7 @@ function parseRuleSubject(
   inherited: number | null
 ): number | null {
   let sawVar = false;
-  let head: Tok | null = null;
+  const np: Tok[] = [];
   for (const t of span) {
     if (
       !t.normal ||
@@ -744,12 +781,12 @@ function parseRuleSubject(
       continue;
     }
     if (isContent(t, false)) {
-      head = t;
+      np.push(t);
       continue;
     }
     return null;
   }
-  if (head) return b.ensure(head.normal, NodeKind.Term);
+  if (np.length > 0) return ensureNp(np, b);
   if (sawVar) return -1;
   return inherited;
 }

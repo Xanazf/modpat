@@ -576,7 +576,14 @@ export function resolveGraphQuery(
     // edges. Every asked link must agree; any undecided link -> silence.
     let negatedQuestion = false;
     const links: Array<[number, number]> = [];
-    for (const e of graph.edges) links.push([e.from, e.to]);
+    // Definitional edges are not part of what was ASKED. Parsing "is the bald
+    // eagle red?" interns `bald eagle` and relates it to `eagle`, and treating
+    // that as a second asked link makes the question about its own subject's
+    // label: the resolver answered "bald eagle is eagle" to a question about
+    // being red, and the extra undecided link silenced six others (measured
+    // 2026-07-31, 7 LOSS). One question asks one thing.
+    for (const e of graph.edges)
+      if (!e.definitional) links.push([e.from, e.to]);
     for (const c of contrasts) {
       links.push([c.a, c.b]);
       negatedQuestion = true;
