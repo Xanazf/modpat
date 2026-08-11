@@ -41,7 +41,7 @@ Internal (from ROADMAP Status, all guard-tested):
 | static grounding pearson | 0.944 |
 | traversal onPath | 0.95 |
 | coherence gate balanced accuracy | 100% (17 cases) |
-| behavioural fidelity (arith / code) | 1.000 / 1.000 |
+| behavioural fidelity (arith / code-as-arithmetic-through-tsx) | 1.000 / 1.000 |
 | closed-world fidelity (logic) | 0.844 baseline |
 | propositional suite | 6/6 |
 
@@ -306,6 +306,289 @@ should be. The two residuals above are unchanged - three-noun ambiguity and
 compound-noun subjects survive, and now demonstrably cannot be fixed by moving
 the boundary logic around, only by a real NP parser.
 
+### Update, 2026-08-01: the code family gets its honest baseline - it is zero
+
+§3.5 was the largest remaining item (35% of the distance) and the only one
+still costed entirely from theory. It now has the same kind of number the
+deduction family got on 2026-07-21, produced the same way: the actual dataset
+files through the pipeline, with execution as the oracle.
+
+**The dataset.** All 159 problems of MultiPL-E's TypeScript translation of
+HumanEval, vendored at `data/benchmarks/humaneval_ts.jsonl`
+(`scripts/dev/fetch_code_benchmark.ts`). TypeScript rather than the original
+Python because §3.5's asset is "tsx execution = free territory contact" - the
+candidate is spliced into the official prompt and run by the official tests in
+a child process that never sees a manifold coordinate, which is the same
+non-circularity `CodeBehaviouralFidelity.ts` claims for arithmetic, and it only
+holds in a language this repo executes.
+
+**First, a correction to §2's own table.** The "behavioural fidelity (arith /
+code) 1.000 / 1.000" row has been read as a code-synthesis result. It is not.
+That channel parses `a + b` / `a - b`, predicts the reduct from grounded W
+positions, and checks it against tsx - it never touches the Synthesizer's
+emitted text. The 1.000 is real and it is about arithmetic; it says nothing
+about whether the engine can write a function, and §3.5's estimate should never
+have had it nearby.
+
+| configuration (n=159) | pass@1 | abstain | confFalse |
+| --------------------- | ------ | ------- | --------- |
+| cold vault, name surface | **0.0%** | 93.1% | 11 |
+| stdlib-primed, name surface | **0.0%** | 93.1% | 11 |
+| stdlib-primed, doc surface | **0.0%** | 31.4% | 109 |
+
+The headline zero is the least informative part. Three measured findings:
+
+1. **Not one emission was a program.** Inspecting all 477 item-runs: the
+   `fail` bucket is bare English words (`is_prime` → `"prime"`), which parse
+   only because a lone identifier is a valid expression statement; the
+   `invalid` bucket is English prose. The honest claim is not "0% pass@1" but
+   **the code path does not currently emit code for HumanEval-class input.**
+2. **Priming is not the lever.** Cold and stdlib-primed are byte-identical in
+   every emitted string on all 159 items (0 disagreements, measured).
+   Ingesting 90 code patterns changes nothing, because retrieval keys on an
+   abstracted signature plus a grid window around the query centroid, and an
+   unseen intent phrase lands outside the window.
+3. **The reading/writing inversion, one layer further in.** §3.1 opened this
+   document with "the reasoning engine is not what loses; the reading is." For
+   code the round-trip probe isolates the other half: ingest the Stage-1
+   corpus, ask each function back **by the intent phrase ingestion itself
+   minted for it**, and execute the result. On 29 functions the engine had
+   literally just been shown, pass@1 was **0%** with 12 confident falsehoods.
+   Nothing about reading is involved. Here it is the **writing** that loses:
+   the vault stores code as a token sequence, so `+` comes back as `plus`
+   (BaseAtomizer canonicalizes symbol and word forms to one scope - correct
+   for arithmetic language, destructive for source text), `decodeSequence`
+   space-joins punctuation, and every identifier returns as an unbound `_`.
+
+So the §3.5 residual is not "synthesize control flow and data structures", as
+the section has said since 2026-07-05. Control flow is already stored
+correctly - the retrieved templates have the right `if`/`for` shape. The engine
+cannot get a function it already holds back out through its own storage medium.
+
+**One fix landed, and it buys the covenant rather than capability.** A code-
+channel emission gate (`_emissionIsProgram`, `Perception.ts`) parses the
+instantiated template and abstains on what does not parse. Round-trip
+confFalse **12 → 4**, `invalid` **8 → 0**, abstention 58.6% → 86.2%, pass@1
+**0.0% either way**. Scoped to retrievals with non-zero `slotFlags` (actual
+code patterns): `|-` is the general inference sink, so an ungated version would
+silence any English vault recall reaching the same fast-path - the regression
+the perception-gate scoping work already documented.
+
+**It is a recorded capability reduction, not a free win.** `pcs_e2e`'s step 4
+asserted that synthesis returns something containing "function" or "return",
+and it passed on `function add ( _ _ ) { return _ plus _ ; }` - certifying
+structure it never checked. That case is now an abstention. The test was
+rewritten to pin the invariant (*parseable code or abstention, never text
+shaped like code*) rather than the current answer, so restoring emission makes
+it pass on the code branch without being edited.
+
+**A methodological caveat that must travel with the doc-surface 109.** The
+engine has no way to know it was asked for code. `|-` is the general inference
+sink, so a code request that misses the vault is handled as a deduction
+request and answered in English - the settling path doing its job. Scoring that
+as a confident falsehood charges the engine for the harness's framing. It stays
+in the column because under a synthesis contract a non-program answer is a
+failed commitment, but the underlying defect is **the code channel has no
+request type**, and that belongs to §3.5.
+
+On the record, a gradable prediction: **the code family's binding constraint is
+emission fidelity, not synthesis intelligence - restoring a lossless code
+round-trip (a detokenizer that inverts the symbol/word canonicalization for
+code-scoped sequences, plus real slot bindings so identifiers are not `_`)
+takes the round-trip probe from 0% to >80% pass without any new reasoning
+mechanism, and HumanEval pass@1 stays near zero until it lands.** Wrong-if:
+either a full emission fix leaves the round-trip probe below 80% (the loss is
+not in the medium but in retrieval or composition), or HumanEval pass@1 moves
+materially above zero from work that does not touch emission at all.
+
+### Update, same day: the emission is fixed, and the prediction is falsified
+
+The fix landed in full - detokenizer plus real slot bindings, exactly as
+scoped - and the round-trip probe went **0% → 24.1% pass@1** at unchanged
+confident falsehoods, with `invalid` at zero. Emitted code is now correct,
+canonically-formatted TypeScript. Mechanism detail is in
+`data/benchmarks/README.md`; the three parts worth carrying here:
+
+1. **Spacing was never a loss.** The baseline entry above lists "punctuation is
+   space-joined" as one of the three defects. It is not one: JavaScript is
+   whitespace-insensitive, so the space-joined form already parses and
+   re-printing it is free. Only the operator-word and case losses were real.
+2. **The information needed was already being computed and thrown away.**
+   `extractPatternFromNode` has always produced `varNames`, the original
+   identifier for every slot; `processCode` discarded them. Persisting them
+   (`var_names` on `wave_forms`) is what restores case - including member names
+   like `.push`, which no inverse map could recover.
+3. **A real encoding bug surfaced**: `target_pattern` joins tokens with "," and
+   splits on ",", so a literal comma token was destroyed by its own delimiter -
+   `function f(a, b)` came back as `function var_0 ( var_1 var_2 )`. Invisible
+   while the vault held only English.
+
+**Graded: FALSIFIED on its bar, and its own wrong-if named why.** 24.1% is not
+>80%. The stated alternative - "the loss is not in the medium but in retrieval
+or composition" - is what actually holds. The decomposition:
+
+| | n | |
+| --- | --- | --- |
+| probes that retrieved a code pattern at all | 8 / 29 | 28% |
+| of those, emitted correct executable code | 7 / 8 | **87.5%** |
+
+So emission fidelity conditional on retrieval is ~87.5%, and the 24.1% ceiling
+is retrieval firing on barely a quarter of queries. Emission was *a* binding
+constraint - fixing it alone moved 0 → 24.1% - but not *the* binding
+constraint, and the prediction claimed the latter. A confirmed direction
+reached at a quarter of the claimed magnitude is a miss, not a hit.
+
+**What the fix exposed is more useful than what it fixed.** The first fixed run
+measured confFalse 5, and this repo's own regression guard refused to pin it.
+The +1 was `sumOf` returning `startsWith` - a *valid program answering a
+different question*. All `function <name>` intents crystallize under a single
+abstract signature (measured: `function VAR_0` is shared by 8 of 37 code
+patterns), so the vault separates them only by spatial resonance and a
+near-miss returns the wrong function. **That was always happening**; it was
+harmless only because the emission was garbage the parse gate caught.
+Parseability is not correctness, and fixing emission removed the accident that
+had been concealing a retrieval defect. A name-consistency check
+(`_answersTheQuestion`: slot 0 is the declared function's name, so an answer
+whose name is absent from the question is not an answer to it) restored
+confFalse to 4 - final: **7 GAIN / 0 BROKE / 0 LOSS**.
+
+HumanEval is unchanged at 0.0% / 11 / 11 / 109 - the second half of the
+prediction held, and for the reason already recorded: retrieval never fires
+there at all, so there is nothing for an emission fix to improve.
+
+Successor prediction, on the record: **the code family's binding constraint is
+now retrieval keying - the intent signature abstracts away the function name
+that identifies which pattern is wanted, so `function sumOf` and `function
+startsWith` are the same key. Making the intent's content words part of the
+retrieval key (rather than VAR-abstracted) takes the round-trip probe above
+80% at confFalse 0, without touching emission or adding a reasoning
+mechanism.** Wrong-if: keying on intent content leaves the probe below 80%, or
+it clears 80% only by raising confident falsehoods above the pinned 4 (i.e.
+sharper keys buy recall by trading away the covenant).
+
+### Update, same day: retrieval keying fixed - the channel probe is 100%
+
+**Graded: CONFIRMED, with one clause that needed an unnamed mechanism.** The
+predicted change alone - keying code patterns by their literal intent
+(`CODE:function sum of`, not `function VAR_0`) - took the probe **24.1% →
+82.8%**, clearing the 80% bar without touching emission and without adding a
+reasoning mechanism, exactly as stated. The wrong-if did not fire in either
+branch.
+
+But the main claim said "above 80% **at confFalse 0**", and keying alone landed
+82.8% at confFalse **4**. Reaching zero needed a third change the prediction
+did not name: **fast-path order.** Code synthesis ran as the LAST fast-path, so
+any earlier mechanism that produced anything for a sink-terminated query won -
+`function is Even |-` had `isEven` sitting in the vault under a correct exact
+key and was answered `"even"` by semantic derivation instead. An exact key is
+unambiguous by construction, so the exact branch is hoisted above vault recall
+(Phase 0a); the fuzzy attractor-composition fallback stays where it was.
+
+| round-trip (n=29) | pass@1 | abstain | confFalse |
+| ----------------- | ------ | ------- | --------- |
+| pre-gate | 0.0% | 58.6% | 12 |
+| emission gate | 0.0% | 86.2% | 4 |
+| emission fixed | 24.1% | 62.1% | 4 |
+| + exact keying (the predicted change) | 82.8% | 3.4% | 4 |
+| **+ Phase 0a hoist** | **100.0%** | **0.0%** | **0** |
+
+Deduction is untouched (84.3% / 33.1% / confFalse 0, byte-identical, "No
+regressions"), which the namespaced key makes structural rather than lucky: a
+`CODE:` signature exists only for a crystallized code pattern, so a logic query
+cannot mint one or match one.
+
+**Three iterations, three times the binding constraint was somewhere other than
+where the prediction put it** - emission (predicted: >80%, got 24.1%), then
+keying (predicted the mechanism correctly, missed that ordering also mattered),
+with the ordering defect invisible until the two upstream fixes stopped masking
+it. The recurring shape is worth naming: each fix did not so much solve the
+problem as *expose the next one*, because each upstream defect was destroying
+the evidence that would have revealed its successor. Garbage emission concealed
+wrong retrieval; wrong retrieval concealed wrong ordering.
+
+**What this does NOT mean.** The probe is now saturated - 29/29, no silence, no
+error - so it has stopped being a measurement and is only a regression guard.
+It measures **recall of functions the engine was shown verbatim**, which is not
+synthesis. HumanEval is unchanged at **0.0%** across all three configurations,
+and that is the number that speaks to §3.5's actual claim. What has been
+established is that the storage/retrieval/emission channel is now lossless
+end-to-end; what has not been touched is generalizing to a function the engine
+has never seen.
+
+Successor prediction, on the record: **the remaining distance in §3.5 is
+composition, not channel - with the round trip lossless, HumanEval pass@1 stays
+at or near 0.0% until the engine can assemble a pattern it was never shown, and
+no further work on storage, keying, or emission moves it.** Wrong-if: HumanEval
+pass@1 rises materially above 0 from channel-level work alone (better keys,
+better emission, more corpus), which would mean the channel was still the
+constraint and this session's ceiling was self-imposed.
+
+### Update, same day: the toolkit - first HumanEval passes, 0.0% → 2.5%
+
+**Graded: FALSIFIED, and by a mechanism the prediction did not contain.**
+HumanEval pass@1 moved to **2.5% (4/159) at confFalse 0**, and not one of the
+four was assembled - each is a single stored primitive that turned out to solve
+the problem. The prediction said the number could not move "until the engine
+can assemble a pattern it was never shown". It moved without any assembly at
+all.
+
+The prediction's error was a false dichotomy. It offered *channel* versus
+*composition* and the answer was neither: what was missing was **selection by
+execution**. Every candidate was already in the vault and already emittable; no
+mechanism was choosing among them against the request. Note the wrong-if is
+also badly drawn - it names "better keys, better emission, more corpus" as the
+channel-level moves, and the actual move is none of those.
+
+**What was wired.** The code domain's asset is that its oracle is free. Until
+now only the benchmark ever spent it, to score the engine; `Toolkit.ts` lets
+the engine spend it on itself. The problem's own doctests become the goal -
+**156 of 159 problems carry them, 443 in total**, and the doc-surface reader was
+discarding them as noise - every stored pattern is a candidate, all are executed
+against the goal, and only a candidate that passes is committed. The covenant's
+characteristic failure is free by construction: what cannot be verified is
+never emitted.
+
+**The four passes are transfer, not recall**, which is the result worth
+carrying:
+
+| problem | solved by | why |
+| ------- | --------- | --- |
+| `strlen` | `count` | counts elements of an iterable; strings are iterable |
+| `get_positive` | `filterPositive` | the same function under a different name |
+| `max_element` | `largest` | same |
+| `add` | `concat` | `a + b`, written for strings, is addition for numbers |
+
+`concat` solving `add` and `count` solving `strlen` share no name, no intent
+phrase, and no signature. They were found by **execution** - the one retrieval
+channel indifferent to what anything is called. Set against this same session's
+exact-intent keying, which works precisely when the request names the thing and
+is useless here, the two are complementary retrieval modes rather than
+competing ones.
+
+**A specification floor.** The first run committed 6 and passed 4; both false
+commitments came from problems carrying a SINGLE example. One example is not a
+specification - it is one point, and any number of wrong functions pass through
+a point. Requiring two costs reach on 30 of 159 problems and buys confFalse 0;
+all four genuine passes had two or more. After it, self-verified equals
+official-pass exactly, which is the property worth having: the toolkit is no
+longer lying to itself.
+
+**Ablation, stated so 2.5% is not over-read.** The doctests are parsed and
+handed in. Turning prose into a specification is work the Language layer cannot
+do (§3.1), so this isolates composition from reading exactly as the round-trip
+probe isolated the channel from reading. And this is not search: it enumerates
+what the vault holds. It was built to decide whether the next mechanism is
+search or vocabulary, and it answers that - 49 patterns yielded 4 solutions, so
+**the library, not the selection, is now the constraint.**
+
+Successor prediction, on the record: **vocabulary is the binding constraint, and
+it is the cheap kind - growing the Stage-1 corpus from 30 hand-written
+primitives to a real stdlib (string/array/math coverage) takes HumanEval pass@1
+into double digits at confFalse 0 with the toolkit unchanged, i.e. with no
+search and no composition.** Wrong-if: a substantially larger primitive library
+leaves pass@1 below 10%, which would mean single-primitive transfer is
+exhausted near 4 and genuine composition is required for everything beyond it.
+
 ## 3. The gap inventory
 
 Ordered by how much distance each item covers. Size classes: **mechanism**
@@ -416,13 +699,40 @@ encoding). Word problems then reduce to 3.1 (reading) + this.
 
 ### 3.5 Code synthesis depth
 
-`Synthesizer` collapses geodesic paths to TypeScript; behavioural fidelity is
-1.0 on the 132-case corpus. HumanEval-class parity means synthesizing
-control flow and data-structure manipulation, not path collapse. The asset:
-code is the domain where the survey loop is cheapest (tsx execution = free
-territory contact), so wrong synthesis is caught and repaired locally by
-machinery that already exists. Size: large engineering + corpus, derisked by
-the loop.
+`Synthesizer` collapses geodesic paths to TypeScript. The asset: code is the
+domain where the survey loop is cheapest (tsx execution = free territory
+contact), so wrong synthesis is caught and repaired locally by machinery that
+already exists. Size: large engineering + corpus, derisked by the loop.
+
+**The 1.0 this section used to cite was the wrong number.** "Behavioural
+fidelity 1.0 on the 132-case corpus" is `CodeBehaviouralFidelity.ts`, which
+checks `a + b` / `a - b` reduction against tsx. It is a real result about
+arithmetic and says nothing about emitting a function.
+
+**Status (2026-08-01, measured):** the honest baseline is run - all 159
+MultiPL-E TypeScript HumanEval problems, candidates executed against the
+official tests. **pass@1 0.0% in every configuration**, and no emission was a
+program at all (§2's 2026-08-01 update has the table and the three findings).
+The residual is NOT "synthesizing control flow and data-structure
+manipulation" as this section claimed from 2026-07-05 to 2026-08-01: retrieved
+templates already carry correct `if`/`for` structure. It is that **code cannot
+survive the round trip through its own storage medium** - operators return in
+word form, punctuation is space-joined, identifiers return unbound - measured
+at 0% on 29 functions the engine had just been shown.
+
+**The channel is now lossless end-to-end (2026-08-01, measured).** Three
+iterations in one session took the round-trip probe **0% → 100%** (29/29, zero
+abstention, zero confident falsehoods): an emission gate (covenant, not
+capability), then the detokenizer plus persisted slot names (0 → 24.1%), then
+exact intent keying plus a fast-path reorder (24.1 → 100%). Full history and
+per-iteration numbers in §2's 2026-08-01 updates.
+
+**That probe is now saturated, and it measures recall, not synthesis** - these
+are functions the engine was shown verbatim. **HumanEval remains 0.0%** in
+every configuration, and it is the number that speaks to this section's claim.
+What is established: storage, retrieval, and emission no longer lose anything.
+What is untouched: assembling a function the engine has never seen. The
+residual here is composition, and it is the whole of the remaining distance.
 
 ### 3.6 Scale
 
@@ -515,7 +825,7 @@ because the biggest original item shrank:
 | 3.2 residual (existentials, nested quantifiers, proof by cases, CWA reinstatement) | 15% | first cut DONE; CWA attempted once, reverted (§2) |
 | 3.3 disjunction physics | 10% | untouched; one hard mechanism (prediction 2, OPEN since 2026-06-11) |
 | 3.4 arithmetic beyond addition | 10% | untouched |
-| 3.5 code synthesis depth (HumanEval-class) | **35%** | untouched - now the single largest remaining item |
+| 3.5 code synthesis depth (HumanEval-class) | **35%** | baseline RUN 2026-08-01: HumanEval pass@1 **0.0%**. Channel (storage/retrieval/emission) fixed the same day, probe 0 → **100%**; residual is composition - synthesizing a function never seen (§2) |
 | 3.6 scale | 5% | untouched; engineering only, low risk |
 | 3.7 degree/magnitude placement | 5% | untouched; gate probe unrun |
 | 3.8 expression (proof verbalization) | 10% | untouched; depends on 3.1 |

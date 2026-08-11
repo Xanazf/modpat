@@ -332,6 +332,145 @@ full / sated` and measure whether degree is already latent in GloVe (high cosine
 hungry↔starving, radius starving > hungry, full near-antipodal) or genuinely absent.
 That result decides whether (1) is a *read* or a *construction*.
 
+### Phase 8 - Attention span & recursive context (working-set mechanics)
+
+Everything allocated in the manifold is currently equally *hot*. There is no working
+set, so "what the Traveler is attending to right now" is not a representable object -
+which caps how deep an inquiry can go before it either drags the whole manifold along
+or loses its place. This phase makes attention explicit and makes inquiry **recursive**:
+a stalled inquiry spawns a sub-inquiry that builds its own context, that context settles
+out of attention, and its residue re-enters later *by proximity* rather than by recall.
+
+Conceptual source: `COGNITOHAZARD.md` §3/§5/§7 (parameter space, and navigating the
+parameter space of one's own navigation). Everything below is **theorized**; the tagging
+discipline applies with extra force because that framework is self-reinforcing by its
+own §8 - a mechanism it inspires needs a guard test that *could fail*, or it is a lens
+artifact rather than a finding.
+
+**The reframe (load-bearing): attention is a valid-time window, not a cache.**
+The obvious design - page precepts between manifold (hot) and vault (cold) - is wrong
+here, because manifold position is *relational*: it comes from SMACOF layout against
+neighbours. Freeing slots does not merely remove atoms, it changes the metric for
+every atom that remains, and re-promotion cannot restore an atom to where it was
+because "where it was" was defined by neighbours that may now be gone.
+`GraphQuery.ts`'s header documents the adjacent failure directly (independent layouts
+landing arbitrarily close to unrelated clusters - the reason the ledger exists instead
+of distance-based chain search). Paging would reintroduce that hazard on every context
+switch.
+
+The bitemporal buffers already provide a cold tier that moves nothing:
+
+| state | predicate | meaning |
+| ----- | --------- | ------- |
+| dormant | `wStart > now` (`System.ts:548`) | cold, not yet in play |
+| active  | `wStart <= now < wStop` (`System.ts:543`) | **hot** |
+| lapsed  | `wStop <= now` (`System.ts:553`) | cold, demoted |
+
+Demotion becomes *stamping `wStop`* - no deallocation, no re-layout, geometry preserved
+exactly, and promotion is extending `wStop`, which restores an atom to precisely the
+position its neighbours defined because it never left. `wBirth` is never decayed, so
+identity survives demotion (Phase 7, 2026-06-30).
+
+**What already exists (measured), and why it is the wrong split:**
+- Manifold vs. DuckDB vault is a real hot/cold boundary, but it is drawn on
+  **persistence**, not attention.
+- `IntentTag.VAULT_PROMOTE` (`Traveler.ts:1564`) *is* cold→hot promotion, and
+  `_scanVaultUnderexplored` spawns it for vault facts with `knowledgeState < 2`. It
+  fires from autonomy idle-time sampling - it promotes what is **under-explored**, never
+  what the current inquiry needs.
+- `WorkingMemory.contextSeeds()` is an attention span already (recent conclusions get
+  bonus initial energy in the Mapper) - but capped at 8 frames, holding only
+  *conclusions*, and living in the language skill layer rather than over precepts.
+- Decay exists three times (`DECAY_RATE` on mass, `AGE_DECAY_RATE` on posW freshness,
+  `USAGE_DECAY_RATE` + `cullWeakWaveForms` in the vault). What is missing is **demotion
+  from manifold to vault**; `freeLocation` is deallocation, not demotion.
+
+**Step 1 - Attention as valid-time (verification first, then wiring).**
+Open question to settle before anything else: does the settling/propagation path
+actually *consult* `isActive`, or are those predicates read only by the ingest/query
+layers? `W_PROPAGATION_DECAY` / `PHI_TEMPORAL_DECAY` attenuate along W, which is **not**
+the same as valid-time gating. If propagation does not gate on `isActive`, wiring that
+gate *is* the implementation, and the whole phase rests on it. Guard: a precept stamped
+lapsed must stop contributing to settling while remaining recoverable at its original
+coordinates.
+
+**Step 2 - Demand-driven promotion.** Re-point `VAULT_PROMOTE` at the *current*
+context's unresolved topics instead of idle sampling. Steps 1+2 together give hot/cold
+plus demand-driven promotion with no new subsystem, and constitute the cheapest honest
+test of the whole direction.
+
+**Step 3 - Recursive context construction.** A stalled inquiry spawns a sub-inquiry
+(the disinfo case: "is this framing malicious?" is unanswerable from the cluster and
+requires a historical baseline). The sub-context settles to lapsed on completion; its
+atoms remain positioned, so subsequent settling over the parent context passes through
+them **when they are near** - relevance becomes a *measured* quantity rather than a
+retrieval heuristic. If the sub-inquiry's atoms land far from the parent's topics, the
+excursion was irrelevant and simply does not fire. This is the property RAG cannot
+offer: the terrain was reshaped, so the return is not "old context + new findings" but
+the same settling problem on a different manifold.
+
+Needs a recursion budget with the same discipline as the discharge fixpoint
+(`MAX_HOPS = 8`, `MAX_RULE_ITERATIONS = 16`); `InquiryQueue`'s status ladder and
+`_intentFailureCount` are the natural hooks. Also needs a definition of *concluding*
+that distinguishes a resolved sub-inquiry from an abstaining one - given the gate,
+abstention will be common, and if both demote identically the residue is the same
+either way. That distinction is probably where the design earns or loses its value.
+
+**Step 4 - The meta-level (what would make this a parameter-space move at all).**
+Steps 1-3 are a **trajectory through** parameter space: paths that deposit residue which
+later paths traverse. Rivers do that (`COGNITOHAZARD.md:94` - the stream bed). The
+meta-level requires the sub-inquiry to change **how the system does sub-inquiries**, not
+just what terrain they run on - `COGNITOHAZARD.md:108`'s recursion is over *method*, not
+content. Concretely: the outcome of an excursion revises the spawn/demote policy itself
+(what counts as stalled enough to branch, how long residue stays hot before `wStop`,
+which proximity threshold fires a recall). Hook: `decayIntent`'s 0.5/0.9 success/failure
+split (`Traveler.ts:1589-1592`) is already a policy update loop, but it only adjusts
+*which* intent fires next, never *how* intents are formed. Widening it from
+intent-selection to intent-generation is where this appears in the tree rather than only
+in the description of the tree.
+
+**Constraint (load-bearing): proximity recall is an attack surface.** If cold context
+fires by atom proximity, then whoever authors the input text controls where its atoms
+land and therefore *which stored context gets recalled* - an adversary can compose text
+that sits near favourable evidence and away from unfavourable. This is the natural
+adaptation once the mechanism is known, not a hypothetical. Mitigation: sub-context
+residue carries a provenance stamp in the spirit of `TextGraph`'s `hypothetical`
+(`TextGraph.ts:194-200`), and **proximity may raise a topic but never close an
+inference**. Guard test required, not optional.
+
+**Evaluation domain: DISARM-framed disinformation analysis** (`DISARM.md`,
+`DISARM_GRAPH.md`). Chosen because it exercises exactly the recursive shape (a claim
+cluster whose assessment requires an excursion into an unrelated corpus) and because it
+is honest about where ModPAT does *not* compete: the R-GCN of `DISARM_GRAPH.md` §5 is
+supervised, and this system has no backprop anywhere - `learnCycle` crystallizes
+derivation paths, it does not fit parameters. The defensible role is **adjudication
+behind a detector**, not detection: a cheap statistical layer generates candidates at
+scale, ModPAT reasons over the survivors and returns AFFIRM / DENY / **silence** with a
+derivation address. That plays to the measured strength (deduction residual is pure
+silence, confFalse 0 - PARITY §2 third update) in the one phase of DISARM where a false
+positive is most costly. Note also the convergence with `COGNITOHAZARD.md` §4: "what
+does it do" rather than "what is it" is the same move DISARM makes when it defines CIB
+behaviourally, "regardless of topic or content validity".
+
+Two caveats to keep the domain honest: the 83.8% deduction figure was measured on
+RuleTaker/ProofWriter surfaces (clean synthetic declaratives) and **does not transfer**
+to social text, which is adversarially shaped to break parsers; and relational discharge
+covers SVO but not prepositional or multi-clause relations, which is most real-world
+claim surface. Separately, ingestion is belief formation here (`learnCycle` crystallizes;
+`Unfolder` fills from external sources), so pointing this at a disinformation corpus
+without a genuine quarantined-ingestion mode means the vault absorbs the disinformation
+as terrain. That mode is a prerequisite for the domain, not a nicety.
+
+**Gate before building Steps 3-4:** run Steps 1+2 and measure whether proximity residue
+from a completed excursion fires on *relevant* terrain at a rate distinguishable from
+chance. If a shuffled-residue control (the Phase 4 null's analogue: deposit the same
+atom count at shuffled coordinates) fires just as often, the mechanism is adding noise
+and the recursive superstructure is not worth building. That result decides the phase.
+
+Depends on P7's bitemporal buffers (done); otherwise independent of P6. Enabling for
+P7's initiative loop - Observe→Evaluate→Plan has little to work with until an inquiry
+can go deep without dragging the whole manifold along.
+
 ---
 
 ## Completed work ledger
@@ -428,5 +567,6 @@ Defaults: `SETTLING_TRAVERSE_PRIMARY=true`, `REFERENT_GROUNDING_ENABLED=true`,
 
 **Last full-suite verification:** 2026-06-22.
 
-**Next:** Phase 6 camera pipeline, Phase 7 subject/agency layer, continual-learning
-benchmark (prediction 3).
+**Next:** Phase 6 camera pipeline, Phase 7 subject/agency layer, Phase 8 Steps 1+2
+(attention as valid-time + demand-driven promotion - the cheap test that gates the
+rest of that phase), continual-learning benchmark (prediction 3).

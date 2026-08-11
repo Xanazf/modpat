@@ -449,3 +449,356 @@ Two tagger failures found by sweeping surfaces rather than by reasoning, both
 now guarded: mid-string articles mis-tag (`"felix an animal"` tags `an` as a
 Noun), so articles are matched by surface; and a subject can itself mis-tag
 (`"bob rich"` tags `bob` an imperative Verb), so position is the fallback.
+
+## HumanEval-TS - the code-synthesis family (PARITY §3.5)
+
+`humaneval_ts.jsonl` is the **complete** MultiPL-E TypeScript translation of
+HumanEval (159 problems), vendored rather than sampled - it is small, and
+"the actual dataset files through the pipeline" is the whole point of it.
+
+| file | source dataset | license |
+| ---- | -------------- | ------- |
+| `humaneval_ts.jsonl` | MultiPL-E `humaneval-ts` (Cassano et al., "MultiPL-E: A Scalable and Polyglot Approach to Benchmarking Neural Code Generation", TSE 2023), translating HumanEval (Chen et al., "Evaluating Large Language Models Trained on Code", 2021) | MIT |
+
+Schema (one JSON object per line):
+
+```json
+{ "id": "HumanEval_0_has_close_elements", "entryPoint": "has_close_elements",
+  "prompt": "//Check if ...\nfunction has_close_elements(...): boolean {\n",
+  "tests": "declare var require: any; ... test();", "stopTokens": ["\nfunction ", ...] }
+```
+
+Regenerate with `tsx scripts/dev/fetch_code_benchmark.ts` (downloads the
+parquet from HuggingFace, reads it through DuckDB - already a dependency - and
+sorts by HumanEval index, so re-runs are byte-identical).
+
+**Why TypeScript rather than the original Python.** §3.5 names the code
+domain's asset as "tsx execution = free territory contact": ground truth comes
+from RUNNING the candidate in a child process that never sees a manifold
+coordinate, the same non-circularity argument `CodeBehaviouralFidelity.ts`
+makes for arithmetic. That argument only holds in a language this repo can
+execute, and the Synthesizer emits TypeScript.
+
+### Scoring
+
+`tests/benchmarks/code_benchmark.ts`, covenant-shaped rather than pass@1 alone:
+every item is `abstain` (no commitment), `pass` (official tests green), `fail`
+(committed, parses, tests red), `invalid` (committed, does not parse), or
+`timeout`. `confidentFalsehoods` = every committed item that is not `pass`.
+Counting `invalid` there is deliberate - an emission that does not parse is
+still a commitment, and calling it abstention would flatter the metric by
+reclassifying garbage as silence.
+
+### 2026-08-01 - the honest baseline
+
+Three configurations over all 159 problems, per-item checkpoints in
+`code.checkpoint.jsonl`. `name` asks with the phrase ingestion itself would
+mint (`has_close_elements` → "function has close elements") - the most
+generous reading possible, isolating synthesis from reading; `doc` asks with
+the problem's prose, which is what the task actually poses.
+
+| configuration | pass@1 | abstain | confFalse | pass / fail / invalid / abstain |
+| ------------- | ------ | ------- | --------- | ------------------------------- |
+| cold vault, name surface | **0.0%** | 93.1% | 11 | 0 / 7 / 4 / 148 |
+| stdlib-primed, name surface | **0.0%** | 93.1% | 11 | 0 / 7 / 4 / 148 |
+| stdlib-primed, doc surface | **0.0%** | 31.4% | 109 | 0 / 4 / 105 / 50 |
+
+Three findings, each stronger than the headline zero:
+
+1. **Not one emission was a program.** Across all 477 item-runs there is no
+   `pass`, and inspecting the commitments shows none of them is code at all.
+   The `fail` bucket is bare English words - `is_prime` → `"prime"`,
+   `is_palindrome` → `"palindrome"` - which parse only because a lone
+   identifier is a valid expression statement and then throw `ReferenceError`
+   at runtime. The `invalid` bucket is English prose
+   (`"two numbers closer to each other than given threshold"`). So the honest
+   statement is not "0% pass@1" but **the code path does not currently emit
+   code for HumanEval-class input**.
+2. **The Stage-1 corpus is inert.** Cold and primed are not merely equal in
+   aggregate - they are identical on all 159 items *and byte-identical in every
+   emitted string* (0 disagreements, measured). Ingesting 90 code patterns
+   changes nothing about what a HumanEval query returns, because retrieval
+   never reaches them: `checkInterferencePattern` keys on an abstracted
+   signature plus a grid window around the query centroid, and an unseen intent
+   phrase lands outside the window. This is why priming is not the lever.
+3. **The doc surface is where the covenant breaks**, at 109 confident
+   falsehoods against the name surface's 11. A prose query misses the vault,
+   falls through Phase 0.5 into general settling, and gets answered with
+   English - which the benchmark then scores as a failed commitment to code.
+
+**A methodological caveat that must travel with finding 3.** The engine has no
+way to know it was asked for code: `|-` is the GENERAL inference sink (the
+entire deduction suite ends its queries with it), so a code request that misses
+the vault is silently handled as a deduction request, and answering it in
+English is the settling path doing exactly its job. Scoring that as a confident
+falsehood charges the engine for the harness's framing. It is kept in the
+confFalse column because under a synthesis task's contract a non-program answer
+IS a failed commitment - but the absence of a request type is the underlying
+defect, and it belongs to §3.5, not to the settling path.
+
+### 2026-08-01 - the code-channel emission gate
+
+The round-trip probe (`--roundtrip`: ingest the Stage-1 corpus, ask each
+function back by the phrase ingestion minted for it, execute the result against
+the original) isolates the storage/emission channel from reading entirely.
+Pre-gate it measured **0% pass with 12 confident falsehoods on 29 functions the
+engine had literally just been shown**, and the failure was one mechanism:
+
+- Operators come back in word form - `+`→`plus`, `-`→`minus`, `*`→`times`,
+  `=`→`equals` - because `BaseAtomizer` canonicalizes symbol and word forms to
+  one scope so `"1 + 1"` and `"1 plus 1"` are the same sequence. That is
+  correct for arithmetic language and destructive for source text.
+- `decodeSequence` joins tokens with spaces, so punctuation is separated and
+  commas are gone: `function f ( _ _ ) { return _ plus _ ; }`.
+- Every identifier is `_`: an intent-only query carries no concrete tokens, so
+  `buildBindings` binds nothing.
+
+None of that is recoverable at read time, so the emission cannot be honoured -
+and under the covenant the characteristic failure must be silence. The gate
+(`_emissionIsProgram` in `Perception.ts`) parses the instantiated template and
+refuses to commit what does not parse:
+
+| round-trip (n=29) | pass@1 | abstain | confFalse | pass / fail / invalid / abstain |
+| ----------------- | ------ | ------- | --------- | ------------------------------- |
+| pre-gate | 0.0% | 58.6% | 12 | 0 / 4 / 8 / 17 |
+| **gated** | 0.0% | 86.2% | **4** | 0 / 4 / **0** / 25 |
+
+**It buys the covenant, not capability** - pass@1 is 0.0% either way, and it is
+worth being explicit that the gate makes the engine emit *less*, not better.
+The 4 surviving failures are the bare-word settling answers, which do not come
+through the code channel at all.
+
+**Scope, load-bearing:** the gate applies only to retrievals with non-zero
+`slotFlags`, i.e. records `processCode` crystallized as CODE patterns. Phase
+0.5 fires for every Sink-terminated query, so an ungated version would silence
+any English vault recall arriving there (`"socrates is mortal"` does not parse
+as JavaScript) - the same regression this file already records from the
+perception-gate scoping work, which is why the discriminator is applied rather
+than rediscovered.
+
+**The gate is a measured no-op on HumanEval**, and that confirms the diagnosis
+rather than disappointing it: re-running all three configurations gated gives
+11 / 11 / 109 confident falsehoods, identical to pre-gate. Nothing changes
+because nothing retrieves - the HumanEval commitments never come through the
+code channel at all, they come from the settling path (finding 2 above). The
+gate closes the code channel's own covenant breach; the settling-path leak is
+a separate defect with a separate cause.
+
+Two independent regression checks were run against the gated tree:
+
+- **Deduction is untouched**: `external_benchmarks --datasets --no-pin`
+  reproduces the pin exactly - overall 84.3% / 33.1% / confFalse 0, every
+  family byte-identical, "No regressions vs externalReal baseline". This is
+  the check that mattered most, since Phase 0.5 fires for every
+  Sink-terminated query and the whole deduction suite ends its queries with
+  `|-`.
+- **Full suite green** (`yarn test`), with one pre-existing, unrelated failure
+  excluded: `unfolder` asserts that Wikipedia expansion adds precepts and
+  fails identically on the pre-change tree (verified by stashing the change
+  and re-running) - it is network-dependent, not a regression from this work.
+
+### 2026-08-01 (same day) - the emission fix: 0% -> 24.1% on the channel probe
+
+The gate above bought silence; this is the capability. Three losses were
+inverted, and the third turned out to be a bug rather than a limit.
+
+**1. Operator words.** `detokenizeCode` (`Coder.ts`) inverts `BaseAtomizer`'s
+`ARITHMETIC_CANONICAL` map (`plus`→`+`, `minus`→`-`, `times`→`*`,
+`divided`→`/`, `equals`→`=`). Unambiguous *in an abstracted pattern
+specifically*, which is the only place it runs: every identifier is already a
+`VAR_N` slot, so a surviving bare word is a keyword or an operator, never a
+variable that happened to be called `plus`. `===` is one token and passes
+through untouched.
+
+**2. Spacing needs no repair at all.** `decodeSequence` space-joins, giving
+`function var_0 ( var_1 , var_2 ) { ... }` - which is *already valid
+JavaScript*, because JS is whitespace-insensitive. Parsing and re-printing
+through `generate` returns canonical source for free. The 2026-08-01 baseline
+entry above lists "punctuation is space-joined" among the losses; that was
+wrong, and only the operator and case losses were real.
+
+**3. Case, and the names that were being thrown away.** The atomizer
+lowercases, so `toUpperCase` decodes as `touppercase` and cannot be
+mechanically restored. But `extractPatternFromNode` has always computed
+`varNames` - the original identifier for every slot - and `processCode`
+discarded them. They are now persisted (`var_names` column on `wave_forms`,
+idempotent migration, JSON array index-aligned to slot number) and used as the
+**base** bindings at emission, with query tokens demoted to a fallback.
+
+That precedence flip is the "real slot bindings" half. The old order bound the
+*query's own words* positionally, which is why asking for `filterPositive`
+emitted `function filter ( positive ) { ... }`: the words of the question were
+being installed as the function's identifiers. An intent phrase names the thing
+being asked for; it does not name that thing's parameters.
+
+**A genuine encoding bug, found by the fix.** `target_pattern` joins its tokens
+with "," and retrieval splits on "," - so a token that IS a comma is destroyed
+by its own delimiter, and `function f(a, b)` came back as
+`function var_0 ( var_1 var_2 )`, which no longer parses. That cost nothing
+while the vault held only English derivations. A literal comma is now escaped
+to `<COMMA>`; escaping rather than changing the delimiter keeps old rows
+readable, since no pre-existing row can contain the sentinel.
+
+**The fix has to travel past the round trip, not through it.** The first
+working version measured *worse* than it should have, because
+`_resolveCodeSynthesis` returns ids and the caller re-decoded them - re-applying
+every loss the detokenizer had just undone. `ObserveResult`/`CoherentResult`
+now carry an optional `text`, the exact emitted surface, and the Traveler
+prefers it over decoding. Absent for every other provenance, where ids remain
+the single source of truth.
+
+| round-trip (n=29) | pass@1 | abstain | confFalse | pass / fail / invalid / abstain |
+| ----------------- | ------ | ------- | --------- | ------------------------------- |
+| pre-gate | 0.0% | 58.6% | 12 | 0 / 4 / 8 / 17 |
+| gated | 0.0% | 86.2% | 4 | 0 / 4 / 0 / 25 |
+| **emission fixed** | **24.1%** | 62.1% | **4** | **7** / 4 / 0 / 18 |
+
+Emitted code is now correct, formatted TypeScript - e.g. `filterPositive`
+returns verbatim-equivalent source including the member name `push`, which
+survives only because slot names carry it.
+
+### The break this exposed, and why it is the interesting part
+
+The first fixed run measured confFalse **5**, and the repo's own regression
+guard refused to pin it ("the characteristic failure must remain silence").
+The +1 was `sumOf` returning `startsWith` - **a valid program that answers a
+different question.**
+
+The cause is retrieval, not emission: all `function <name>` intents crystallize
+under ONE abstract signature - measured, `function VAR_0` is shared by 8 of the
+37 code patterns - so the vault discriminates them only by spatial resonance of
+the query centroid, and a near-miss returns the wrong function. That has always
+happened. It was harmless only because the emission was garbage the parse gate
+caught. **Parseability is not correctness**, and fixing emission removed the
+accident that had been concealing a retrieval defect.
+
+The narrow fix is a consistency check that the emission itself makes available:
+slot 0 of a code pattern is the declared function's name, so a retrieval whose
+name does not appear in the question is not an answer to it
+(`_answersTheQuestion`). Matching squashes to alphanumerics because the intent
+surface is `deriveIntent`'s camelCase split ("function sum Of") while the
+stored name is the identifier ("sumOf"). One subtlety worth recording: it
+matches against the WHOLE query rather than its content tokens, because a
+function can be named after an operator word - `function equals` has its own
+name canonicalized to the `=` operator and filtered out of the content tokens,
+and the first version silently cost that item a pass.
+
+Result: 7 GAIN / 0 BROKE / 0 LOSS against the gated pin, confFalse unmoved at 4.
+The 4 survivors are the bare-word settling answers (`isEven` → `"even"`), which
+never come through the code channel.
+
+### 2026-08-01 (same day) - retrieval keying: 24.1% -> 100% on the channel probe
+
+The emission fix moved the constraint to retrieval, and the diagnosis was
+specific: all `function <name>` intents crystallized under ONE abstract
+signature (`function VAR_0`, shared by 8 of 37 code patterns), so the vault
+separated them only by spatial resonance. Three changes, in decreasing order of
+how obvious they were in advance.
+
+**1. Key code patterns by their exact intent.** `abstractSequence` gained a
+`literalAtoms` mode; a code pattern (`slotFlags != 0`) is stored under
+`CODE:function sum of` rather than `function VAR_0`. VAR abstraction is right
+for logic - it is what lets "socrates is human" generalize to "plato is human" -
+and wrong here, where it discards the token naming which function is wanted.
+
+This is not a new idea in this file: `abstractSequence` already keeps NUMERIC
+literals concrete, with the stated reason "removing the dependence on spatial
+centroid proximity for arithmetic vault lookup". Same argument, second
+application. The `CODE:` prefix namespaces the key so a literal signature can
+never collide with an abstract one.
+
+**2. The exact lookup must bypass the spatial machinery, not just precede it.**
+Phase-1 lookup is `WHERE signature = ?` with no grid window and no resonance
+threshold. Both exist to choose among rows sharing an abstract signature;
+against a key that is unique by construction they can only reject a correct
+match because the query's centroid drifted from the anchor it was crystallized
+at - which, measured, was most of the probe's remaining silence. Non-code rows
+cannot match a namespaced key, so phase 2 is untouched and runs unchanged
+whenever phase 1 misses.
+
+**3. The one that was not predicted: fast-path ORDER.** With keying fixed the
+probe reached 82.8%, and the five stragglers all had their answer sitting in
+the vault under a correct exact key. Code synthesis ran as the LAST fast-path
+(Phase 0.5), so any earlier mechanism that produced anything at all for a
+sink-terminated query won first. `function is Even |-` was answered `"even"` by
+semantic derivation; `function lesser Of |-` was answered `"unknown"`. An exact
+key is unambiguous by construction, so there is nothing a fuzzier mechanism can
+add: the exact branch is hoisted to Phase 0a, above vault recall. Only that
+branch moves - the attractor-composition fallback stays at Phase 0.5, where it
+must not preempt vault recall - and deduction cannot be affected, because a
+`CODE:` key exists only for a crystallized code pattern and a logic query
+cannot mint one.
+
+| round-trip (n=29) | pass@1 | abstain | confFalse |
+| ----------------- | ------ | ------- | --------- |
+| pre-gate | 0.0% | 58.6% | 12 |
+| emission gate | 0.0% | 86.2% | 4 |
+| emission fixed | 24.1% | 62.1% | 4 |
+| + exact keying | 82.8% | 3.4% | 4 |
+| **+ Phase 0a hoist** | **100.0%** | **0.0%** | **0** |
+
+**The probe is now saturated and has stopped being a measurement.** 29/29 with
+no silence and no error means it can no longer detect improvement, and its only
+remaining value is as a regression guard - which is exactly what it is pinned
+as. Any further claim about code synthesis needs a harder probe: these are
+functions the engine was shown verbatim, and recall is not synthesis.
+
+### 2026-08-01 (same day) - the toolkit: HumanEval 0.0% -> 2.5%, confFalse 0
+
+The first HumanEval passes. Four of 159, and the mechanism matters more than
+the number.
+
+**What was wired.** The code domain's standing asset is that its oracle is
+free - a candidate can be RUN. Until now only the benchmark ever spent that,
+to score the engine. `Toolkit.ts` lets the engine spend it on itself: the
+problem's own doctests become a goal, every stored code pattern is a candidate,
+all candidates are executed against the goal in one batched program, and only a
+candidate that passes is committed. Nothing that fails verification is ever
+emitted, so the covenant's characteristic failure is free here by construction.
+
+The goal was already in the data and was being discarded: **156 of 159 problems
+carry `>>> call` / expected-value doctests, 443 in total**, and `docSurface`
+dropped them as noise.
+
+**This is explicitly NOT search.** It enumerates what the vault holds and tests
+it; it composes nothing toward a goal and has no notion of a behavioural type.
+It was built to answer one question - *can any composition the current library
+can express pass a real problem* - because the answer decides whether the next
+mechanism is search or vocabulary.
+
+| toolkit (n=159) | pass@1 | abstain | confFalse | self-verified |
+| --------------- | ------ | ------- | --------- | ------------- |
+| 1-example floor | 2.5% | 96.2% | 2 | 6 |
+| **2-example floor (pinned)** | **2.5%** | 97.5% | **0** | **4** |
+
+**The four passes are transfer, not recall**, which is the interesting part:
+
+| problem | solved by | why |
+| ------- | --------- | --- |
+| `HumanEval_23_strlen` | `count` | counts elements of an iterable; strings are iterable |
+| `HumanEval_30_get_positive` | `filterPositive` | the same function under a different name |
+| `HumanEval_35_max_element` | `largest` | same |
+| `HumanEval_53_add` | `concat` | `a + b`, written for strings, is addition for numbers |
+
+`concat` solving `add` and `count` solving `strlen` are not name matches - the
+names have nothing in common. They were found by **execution**, which is the
+one retrieval channel that does not care what anything is called. Note the
+contrast with the same session's earlier fix: exact-intent keying works when
+the request names the thing, and is exactly useless here.
+
+**A specification floor, and why it is not arbitrary.** The first run committed
+6 and passed 4; both false commitments came from problems carrying a SINGLE
+example (`smallest` "satisfying" `mean_absolute_deviation`, and `add`). One
+example is not a specification - it is one point, and any number of wrong
+functions pass through a point. Requiring two costs reach on 30 of 159 problems
+(the corpus's own histogram: 3 problems have 0 examples, 27 have 1) and buys
+confFalse 0. All four genuine passes had two or more, so the trade cost nothing
+real here. After it, **self-verified equals official-pass exactly** - the
+toolkit has stopped lying to itself, which is the property worth having.
+
+**Honest ablation, stated so the number cannot be over-read.** The doctests are
+parsed by `parseExamples` and handed in. Turning prose into a specification is
+work the Language layer cannot do (§3.1 territory), so this isolates
+composition from reading exactly as the round-trip probe isolated the channel
+from reading. A toolkit that needed its examples pre-parsed in production would
+not be finished.

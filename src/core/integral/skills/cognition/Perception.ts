@@ -15,7 +15,7 @@ import { OperatorClass, SlotType } from "@core_i/helpers/enums";
 import type Store from "@core_s/Memory";
 import { metrics } from "@core_s/Metrics";
 import { resolveActiveAtoms } from "@mutate/FrameworkIndex";
-import { Synthesizer } from "@skill_code/Coder";
+import { detokenizeCode, Synthesizer } from "@skill_code/Coder";
 import { gateEmit } from "@skill_cogi/Coherence";
 import { reduceAdditive, reduceStatements } from "@skill_cogi/Reduction";
 import nlp from "compromise";
@@ -175,6 +175,7 @@ export async function perceiveCoherent(
     learned: [],
     diagnosis: r.ids.length > 0 ? "coherent" : "void",
     diagnostics: null,
+    text: r.text,
   };
 }
 
@@ -201,6 +202,42 @@ export async function observeSettlingGradient(
     position,
     activeFrameworks,
   } = deps;
+
+  // Phase 0a: exact code-intent recall.
+  //
+  // Code synthesis used to run as the LAST fast-path (Phase 0.5 below), which
+  // meant any earlier path that produced anything at all for a sink-terminated
+  // query won - even against a vault row keyed by the exact intent. Measured:
+  // `function is Even |-` had `isEven` sitting in the vault under an exact key
+  // and was answered `"even"` by semantic derivation instead, and
+  // `function lesser Of |-` was answered `"unknown"`.
+  //
+  // An EXACT code key is unambiguous by construction, so when one matches there
+  // is nothing for a fuzzier mechanism to add. Only the exact branch is hoisted;
+  // the attractor-composition fallback stays at Phase 0.5, where it must not
+  // preempt vault recall. Deduction is untouched because a `CODE:` key exists
+  // only for a crystallized code pattern - a logic query cannot mint one.
+  if (
+    store &&
+    ids.length > 0 &&
+    system.operatorClass[ids[ids.length - 1]] === OperatorClass.Sink
+  ) {
+    const exact = await _resolveCodeSynthesis(
+      ids,
+      system,
+      atomizer,
+      store,
+      cache,
+      { exactOnly: true }
+    );
+    if (exact.text)
+      return {
+        ids: exact.ids,
+        sinkStrength: 1.0,
+        provenance: "synth",
+        text: exact.text,
+      };
+  }
 
   // Phase 0b: vault recall
   if (!opts.probeMode) {
@@ -346,9 +383,18 @@ export async function observeSettlingGradient(
       store,
       cache
     );
-    const decoded = atomizer.decodeSequence(synth, system).trim();
+    const decoded = atomizer.decodeSequence(synth.ids, system).trim();
     if (decoded && decoded !== "unknown")
-      return { ids: synth, sinkStrength: 0, provenance: "synth" };
+      return {
+        ids: synth.ids,
+        sinkStrength: 0,
+        provenance: "synth",
+        // The emitted source, NOT re-derived from ids. Ingesting the program
+        // and decoding it back would re-apply every loss the detokenizer just
+        // undid (`=` -> `equals`, case flattening), so the fix has to travel
+        // past the round trip rather than through it.
+        text: synth.text,
+      };
   }
 
   // E0: active frameworks + E1 framework boost
@@ -723,13 +769,140 @@ function _resolveReduction(
 
 // -- Code synthesis ----------------------------------------------------------
 
+/*
+ * EMISSION, and its gate.
+ *
+ * A synthesis answer may only be committed if it is actually a program. That
+ * check no longer needs its own function: `detokenizeCode` repairs the decoded
+ * token stream and then parses it, returning null on anything that does not
+ * survive - so repair and verdict are the same step, and a lossy recall
+ * degrades to silence rather than to a confident falsehood (PARITY §1).
+ *
+ * SCOPE, load-bearing: the emission path runs only for retrievals whose
+ * `slotFlags` are non-zero, i.e. records `processCode` crystallized as CODE
+ * patterns. Phase 0.5 fires for every Sink-terminated query and `|-` is the
+ * GENERAL inference sink - the whole deduction suite ends its queries with it -
+ * so applying a "must parse as JavaScript" rule here unconditionally would
+ * silence any English vault recall reaching this fast-path ("socrates is
+ * mortal" is not a program). That is the same regression the deduction work
+ * already hit when it gated every provenance tier at once
+ * (data/benchmarks/README.md, perception-gate scoping); the discriminator is
+ * already in the retrieved record, so there is no reason to rediscover it.
+ */
+
+/** Content tokens of the query, in order - the caller's concrete operands. */
+function _contextTokens(
+  ids: Uint32Array,
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine
+): string[] {
+  return Array.from(ids)
+    .filter(id => {
+      const c = system.operatorClass[id];
+      return (
+        c === OperatorClass.None ||
+        c === OperatorClass.Action ||
+        c === OperatorClass.Arithmetic
+      );
+    })
+    .map(id => atomizer.decodeSequence(new Uint32Array([id]), system).trim())
+    .filter(t => t.length > 0);
+}
+
+/**
+ * Resolves each VAR_N slot of a code pattern to an identifier.
+ *
+ * PRECEDENCE, and it is the fix rather than a detail: the pattern's OWN stored
+ * names win, and query tokens only fill slots the names do not cover.
+ *
+ * The old order was the other way round - `buildBindings` bound the query's
+ * words positionally - which is why asking for `filterPositive` emitted
+ * `function filter ( positive ) { ... }`: the words of the *question* were
+ * being installed as the function's identifiers. An intent phrase names the
+ * thing being asked for; it does not name that thing's parameters, and the only
+ * record of what those were called is what ingestion stored.
+ *
+ * Query tokens remain the fallback rather than being dropped, because a
+ * synthesis request CAN legitimately carry operands, and for a pattern
+ * crystallized before `var_names` existed they are the only bindings available.
+ */
+function _slotBindings(
+  varNames: string[],
+  ids: Uint32Array,
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine,
+  slotFlags: bigint,
+  cache: Cognition.PerceptionCache
+): Map<number, string> {
+  const bindings = cache.synthesizer.buildBindings(
+    _contextTokens(ids, system, atomizer),
+    slotFlags
+  );
+  for (let i = 0; i < varNames.length; i++) {
+    if (varNames[i]) bindings.set(i, varNames[i]);
+  }
+  return bindings;
+}
+
+/**
+ * Does the retrieved pattern actually answer the question that was asked?
+ *
+ * A code pattern's slot 0 is the declared function's own name, so a retrieval
+ * can be checked against the intent for free: asking for `sumOf` and getting
+ * back `startsWith` is a retrieval error, not an answer.
+ *
+ * This is needed BECAUSE the emission fix worked. All `function <name>` intents
+ * crystallize under one abstract signature (`function VAR_0` - measured, 8
+ * patterns share it), so the vault discriminates them only by spatial
+ * resonance, and a near-miss returns the wrong function. That has always
+ * happened; it used to be harmless only because the emission was garbage the
+ * parse gate caught. Once emissions became valid programs, a wrong retrieval
+ * started committing as a confident falsehood - **parseability is not
+ * correctness**, and the repo's own regression guard caught the +1 immediately.
+ *
+ * Matching is on squashed alphanumerics because the intent surface is
+ * `deriveIntent`'s camelCase split ("function sum Of"), while the stored name
+ * is the original identifier ("sumOf").
+ */
+function _answersTheQuestion(
+  varNames: string[],
+  ids: Uint32Array,
+  system: Root.ManifoldView,
+  atomizer: Atomic.Engine
+): boolean {
+  const declared = varNames[0];
+  // No declared name (a body fragment, or a pattern from before var_names
+  // existed) - nothing to check against, so this cannot reject it.
+  if (!declared) return true;
+  const squash = (s: string): string =>
+    s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const wanted = squash(declared);
+  if (!wanted) return true;
+  // The WHOLE query, not just its content tokens: a function may legitimately
+  // be named after an operator word, and `equals` is exactly that - ingestion
+  // canonicalizes "=" to "equals", so `function equals` has its own name
+  // classified as an operator and filtered out of the content tokens. Asking
+  // "is the answer's name present in the question" needs every token; the
+  // squash drops the punctuation and the sink for free.
+  const asked = squash(atomizer.decodeSequence(ids, system));
+  return asked.includes(wanted);
+}
+
 async function _resolveCodeSynthesis(
   ids: Uint32Array,
   system: Root.ManifoldView,
   atomizer: Atomic.Engine,
   store: Store,
-  cache: Cognition.PerceptionCache
-): Promise<Uint32Array> {
+  cache: Cognition.PerceptionCache,
+  opts: {
+    /**
+     * Only attempt the exact-key vault hit, skipping the attractor-composition
+     * fallback. Used by Phase 0a, which is hoisted above vault recall and must
+     * therefore commit only on an unambiguous match.
+     */
+    exactOnly?: boolean;
+  } = {}
+): Promise<{ ids: Uint32Array; text?: string }> {
   const lastId = ids[ids.length - 1];
   const lookupIds =
     system.operatorClass[lastId] === OperatorClass.Sink
@@ -738,53 +911,76 @@ async function _resolveCodeSynthesis(
   const direct = await store.checkInterferencePattern(lookupIds);
   if (direct && direct.ids.length > 0) {
     const template = atomizer.decodeSequence(direct.ids, system);
-    const ctxTokens = Array.from(ids)
-      .filter(id => {
-        const c = system.operatorClass[id];
-        return (
-          c === OperatorClass.None ||
-          c === OperatorClass.Action ||
-          c === OperatorClass.Arithmetic
-        );
-      })
-      .map(id => atomizer.decodeSequence(new Uint32Array([id]), system).trim())
-      .filter(t => t.length > 0);
-    const inst = cache.synthesizer.instantiate(
-      template,
-      cache.synthesizer.buildBindings(ctxTokens, direct.slotFlags)
-    );
-    if (inst && inst !== "unknown")
-      return atomizer.ingestSequence(inst, system);
+    // slotFlags === 0 means this record is not a code pattern at all (a plain
+    // crystallized derivation reaching the same fast-path); leave it alone.
+    if (direct.slotFlags === 0n) {
+      const ctxTokens = _contextTokens(ids, system, atomizer);
+      const inst = cache.synthesizer.instantiate(
+        template,
+        cache.synthesizer.buildBindings(ctxTokens, direct.slotFlags)
+      );
+      if (inst && inst !== "unknown")
+        return { ids: atomizer.ingestSequence(inst, system) };
+    } else if (_answersTheQuestion(direct.varNames, ids, system, atomizer)) {
+      const emitted = detokenizeCode(
+        template,
+        _slotBindings(
+          direct.varNames,
+          ids,
+          system,
+          atomizer,
+          direct.slotFlags,
+          cache
+        )
+      );
+      if (emitted)
+        return { ids: atomizer.ingestSequence(emitted, system), text: emitted };
+    }
   }
+  if (opts.exactOnly)
+    return { ids: atomizer.ingestSequence("unknown", system) };
   const attractors: { id: number; posZ: number }[] = [];
   for (let i = 0; i < system.length; i++) {
     if (!system.isAllocated(i)) continue;
     if (system.slotType[i] & (SlotType.Body | SlotType.Condition))
       attractors.push({ id: i, posZ: system.posZ[i] });
   }
+  // The composed path selects its attractors BY SlotType (Body/Condition), so
+  // everything reaching it is code by construction and the gate needs no
+  // slotFlags discriminator here.
   attractors.sort((a, b) => b.posZ - a.posZ);
   const patterns: Code.CodePattern[] = [];
+  let composedNames: string[] = [];
   for (const { id } of attractors.slice(0, 6)) {
     const r = await store.checkInterferencePattern(new Uint32Array([id]));
-    if (r && r.ids.length > 0)
+    if (r && r.ids.length > 0) {
       patterns.push({
         template: atomizer.decodeSequence(r.ids, system),
         slotFlags: r.slotFlags,
       });
+      // The outer pattern owns the composed template's slot numbering, so its
+      // names are the ones that apply; inner patterns are spliced into a Body
+      // slot and renumber nothing.
+      if (composedNames.length === 0) composedNames = r.varNames;
+    }
   }
   if (patterns.length > 0) {
     const composed = cache.synthesizer.compose(patterns);
-    const ctxTokens = Array.from(ids)
-      .map(id => atomizer.decodeSequence(new Uint32Array([id]), system).trim())
-      .filter(t => t.length > 0);
-    const inst = cache.synthesizer.instantiate(
+    const emitted = detokenizeCode(
       composed,
-      cache.synthesizer.buildBindings(ctxTokens, patterns[0].slotFlags)
+      _slotBindings(
+        composedNames,
+        ids,
+        system,
+        atomizer,
+        patterns[0].slotFlags,
+        cache
+      )
     );
-    if (inst && inst !== "unknown")
-      return atomizer.ingestSequence(inst, system);
+    if (emitted)
+      return { ids: atomizer.ingestSequence(emitted, system), text: emitted };
   }
-  return atomizer.ingestSequence("unknown", system);
+  return { ids: atomizer.ingestSequence("unknown", system) };
 }
 
 // -- Semantic lookup ---------------------------------------------------------

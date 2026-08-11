@@ -4,6 +4,7 @@ import { runLogicTest as executeAristotelianSuite } from "./aristotelian_quantum
 import { executeArithmeticSuite } from "./arithmetic.test";
 import { runAstSeederTests } from "./ast_seeder.test";
 import { executeAtomizerRoundTripSuite } from "./atomizer_roundtrip.test";
+import { executeCodeBenchmarkSuite } from "./code_benchmark.test";
 import { executeCodeSynthesisSuite } from "./code_synthesis.test";
 import { runCoherenceCalibrationTests } from "./coherence_calibration.test";
 import { runCoherenceGateTests } from "./coherence_gate.test";
@@ -118,6 +119,7 @@ async function run() {
     await runWithTimeout("rigorous_logic", executeRigorousLogicSuite);
     await runWithTimeout("verbose_logic_traps", executeLogicTrapsSuite);
     await runWithTimeout("code_synthesis", executeCodeSynthesisSuite);
+    await runWithTimeout("code_benchmark", executeCodeBenchmarkSuite);
     await runWithTimeout("grounding", async () => {
       await runGroundingTests();
     });

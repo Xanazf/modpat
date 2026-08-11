@@ -1,0 +1,954 @@
+{"kind":"attempt","id":"HumanEval_0_has_close_elements","config":"none/name"}
+{"kind":"result","id":"HumanEval_0_has_close_elements","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_1_separate_paren_groups","config":"none/name"}
+{"kind":"result","id":"HumanEval_1_separate_paren_groups","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_2_truncate_number","config":"none/name"}
+{"kind":"result","id":"HumanEval_2_truncate_number","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_3_below_zero","config":"none/name"}
+{"kind":"result","id":"HumanEval_3_below_zero","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_4_mean_absolute_deviation","config":"none/name"}
+{"kind":"result","id":"HumanEval_4_mean_absolute_deviation","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_5_intersperse","config":"none/name"}
+{"kind":"result","id":"HumanEval_5_intersperse","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_6_parse_nested_parens","config":"none/name"}
+{"kind":"result","id":"HumanEval_6_parse_nested_parens","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_7_filter_by_substring","config":"none/name"}
+{"kind":"result","id":"HumanEval_7_filter_by_substring","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_8_sum_product","config":"none/name"}
+{"kind":"result","id":"HumanEval_8_sum_product","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_9_rolling_max","config":"none/name"}
+{"kind":"result","id":"HumanEval_9_rolling_max","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_10_make_palindrome","config":"none/name"}
+{"kind":"result","id":"HumanEval_10_make_palindrome","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_11_string_xor","config":"none/name"}
+{"kind":"result","id":"HumanEval_11_string_xor","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_12_longest","config":"none/name"}
+{"kind":"result","id":"HumanEval_12_longest","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_13_greatest_common_divisor","config":"none/name"}
+{"kind":"result","id":"HumanEval_13_greatest_common_divisor","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_14_all_prefixes","config":"none/name"}
+{"kind":"result","id":"HumanEval_14_all_prefixes","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_15_string_sequence","config":"none/name"}
+{"kind":"result","id":"HumanEval_15_string_sequence","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_16_count_distinct_characters","config":"none/name"}
+{"kind":"result","id":"HumanEval_16_count_distinct_characters","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_17_parse_music","config":"none/name"}
+{"kind":"result","id":"HumanEval_17_parse_music","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_18_how_many_times","config":"none/name"}
+{"kind":"result","id":"HumanEval_18_how_many_times","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_19_sort_numbers","config":"none/name"}
+{"kind":"result","id":"HumanEval_19_sort_numbers","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_20_find_closest_elements","config":"none/name"}
+{"kind":"result","id":"HumanEval_20_find_closest_elements","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_21_rescale_to_unit","config":"none/name"}
+{"kind":"result","id":"HumanEval_21_rescale_to_unit","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_22_filter_integers","config":"none/name"}
+{"kind":"result","id":"HumanEval_22_filter_integers","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_23_strlen","config":"none/name"}
+{"kind":"result","id":"HumanEval_23_strlen","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_24_largest_divisor","config":"none/name"}
+{"kind":"result","id":"HumanEval_24_largest_divisor","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_25_factorize","config":"none/name"}
+{"kind":"result","id":"HumanEval_25_factorize","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_26_remove_duplicates","config":"none/name"}
+{"kind":"result","id":"HumanEval_26_remove_duplicates","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_27_flip_case","config":"none/name"}
+{"kind":"result","id":"HumanEval_27_flip_case","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_28_concatenate","config":"none/name"}
+{"kind":"result","id":"HumanEval_28_concatenate","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_29_filter_by_prefix","config":"none/name"}
+{"kind":"result","id":"HumanEval_29_filter_by_prefix","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_30_get_positive","config":"none/name"}
+{"kind":"result","id":"HumanEval_30_get_positive","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_31_is_prime","config":"none/name"}
+{"kind":"result","id":"HumanEval_31_is_prime","config":"none/name","outcome":"fail","emitted":"prime"}
+{"kind":"attempt","id":"HumanEval_33_sort_third","config":"none/name"}
+{"kind":"result","id":"HumanEval_33_sort_third","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_34_unique","config":"none/name"}
+{"kind":"result","id":"HumanEval_34_unique","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_35_max_element","config":"none/name"}
+{"kind":"result","id":"HumanEval_35_max_element","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_36_fizz_buzz","config":"none/name"}
+{"kind":"result","id":"HumanEval_36_fizz_buzz","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_37_sort_even","config":"none/name"}
+{"kind":"result","id":"HumanEval_37_sort_even","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_39_prime_fib","config":"none/name"}
+{"kind":"result","id":"HumanEval_39_prime_fib","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_40_triples_sum_to_zero","config":"none/name"}
+{"kind":"result","id":"HumanEval_40_triples_sum_to_zero","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_41_car_race_collision","config":"none/name"}
+{"kind":"result","id":"HumanEval_41_car_race_collision","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_42_incr_list","config":"none/name"}
+{"kind":"result","id":"HumanEval_42_incr_list","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_43_pairs_sum_to_zero","config":"none/name"}
+{"kind":"result","id":"HumanEval_43_pairs_sum_to_zero","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_44_change_base","config":"none/name"}
+{"kind":"result","id":"HumanEval_44_change_base","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_45_triangle_area","config":"none/name"}
+{"kind":"result","id":"HumanEval_45_triangle_area","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_46_fib4","config":"none/name"}
+{"kind":"result","id":"HumanEval_46_fib4","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_47_median","config":"none/name"}
+{"kind":"result","id":"HumanEval_47_median","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_48_is_palindrome","config":"none/name"}
+{"kind":"result","id":"HumanEval_48_is_palindrome","config":"none/name","outcome":"fail","emitted":"palindrome"}
+{"kind":"attempt","id":"HumanEval_49_modp","config":"none/name"}
+{"kind":"result","id":"HumanEval_49_modp","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_51_remove_vowels","config":"none/name"}
+{"kind":"result","id":"HumanEval_51_remove_vowels","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_52_below_threshold","config":"none/name"}
+{"kind":"result","id":"HumanEval_52_below_threshold","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_53_add","config":"none/name"}
+{"kind":"result","id":"HumanEval_53_add","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_54_same_chars","config":"none/name"}
+{"kind":"result","id":"HumanEval_54_same_chars","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_55_fib","config":"none/name"}
+{"kind":"result","id":"HumanEval_55_fib","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_56_correct_bracketing","config":"none/name"}
+{"kind":"result","id":"HumanEval_56_correct_bracketing","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_57_monotonic","config":"none/name"}
+{"kind":"result","id":"HumanEval_57_monotonic","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_58_common","config":"none/name"}
+{"kind":"result","id":"HumanEval_58_common","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_59_largest_prime_factor","config":"none/name"}
+{"kind":"result","id":"HumanEval_59_largest_prime_factor","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_60_sum_to_n","config":"none/name"}
+{"kind":"result","id":"HumanEval_60_sum_to_n","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_61_correct_bracketing","config":"none/name"}
+{"kind":"result","id":"HumanEval_61_correct_bracketing","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_62_derivative","config":"none/name"}
+{"kind":"result","id":"HumanEval_62_derivative","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_63_fibfib","config":"none/name"}
+{"kind":"result","id":"HumanEval_63_fibfib","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_64_vowels_count","config":"none/name"}
+{"kind":"result","id":"HumanEval_64_vowels_count","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_65_circular_shift","config":"none/name"}
+{"kind":"result","id":"HumanEval_65_circular_shift","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_66_digitSum","config":"none/name"}
+{"kind":"result","id":"HumanEval_66_digitSum","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_67_fruit_distribution","config":"none/name"}
+{"kind":"result","id":"HumanEval_67_fruit_distribution","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_68_pluck","config":"none/name"}
+{"kind":"result","id":"HumanEval_68_pluck","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_69_search","config":"none/name"}
+{"kind":"result","id":"HumanEval_69_search","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_70_strange_sort_list","config":"none/name"}
+{"kind":"result","id":"HumanEval_70_strange_sort_list","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_71_triangle_area","config":"none/name"}
+{"kind":"result","id":"HumanEval_71_triangle_area","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_72_will_it_fly","config":"none/name"}
+{"kind":"result","id":"HumanEval_72_will_it_fly","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_73_smallest_change","config":"none/name"}
+{"kind":"result","id":"HumanEval_73_smallest_change","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_74_total_match","config":"none/name"}
+{"kind":"result","id":"HumanEval_74_total_match","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_75_is_multiply_prime","config":"none/name"}
+{"kind":"result","id":"HumanEval_75_is_multiply_prime","config":"none/name","outcome":"invalid","emitted":"multiply prime"}
+{"kind":"attempt","id":"HumanEval_76_is_simple_power","config":"none/name"}
+{"kind":"result","id":"HumanEval_76_is_simple_power","config":"none/name","outcome":"invalid","emitted":"simple power"}
+{"kind":"attempt","id":"HumanEval_77_iscube","config":"none/name"}
+{"kind":"result","id":"HumanEval_77_iscube","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_78_hex_key","config":"none/name"}
+{"kind":"result","id":"HumanEval_78_hex_key","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_79_decimal_to_binary","config":"none/name"}
+{"kind":"result","id":"HumanEval_79_decimal_to_binary","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_80_is_happy","config":"none/name"}
+{"kind":"result","id":"HumanEval_80_is_happy","config":"none/name","outcome":"fail","emitted":"happy"}
+{"kind":"attempt","id":"HumanEval_81_numerical_letter_grade","config":"none/name"}
+{"kind":"result","id":"HumanEval_81_numerical_letter_grade","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_82_prime_length","config":"none/name"}
+{"kind":"result","id":"HumanEval_82_prime_length","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_83_starts_one_ends","config":"none/name"}
+{"kind":"result","id":"HumanEval_83_starts_one_ends","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_84_solve","config":"none/name"}
+{"kind":"result","id":"HumanEval_84_solve","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_85_add","config":"none/name"}
+{"kind":"result","id":"HumanEval_85_add","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_86_anti_shuffle","config":"none/name"}
+{"kind":"result","id":"HumanEval_86_anti_shuffle","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_87_get_row","config":"none/name"}
+{"kind":"result","id":"HumanEval_87_get_row","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_88_sort_array","config":"none/name"}
+{"kind":"result","id":"HumanEval_88_sort_array","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_89_encrypt","config":"none/name"}
+{"kind":"result","id":"HumanEval_89_encrypt","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_90_next_smallest","config":"none/name"}
+{"kind":"result","id":"HumanEval_90_next_smallest","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_91_is_bored","config":"none/name"}
+{"kind":"result","id":"HumanEval_91_is_bored","config":"none/name","outcome":"fail","emitted":"bored"}
+{"kind":"attempt","id":"HumanEval_92_any_int","config":"none/name"}
+{"kind":"result","id":"HumanEval_92_any_int","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_93_encode","config":"none/name"}
+{"kind":"result","id":"HumanEval_93_encode","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_94_skjkasdkd","config":"none/name"}
+{"kind":"result","id":"HumanEval_94_skjkasdkd","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_95_check_dict_case","config":"none/name"}
+{"kind":"result","id":"HumanEval_95_check_dict_case","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_96_count_up_to","config":"none/name"}
+{"kind":"result","id":"HumanEval_96_count_up_to","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_97_multiply","config":"none/name"}
+{"kind":"result","id":"HumanEval_97_multiply","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_98_count_upper","config":"none/name"}
+{"kind":"result","id":"HumanEval_98_count_upper","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_99_closest_integer","config":"none/name"}
+{"kind":"result","id":"HumanEval_99_closest_integer","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_100_make_a_pile","config":"none/name"}
+{"kind":"result","id":"HumanEval_100_make_a_pile","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_101_words_string","config":"none/name"}
+{"kind":"result","id":"HumanEval_101_words_string","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_102_choose_num","config":"none/name"}
+{"kind":"result","id":"HumanEval_102_choose_num","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_103_rounded_avg","config":"none/name"}
+{"kind":"result","id":"HumanEval_103_rounded_avg","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_104_unique_digits","config":"none/name"}
+{"kind":"result","id":"HumanEval_104_unique_digits","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_105_by_length","config":"none/name"}
+{"kind":"result","id":"HumanEval_105_by_length","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_106_f","config":"none/name"}
+{"kind":"result","id":"HumanEval_106_f","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_107_even_odd_palindrome","config":"none/name"}
+{"kind":"result","id":"HumanEval_107_even_odd_palindrome","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_108_count_nums","config":"none/name"}
+{"kind":"result","id":"HumanEval_108_count_nums","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_109_move_one_ball","config":"none/name"}
+{"kind":"result","id":"HumanEval_109_move_one_ball","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_110_exchange","config":"none/name"}
+{"kind":"result","id":"HumanEval_110_exchange","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_111_histogram","config":"none/name"}
+{"kind":"result","id":"HumanEval_111_histogram","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_112_reverse_delete","config":"none/name"}
+{"kind":"result","id":"HumanEval_112_reverse_delete","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_113_odd_count","config":"none/name"}
+{"kind":"result","id":"HumanEval_113_odd_count","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_114_minSubArraySum","config":"none/name"}
+{"kind":"result","id":"HumanEval_114_minSubArraySum","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_115_max_fill","config":"none/name"}
+{"kind":"result","id":"HumanEval_115_max_fill","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_116_sort_array","config":"none/name"}
+{"kind":"result","id":"HumanEval_116_sort_array","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_117_select_words","config":"none/name"}
+{"kind":"result","id":"HumanEval_117_select_words","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_118_get_closest_vowel","config":"none/name"}
+{"kind":"result","id":"HumanEval_118_get_closest_vowel","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_119_match_parens","config":"none/name"}
+{"kind":"result","id":"HumanEval_119_match_parens","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_120_maximum","config":"none/name"}
+{"kind":"result","id":"HumanEval_120_maximum","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_121_solution","config":"none/name"}
+{"kind":"result","id":"HumanEval_121_solution","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_122_add_elements","config":"none/name"}
+{"kind":"result","id":"HumanEval_122_add_elements","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_123_get_odd_collatz","config":"none/name"}
+{"kind":"result","id":"HumanEval_123_get_odd_collatz","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_124_valid_date","config":"none/name"}
+{"kind":"result","id":"HumanEval_124_valid_date","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_125_split_words","config":"none/name"}
+{"kind":"result","id":"HumanEval_125_split_words","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_126_is_sorted","config":"none/name"}
+{"kind":"result","id":"HumanEval_126_is_sorted","config":"none/name","outcome":"fail","emitted":"sorted"}
+{"kind":"attempt","id":"HumanEval_127_intersection","config":"none/name"}
+{"kind":"result","id":"HumanEval_127_intersection","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_128_prod_signs","config":"none/name"}
+{"kind":"result","id":"HumanEval_128_prod_signs","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_129_minPath","config":"none/name"}
+{"kind":"result","id":"HumanEval_129_minPath","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_130_tri","config":"none/name"}
+{"kind":"result","id":"HumanEval_130_tri","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_131_digits","config":"none/name"}
+{"kind":"result","id":"HumanEval_131_digits","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_132_is_nested","config":"none/name"}
+{"kind":"result","id":"HumanEval_132_is_nested","config":"none/name","outcome":"fail","emitted":"nested"}
+{"kind":"attempt","id":"HumanEval_133_sum_squares","config":"none/name"}
+{"kind":"result","id":"HumanEval_133_sum_squares","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_134_check_if_last_char_is_a_letter","config":"none/name"}
+{"kind":"result","id":"HumanEval_134_check_if_last_char_is_a_letter","config":"none/name","outcome":"invalid","emitted":"a letter"}
+{"kind":"attempt","id":"HumanEval_135_can_arrange","config":"none/name"}
+{"kind":"result","id":"HumanEval_135_can_arrange","config":"none/name","outcome":"fail","emitted":"arrange"}
+{"kind":"attempt","id":"HumanEval_136_largest_smallest_integers","config":"none/name"}
+{"kind":"result","id":"HumanEval_136_largest_smallest_integers","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_138_is_equal_to_sum_even","config":"none/name"}
+{"kind":"result","id":"HumanEval_138_is_equal_to_sum_even","config":"none/name","outcome":"invalid","emitted":"equal to sum even"}
+{"kind":"attempt","id":"HumanEval_139_special_factorial","config":"none/name"}
+{"kind":"result","id":"HumanEval_139_special_factorial","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_140_fix_spaces","config":"none/name"}
+{"kind":"result","id":"HumanEval_140_fix_spaces","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_141_file_name_check","config":"none/name"}
+{"kind":"result","id":"HumanEval_141_file_name_check","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_142_sum_squares","config":"none/name"}
+{"kind":"result","id":"HumanEval_142_sum_squares","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_143_words_in_sentence","config":"none/name"}
+{"kind":"result","id":"HumanEval_143_words_in_sentence","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_144_simplify","config":"none/name"}
+{"kind":"result","id":"HumanEval_144_simplify","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_145_order_by_points","config":"none/name"}
+{"kind":"result","id":"HumanEval_145_order_by_points","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_146_specialFilter","config":"none/name"}
+{"kind":"result","id":"HumanEval_146_specialFilter","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_147_get_max_triples","config":"none/name"}
+{"kind":"result","id":"HumanEval_147_get_max_triples","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_149_sorted_list_sum","config":"none/name"}
+{"kind":"result","id":"HumanEval_149_sorted_list_sum","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_150_x_or_y","config":"none/name"}
+{"kind":"result","id":"HumanEval_150_x_or_y","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_151_double_the_difference","config":"none/name"}
+{"kind":"result","id":"HumanEval_151_double_the_difference","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_152_compare","config":"none/name"}
+{"kind":"result","id":"HumanEval_152_compare","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_153_Strongest_Extension","config":"none/name"}
+{"kind":"result","id":"HumanEval_153_Strongest_Extension","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_154_cycpattern_check","config":"none/name"}
+{"kind":"result","id":"HumanEval_154_cycpattern_check","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_155_even_odd_count","config":"none/name"}
+{"kind":"result","id":"HumanEval_155_even_odd_count","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_156_int_to_mini_roman","config":"none/name"}
+{"kind":"result","id":"HumanEval_156_int_to_mini_roman","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_157_right_angle_triangle","config":"none/name"}
+{"kind":"result","id":"HumanEval_157_right_angle_triangle","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_158_find_max","config":"none/name"}
+{"kind":"result","id":"HumanEval_158_find_max","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_159_eat","config":"none/name"}
+{"kind":"result","id":"HumanEval_159_eat","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_160_do_algebra","config":"none/name"}
+{"kind":"result","id":"HumanEval_160_do_algebra","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_161_solve","config":"none/name"}
+{"kind":"result","id":"HumanEval_161_solve","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_162_string_to_md5","config":"none/name"}
+{"kind":"result","id":"HumanEval_162_string_to_md5","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_163_generate_integers","config":"none/name"}
+{"kind":"result","id":"HumanEval_163_generate_integers","config":"none/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_0_has_close_elements","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_0_has_close_elements","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_1_separate_paren_groups","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_1_separate_paren_groups","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_2_truncate_number","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_2_truncate_number","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_3_below_zero","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_3_below_zero","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_4_mean_absolute_deviation","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_4_mean_absolute_deviation","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_5_intersperse","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_5_intersperse","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_6_parse_nested_parens","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_6_parse_nested_parens","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_7_filter_by_substring","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_7_filter_by_substring","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_8_sum_product","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_8_sum_product","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_9_rolling_max","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_9_rolling_max","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_10_make_palindrome","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_10_make_palindrome","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_11_string_xor","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_11_string_xor","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_12_longest","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_12_longest","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_13_greatest_common_divisor","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_13_greatest_common_divisor","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_14_all_prefixes","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_14_all_prefixes","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_15_string_sequence","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_15_string_sequence","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_16_count_distinct_characters","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_16_count_distinct_characters","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_17_parse_music","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_17_parse_music","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_18_how_many_times","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_18_how_many_times","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_19_sort_numbers","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_19_sort_numbers","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_20_find_closest_elements","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_20_find_closest_elements","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_21_rescale_to_unit","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_21_rescale_to_unit","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_22_filter_integers","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_22_filter_integers","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_23_strlen","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_23_strlen","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_24_largest_divisor","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_24_largest_divisor","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_25_factorize","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_25_factorize","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_26_remove_duplicates","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_26_remove_duplicates","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_27_flip_case","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_27_flip_case","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_28_concatenate","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_28_concatenate","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_29_filter_by_prefix","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_29_filter_by_prefix","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_30_get_positive","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_30_get_positive","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_31_is_prime","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_31_is_prime","config":"stdlib/name","outcome":"fail","emitted":"prime"}
+{"kind":"attempt","id":"HumanEval_33_sort_third","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_33_sort_third","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_34_unique","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_34_unique","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_35_max_element","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_35_max_element","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_36_fizz_buzz","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_36_fizz_buzz","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_37_sort_even","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_37_sort_even","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_39_prime_fib","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_39_prime_fib","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_40_triples_sum_to_zero","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_40_triples_sum_to_zero","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_41_car_race_collision","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_41_car_race_collision","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_42_incr_list","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_42_incr_list","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_43_pairs_sum_to_zero","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_43_pairs_sum_to_zero","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_44_change_base","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_44_change_base","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_45_triangle_area","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_45_triangle_area","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_46_fib4","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_46_fib4","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_47_median","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_47_median","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_48_is_palindrome","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_48_is_palindrome","config":"stdlib/name","outcome":"fail","emitted":"palindrome"}
+{"kind":"attempt","id":"HumanEval_49_modp","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_49_modp","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_51_remove_vowels","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_51_remove_vowels","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_52_below_threshold","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_52_below_threshold","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_53_add","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_53_add","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_54_same_chars","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_54_same_chars","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_55_fib","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_55_fib","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_56_correct_bracketing","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_56_correct_bracketing","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_57_monotonic","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_57_monotonic","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_58_common","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_58_common","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_59_largest_prime_factor","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_59_largest_prime_factor","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_60_sum_to_n","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_60_sum_to_n","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_61_correct_bracketing","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_61_correct_bracketing","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_62_derivative","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_62_derivative","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_63_fibfib","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_63_fibfib","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_64_vowels_count","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_64_vowels_count","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_65_circular_shift","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_65_circular_shift","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_66_digitSum","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_66_digitSum","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_67_fruit_distribution","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_67_fruit_distribution","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_68_pluck","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_68_pluck","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_69_search","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_69_search","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_70_strange_sort_list","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_70_strange_sort_list","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_71_triangle_area","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_71_triangle_area","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_72_will_it_fly","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_72_will_it_fly","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_73_smallest_change","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_73_smallest_change","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_74_total_match","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_74_total_match","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_75_is_multiply_prime","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_75_is_multiply_prime","config":"stdlib/name","outcome":"invalid","emitted":"multiply prime"}
+{"kind":"attempt","id":"HumanEval_76_is_simple_power","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_76_is_simple_power","config":"stdlib/name","outcome":"invalid","emitted":"simple power"}
+{"kind":"attempt","id":"HumanEval_77_iscube","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_77_iscube","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_78_hex_key","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_78_hex_key","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_79_decimal_to_binary","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_79_decimal_to_binary","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_80_is_happy","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_80_is_happy","config":"stdlib/name","outcome":"fail","emitted":"happy"}
+{"kind":"attempt","id":"HumanEval_81_numerical_letter_grade","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_81_numerical_letter_grade","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_82_prime_length","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_82_prime_length","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_83_starts_one_ends","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_83_starts_one_ends","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_84_solve","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_84_solve","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_85_add","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_85_add","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_86_anti_shuffle","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_86_anti_shuffle","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_87_get_row","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_87_get_row","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_88_sort_array","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_88_sort_array","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_89_encrypt","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_89_encrypt","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_90_next_smallest","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_90_next_smallest","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_91_is_bored","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_91_is_bored","config":"stdlib/name","outcome":"fail","emitted":"bored"}
+{"kind":"attempt","id":"HumanEval_92_any_int","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_92_any_int","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_93_encode","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_93_encode","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_94_skjkasdkd","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_94_skjkasdkd","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_95_check_dict_case","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_95_check_dict_case","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_96_count_up_to","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_96_count_up_to","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_97_multiply","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_97_multiply","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_98_count_upper","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_98_count_upper","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_99_closest_integer","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_99_closest_integer","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_100_make_a_pile","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_100_make_a_pile","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_101_words_string","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_101_words_string","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_102_choose_num","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_102_choose_num","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_103_rounded_avg","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_103_rounded_avg","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_104_unique_digits","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_104_unique_digits","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_105_by_length","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_105_by_length","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_106_f","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_106_f","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_107_even_odd_palindrome","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_107_even_odd_palindrome","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_108_count_nums","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_108_count_nums","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_109_move_one_ball","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_109_move_one_ball","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_110_exchange","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_110_exchange","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_111_histogram","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_111_histogram","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_112_reverse_delete","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_112_reverse_delete","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_113_odd_count","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_113_odd_count","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_114_minSubArraySum","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_114_minSubArraySum","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_115_max_fill","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_115_max_fill","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_116_sort_array","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_116_sort_array","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_117_select_words","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_117_select_words","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_118_get_closest_vowel","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_118_get_closest_vowel","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_119_match_parens","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_119_match_parens","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_120_maximum","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_120_maximum","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_121_solution","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_121_solution","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_122_add_elements","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_122_add_elements","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_123_get_odd_collatz","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_123_get_odd_collatz","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_124_valid_date","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_124_valid_date","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_125_split_words","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_125_split_words","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_126_is_sorted","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_126_is_sorted","config":"stdlib/name","outcome":"fail","emitted":"sorted"}
+{"kind":"attempt","id":"HumanEval_127_intersection","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_127_intersection","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_128_prod_signs","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_128_prod_signs","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_129_minPath","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_129_minPath","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_130_tri","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_130_tri","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_131_digits","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_131_digits","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_132_is_nested","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_132_is_nested","config":"stdlib/name","outcome":"fail","emitted":"nested"}
+{"kind":"attempt","id":"HumanEval_133_sum_squares","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_133_sum_squares","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_134_check_if_last_char_is_a_letter","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_134_check_if_last_char_is_a_letter","config":"stdlib/name","outcome":"invalid","emitted":"a letter"}
+{"kind":"attempt","id":"HumanEval_135_can_arrange","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_135_can_arrange","config":"stdlib/name","outcome":"fail","emitted":"arrange"}
+{"kind":"attempt","id":"HumanEval_136_largest_smallest_integers","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_136_largest_smallest_integers","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_138_is_equal_to_sum_even","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_138_is_equal_to_sum_even","config":"stdlib/name","outcome":"invalid","emitted":"equal to sum even"}
+{"kind":"attempt","id":"HumanEval_139_special_factorial","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_139_special_factorial","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_140_fix_spaces","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_140_fix_spaces","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_141_file_name_check","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_141_file_name_check","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_142_sum_squares","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_142_sum_squares","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_143_words_in_sentence","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_143_words_in_sentence","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_144_simplify","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_144_simplify","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_145_order_by_points","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_145_order_by_points","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_146_specialFilter","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_146_specialFilter","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_147_get_max_triples","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_147_get_max_triples","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_149_sorted_list_sum","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_149_sorted_list_sum","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_150_x_or_y","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_150_x_or_y","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_151_double_the_difference","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_151_double_the_difference","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_152_compare","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_152_compare","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_153_Strongest_Extension","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_153_Strongest_Extension","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_154_cycpattern_check","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_154_cycpattern_check","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_155_even_odd_count","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_155_even_odd_count","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_156_int_to_mini_roman","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_156_int_to_mini_roman","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_157_right_angle_triangle","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_157_right_angle_triangle","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_158_find_max","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_158_find_max","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_159_eat","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_159_eat","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_160_do_algebra","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_160_do_algebra","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_161_solve","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_161_solve","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_162_string_to_md5","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_162_string_to_md5","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_163_generate_integers","config":"stdlib/name"}
+{"kind":"result","id":"HumanEval_163_generate_integers","config":"stdlib/name","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_0_has_close_elements","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_0_has_close_elements","config":"stdlib/doc","outcome":"invalid","emitted":"two numbers closer to each other than given threshold"}
+{"kind":"attempt","id":"HumanEval_1_separate_paren_groups","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_1_separate_paren_groups","config":"stdlib/doc","outcome":"invalid","emitted":"not input to this"}
+{"kind":"attempt","id":"HumanEval_2_truncate_number","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_2_truncate_number","config":"stdlib/doc","outcome":"invalid","emitted":"be decomposed into"}
+{"kind":"attempt","id":"HumanEval_3_below_zero","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_3_below_zero","config":"stdlib/doc","outcome":"invalid","emitted":"i ' re given an array of deposit"}
+{"kind":"attempt","id":"HumanEval_4_mean_absolute_deviation","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_4_mean_absolute_deviation","config":"stdlib/doc","outcome":"invalid","emitted":"the average absolute difference between each element"}
+{"kind":"attempt","id":"HumanEval_5_intersperse","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_5_intersperse","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_6_parse_nested_parens","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_6_parse_nested_parens","config":"stdlib/doc","outcome":"invalid","emitted":"a string represented multiple groups for nested parentheses separated by spaces for each of the group output the deepest level of nesting of parentheses e g has maximum two levels of nesting while has three"}
+{"kind":"attempt","id":"HumanEval_7_filter_by_substring","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_7_filter_by_substring","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_8_sum_product","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_8_sum_product","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_9_rolling_max","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_9_rolling_max","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_10_make_palindrome","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_10_make_palindrome","config":"stdlib/doc","outcome":"invalid","emitted":"simple find the longest postfix of supplied string that a palindrome append to the end of the string reverse of a string prefix that comes the palindromic suffix"}
+{"kind":"attempt","id":"HumanEval_11_string_xor","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_11_string_xor","config":"stdlib/doc","outcome":"invalid","emitted":"two strings a"}
+{"kind":"attempt","id":"HumanEval_12_longest","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_12_longest","config":"stdlib/doc","outcome":"fail","emitted":"empty"}
+{"kind":"attempt","id":"HumanEval_13_greatest_common_divisor","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_13_greatest_common_divisor","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_14_all_prefixes","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_14_all_prefixes","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_15_string_sequence","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_15_string_sequence","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_16_count_distinct_characters","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_16_count_distinct_characters","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_17_parse_music","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_17_parse_music","config":"stdlib/doc","outcome":"invalid","emitted":"a string representing musical notes in a special ascii format i task to parse this string"}
+{"kind":"attempt","id":"HumanEval_18_how_many_times","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_18_how_many_times","config":"stdlib/doc","outcome":"invalid","emitted":"be found in the original string count overlaping cases"}
+{"kind":"attempt","id":"HumanEval_19_sort_numbers","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_19_sort_numbers","config":"stdlib/doc","outcome":"invalid","emitted":"a space delimited string of numberals from ' zero ' to ' nine '. valid choices ' zero ', ' one ', ' two ', ' three ', ' four ', ' five ', ' six ', ' seven ', ' eight '"}
+{"kind":"attempt","id":"HumanEval_20_find_closest_elements","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_20_find_closest_elements","config":"stdlib/doc","outcome":"invalid","emitted":"from a supplied array of numbers of length at least two select"}
+{"kind":"attempt","id":"HumanEval_21_rescale_to_unit","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_21_rescale_to_unit","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_22_filter_integers","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_22_filter_integers","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_23_strlen","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_23_strlen","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_24_largest_divisor","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_24_largest_divisor","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_25_factorize","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_25_factorize","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_26_remove_duplicates","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_26_remove_duplicates","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_27_flip_case","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_27_flip_case","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_28_concatenate","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_28_concatenate","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_29_filter_by_prefix","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_29_filter_by_prefix","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_30_get_positive","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_30_get_positive","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_31_is_prime","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_31_is_prime","config":"stdlib/doc","outcome":"fail","emitted":"prime"}
+{"kind":"attempt","id":"HumanEval_33_sort_third","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_33_sort_third","config":"stdlib/doc","outcome":"invalid","emitted":"this takes an array l"}
+{"kind":"attempt","id":"HumanEval_34_unique","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_34_unique","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_35_max_element","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_35_max_element","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_36_fizz_buzz","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_36_fizz_buzz","config":"stdlib/doc","outcome":"invalid","emitted":"divisible by 11 or 13"}
+{"kind":"attempt","id":"HumanEval_37_sort_even","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_37_sort_even","config":"stdlib/doc","outcome":"invalid","emitted":"this takes an array l"}
+{"kind":"attempt","id":"HumanEval_39_prime_fib","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_39_prime_fib","config":"stdlib/doc","outcome":"invalid","emitted":"a fibonacci number"}
+{"kind":"attempt","id":"HumanEval_40_triples_sum_to_zero","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_40_triples_sum_to_zero","config":"stdlib/doc","outcome":"invalid","emitted":"three distinct elements in the array that sum to zero"}
+{"kind":"attempt","id":"HumanEval_41_car_race_collision","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_41_car_race_collision","config":"stdlib/doc","outcome":"invalid","emitted":"driving left to right simultaneously a different set of n cars driving right to left the two sets of cars start out being very far from each other cars move in the same speed two cars said to collide a car that ' s moving left to right hits a car that ' s moving right to left however the cars infinitely sturdy"}
+{"kind":"attempt","id":"HumanEval_42_incr_list","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_42_incr_list","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_43_pairs_sum_to_zero","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_43_pairs_sum_to_zero","config":"stdlib/doc","outcome":"invalid","emitted":"two distinct elements in the array that sum to zero"}
+{"kind":"attempt","id":"HumanEval_44_change_base","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_44_change_base","config":"stdlib/doc","outcome":"invalid","emitted":"the conversion base numbers less than 10"}
+{"kind":"attempt","id":"HumanEval_45_triangle_area","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_45_triangle_area","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_46_fib4","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_46_fib4","config":"stdlib/doc","outcome":"invalid","emitted":"a sequence similar to the fibbonacci sequnece that ' s defined as follows fib4 0 -> 0 fib4 1 -> 0 fib4 2 -> 2 fib4 3 -> 0 fib4 n -> fib4 n 1 fib4 n 2 fib4 n 3 fib4 n 4 ). please write a to efficiently compute the n th element of the fib4 number sequence use recursion"}
+{"kind":"attempt","id":"HumanEval_47_median","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_47_median","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_48_is_palindrome","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_48_is_palindrome","config":"stdlib/doc","outcome":"invalid","emitted":"a palindrome"}
+{"kind":"attempt","id":"HumanEval_49_modp","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_49_modp","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_51_remove_vowels","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_51_remove_vowels","config":"stdlib/doc","outcome":"invalid","emitted":"a that takes string"}
+{"kind":"attempt","id":"HumanEval_52_below_threshold","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_52_below_threshold","config":"stdlib/doc","outcome":"invalid","emitted":"below threshold t"}
+{"kind":"attempt","id":"HumanEval_53_add","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_53_add","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_54_same_chars","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_54_same_chars","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_55_fib","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_55_fib","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_56_correct_bracketing","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_56_correct_bracketing","config":"stdlib/doc","outcome":"invalid","emitted":"a string of \"<\""}
+{"kind":"attempt","id":"HumanEval_57_monotonic","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_57_monotonic","config":"stdlib/doc","outcome":"invalid","emitted":"array elements monotonically increasing or decreasing"}
+{"kind":"attempt","id":"HumanEval_58_common","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_58_common","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_59_largest_prime_factor","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_59_largest_prime_factor","config":"stdlib/doc","outcome":"invalid","emitted":"the largest prime factor of n assume n 1"}
+{"kind":"attempt","id":"HumanEval_60_sum_to_n","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_60_sum_to_n","config":"stdlib/doc","outcome":"invalid","emitted":"a that sums numbers from 1 to n"}
+{"kind":"attempt","id":"HumanEval_61_correct_bracketing","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_61_correct_bracketing","config":"stdlib/doc","outcome":"invalid","emitted":"a string of \" \""}
+{"kind":"attempt","id":"HumanEval_62_derivative","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_62_derivative","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_63_fibfib","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_63_fibfib","config":"stdlib/doc","outcome":"invalid","emitted":"a sequence similar to the fibbonacci sequnece that ' s defined as follows fibfib 0 == 0 fibfib 1 == 0 fibfib 2 == 1 fibfib n == fibfib n 1 fibfib n 2 fibfib n 3 ). please write a to efficiently compute the n th element of the fibfib number sequence"}
+{"kind":"attempt","id":"HumanEval_64_vowels_count","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_64_vowels_count","config":"stdlib/doc","outcome":"invalid","emitted":"only it is ' a ', ' e ', ' i ', ' o ', ' u '. here ' y ' also a vowel"}
+{"kind":"attempt","id":"HumanEval_65_circular_shift","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_65_circular_shift","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_66_digitSum","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_66_digitSum","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_67_fruit_distribution","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_67_fruit_distribution","config":"stdlib/doc","outcome":"invalid","emitted":"distributed in a basket of fruit this basket contains apples oranges"}
+{"kind":"attempt","id":"HumanEval_68_pluck","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_68_pluck","config":"stdlib/doc","outcome":"invalid","emitted":"\" given an array representing a branch of a tree that has non negative integer nodes i task is found the node that has smallest index the plucked node should be returned in an array smalest_value its index ], there no even values or the given array empty []. example 1"}
+{"kind":"attempt","id":"HumanEval_69_search","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_69_search","config":"stdlib/doc","outcome":"invalid","emitted":"i are the number of it appears in the array no such a value exist 1 examples"}
+{"kind":"attempt","id":"HumanEval_70_strange_sort_list","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_70_strange_sort_list","config":"stdlib/doc","outcome":"invalid","emitted":"i start with the minimum value"}
+{"kind":"attempt","id":"HumanEval_71_triangle_area","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_71_triangle_area","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_72_will_it_fly","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_72_will_it_fly","config":"stdlib/doc","outcome":"invalid","emitted":"write a that returns true the object q will fly"}
+{"kind":"attempt","id":"HumanEval_73_smallest_change","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_73_smallest_change","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_74_total_match","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_74_total_match","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_75_is_multiply_prime","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_75_is_multiply_prime","config":"stdlib/doc","outcome":"invalid","emitted":"the multiplication of 3 prime numbers"}
+{"kind":"attempt","id":"HumanEval_76_is_simple_power","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_76_is_simple_power","config":"stdlib/doc","outcome":"invalid","emitted":"i task is a simple power of n n ** int x for example"}
+{"kind":"attempt","id":"HumanEval_77_iscube","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_77_iscube","config":"stdlib/doc","outcome":"invalid","emitted":"write a that takes an integer a"}
+{"kind":"attempt","id":"HumanEval_78_hex_key","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_78_hex_key","config":"stdlib/doc","outcome":"invalid","emitted":"counts the number of hexadecimal digits that are always uppercase examples"}
+{"kind":"attempt","id":"HumanEval_79_decimal_to_binary","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_79_decimal_to_binary","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_80_is_happy","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_80_is_happy","config":"stdlib/doc","outcome":"invalid","emitted":"i are distinct for example"}
+{"kind":"attempt","id":"HumanEval_81_numerical_letter_grade","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_81_numerical_letter_grade","config":"stdlib/doc","outcome":"invalid","emitted":"it is she has lost the code she used for grading she has given i an array of gpas for students"}
+{"kind":"attempt","id":"HumanEval_82_prime_length","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_82_prime_length","config":"stdlib/doc","outcome":"invalid","emitted":"write a that takes a string"}
+{"kind":"attempt","id":"HumanEval_83_starts_one_ends","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_83_starts_one_ends","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_84_solve","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_84_solve","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_85_add","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_85_add","config":"stdlib/doc","outcome":"invalid","emitted":"at odd indices .. examples"}
+{"kind":"attempt","id":"HumanEval_86_anti_shuffle","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_86_anti_shuffle","config":"stdlib/doc","outcome":"invalid","emitted":"write a that takes a string"}
+{"kind":"attempt","id":"HumanEval_87_get_row","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_87_get_row","config":"stdlib/doc","outcome":"invalid","emitted":"i are a coordinate row columns ), starting with 0 sort coordinates initially by rows in ascending order also sort coordinates of the row by columns in descending order examples"}
+{"kind":"attempt","id":"HumanEval_88_sort_array","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_88_sort_array","config":"stdlib/doc","outcome":"invalid","emitted":"sorting i will sort the given array in ascending order the sum first index value last index value odd or sort it in descending order the sum first index value last index value even note don ' t change the given array examples"}
+{"kind":"attempt","id":"HumanEval_89_encrypt","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_89_encrypt","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_90_next_smallest","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_90_next_smallest","config":"stdlib/doc","outcome":"invalid","emitted":"given an array of integers write a next_smallest that returns the 2nd smallest element of the array undefined there no such element"}
+{"kind":"attempt","id":"HumanEval_91_is_bored","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_91_is_bored","config":"stdlib/doc","outcome":"invalid","emitted":"i ' ll be given a string of words"}
+{"kind":"attempt","id":"HumanEval_92_any_int","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_92_any_int","config":"stdlib/doc","outcome":"invalid","emitted":"all numbers are equal to the sum of the other two"}
+{"kind":"attempt","id":"HumanEval_93_encode","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_93_encode","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_94_skjkasdkd","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_94_skjkasdkd","config":"stdlib/doc","outcome":"invalid","emitted":"given an array of integers i need to find the largest prime value"}
+{"kind":"attempt","id":"HumanEval_95_check_dict_case","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_95_check_dict_case","config":"stdlib/doc","outcome":"invalid","emitted":"strings in lower case or keys strings in upper case false the should false the given object empty examples"}
+{"kind":"attempt","id":"HumanEval_96_count_up_to","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_96_count_up_to","config":"stdlib/doc","outcome":"invalid","emitted":"implement a that takes an non negative integer"}
+{"kind":"attempt","id":"HumanEval_97_multiply","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_97_multiply","config":"stdlib/doc","outcome":"invalid","emitted":"complete the that takes two integers"}
+{"kind":"attempt","id":"HumanEval_98_count_upper","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_98_count_upper","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_99_closest_integer","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_99_closest_integer","config":"stdlib/doc","outcome":"invalid","emitted":"create a that takes a value string representing a number"}
+{"kind":"attempt","id":"HumanEval_100_make_a_pile","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_100_make_a_pile","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_101_words_string","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_101_words_string","config":"stdlib/doc","outcome":"invalid","emitted":"to split the string into words"}
+{"kind":"attempt","id":"HumanEval_102_choose_num","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_102_choose_num","config":"stdlib/doc","outcome":"invalid","emitted":"this takes two positive numbers x"}
+{"kind":"attempt","id":"HumanEval_103_rounded_avg","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_103_rounded_avg","config":"stdlib/doc","outcome":"invalid","emitted":"i are greater than m 1 example"}
+{"kind":"attempt","id":"HumanEval_104_unique_digits","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_104_unique_digits","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_105_by_length","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_105_by_length","config":"stdlib/doc","outcome":"invalid","emitted":"between 1"}
+{"kind":"attempt","id":"HumanEval_106_f","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_106_f","config":"stdlib/doc","outcome":"invalid","emitted":"implement the f that takes n as a parameter"}
+{"kind":"attempt","id":"HumanEval_107_even_odd_palindrome","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_107_even_odd_palindrome","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_108_count_nums","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_108_count_nums","config":"stdlib/doc","outcome":"invalid","emitted":"write a count_nums which takes an array of integers"}
+{"kind":"attempt","id":"HumanEval_109_move_one_ball","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_109_move_one_ball","config":"stdlib/doc","outcome":"invalid","emitted":"i have an array ' arr ' of n integers arr 1 ], arr 2 ], ..., arr n ]. the numbers in the array will be randomly ordered i task is empty"}
+{"kind":"attempt","id":"HumanEval_110_exchange","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_110_exchange","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_111_histogram","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_111_histogram","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_112_reverse_delete","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_112_reverse_delete","config":"stdlib/doc","outcome":"invalid","emitted":"task i are equal to character in c"}
+{"kind":"attempt","id":"HumanEval_113_odd_count","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_113_odd_count","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_114_minSubArraySum","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_114_minSubArraySum","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_115_max_fill","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_115_max_fill","config":"stdlib/doc","outcome":"invalid","emitted":"i are be used to extract water from it"}
+{"kind":"attempt","id":"HumanEval_116_sort_array","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_116_sort_array","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_117_select_words","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_117_select_words","config":"stdlib/doc","outcome":"invalid","emitted":"given a string s"}
+{"kind":"attempt","id":"HumanEval_118_get_closest_vowel","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_118_get_closest_vowel","config":"stdlib/doc","outcome":"invalid","emitted":"given a word i task to find the closest vowel that stands between two consonants from the right side of the word case sensitive ). vowels in the beginning"}
+{"kind":"attempt","id":"HumanEval_119_match_parens","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_119_match_parens","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_120_maximum","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_120_maximum","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_121_solution","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_121_solution","config":"stdlib/doc","outcome":"invalid","emitted":"in even positions examples"}
+{"kind":"attempt","id":"HumanEval_122_add_elements","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_122_add_elements","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_123_get_odd_collatz","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_123_get_odd_collatz","config":"stdlib/doc","outcome":"invalid","emitted":"each term is a conjecture in mathematics that concerns a sequence defined as follows start with positive integer n"}
+{"kind":"attempt","id":"HumanEval_124_valid_date","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_124_valid_date","config":"stdlib/doc","outcome":"invalid","emitted":"returns true the date is less than 1 or higher than 30 days for months 4 6 9 11"}
+{"kind":"attempt","id":"HumanEval_125_split_words","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_125_split_words","config":"stdlib/doc","outcome":"invalid","emitted":"in"}
+{"kind":"attempt","id":"HumanEval_126_is_sorted","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_126_is_sorted","config":"stdlib/doc","outcome":"invalid","emitted":"sorted in ascending order array has more than 1 duplicate of the same number false assume no negative numbers"}
+{"kind":"attempt","id":"HumanEval_127_intersection","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_127_intersection","config":"stdlib/doc","outcome":"invalid","emitted":"i are assumed that its start less or equal its end i task to determine whether the length of intersection of these two intervals a prime number example the intersection of the intervals 1 3 ), 2 4 2 3 which its length 1 which a prime number the length of the intersection a prime number \" yes \", otherwise \" no \". the two intervals don ' t intersect \" no \". input output samples"}
+{"kind":"attempt","id":"HumanEval_128_prod_signs","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_128_prod_signs","config":"stdlib/doc","outcome":"invalid","emitted":"given an array arr of integers"}
+{"kind":"attempt","id":"HumanEval_129_minPath","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_129_minPath","config":"stdlib/doc","outcome":"invalid","emitted":"in each step i can start from cell"}
+{"kind":"attempt","id":"HumanEval_130_tri","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_130_tri","config":"stdlib/doc","outcome":"fail","emitted":"5"}
+{"kind":"attempt","id":"HumanEval_131_digits","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_131_digits","config":"stdlib/doc","outcome":"invalid","emitted":"even for example"}
+{"kind":"attempt","id":"HumanEval_132_is_nested","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_132_is_nested","config":"stdlib/doc","outcome":"invalid","emitted":"create a that takes a string as input which contains only square brackets the should true"}
+{"kind":"attempt","id":"HumanEval_133_sum_squares","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_133_sum_squares","config":"stdlib/doc","outcome":"invalid","emitted":"given an array of numbers i need to the sum of squared numbers in the given array round each element in the array to the upper int ceiling first examples"}
+{"kind":"attempt","id":"HumanEval_134_check_if_last_char_is_a_letter","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_134_check_if_last_char_is_a_letter","config":"stdlib/doc","outcome":"invalid","emitted":"false otherwise note \" word \" is an alphabetical character"}
+{"kind":"attempt","id":"HumanEval_135_can_arrange","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_135_can_arrange","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_136_largest_smallest_integers","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_136_largest_smallest_integers","config":"stdlib/doc","outcome":"invalid","emitted":"' b ' is the largest of negative integers"}
+{"kind":"attempt","id":"HumanEval_138_is_equal_to_sum_even","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_138_is_equal_to_sum_even","config":"stdlib/doc","outcome":"invalid","emitted":"be written as the sum of exactly 4 positive even numbers example"}
+{"kind":"attempt","id":"HumanEval_139_special_factorial","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_139_special_factorial","config":"stdlib/doc","outcome":"invalid","emitted":"defined as brazilian_factorial n n n 1 )! n 2 )! ... 1 n 0 for example"}
+{"kind":"attempt","id":"HumanEval_140_fix_spaces","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_140_fix_spaces","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_141_file_name_check","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_141_file_name_check","config":"stdlib/doc","outcome":"invalid","emitted":"only the following conditions are valid"}
+{"kind":"attempt","id":"HumanEval_142_sum_squares","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_142_sum_squares","config":"stdlib/doc","outcome":"invalid","emitted":"\" this will take an array of integers entries in the array the shall square the integer entry its index is a multiple of 3 or 4 the shall"}
+{"kind":"attempt","id":"HumanEval_143_words_in_sentence","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_143_words_in_sentence","config":"stdlib/doc","outcome":"invalid","emitted":"i are prime numbers the order of the words in the new string should be the same as the original one example 1"}
+{"kind":"attempt","id":"HumanEval_144_simplify","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_144_simplify","config":"stdlib/doc","outcome":"invalid","emitted":"positive whole numbers i assume that x"}
+{"kind":"attempt","id":"HumanEval_145_order_by_points","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_145_order_by_points","config":"stdlib/doc","outcome":"invalid","emitted":"several items with similar sum of their digits order them based on their index in original array for example"}
+{"kind":"attempt","id":"HumanEval_146_specialFilter","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_146_specialFilter","config":"stdlib/doc","outcome":"invalid","emitted":"write a that takes an array of numbers as input"}
+{"kind":"attempt","id":"HumanEval_147_get_max_triples","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_147_get_max_triples","config":"stdlib/doc","outcome":"invalid","emitted":"i are a multiple of 3 example"}
+{"kind":"attempt","id":"HumanEval_149_sorted_list_sum","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_149_sorted_list_sum","config":"stdlib/doc","outcome":"invalid","emitted":"write a that accepts an array of strings as a parameter deletes the strings that have odd lengths from it"}
+{"kind":"attempt","id":"HumanEval_150_x_or_y","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_150_x_or_y","config":"stdlib/doc","outcome":"invalid","emitted":"a prime number"}
+{"kind":"attempt","id":"HumanEval_151_double_the_difference","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_151_double_the_difference","config":"stdlib/doc","outcome":"invalid","emitted":"odd ignore numbers that negative or integers"}
+{"kind":"attempt","id":"HumanEval_152_compare","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_152_compare","config":"stdlib/doc","outcome":"invalid","emitted":"comparing i task is definitely worth noting down"}
+{"kind":"attempt","id":"HumanEval_153_Strongest_Extension","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_153_Strongest_Extension","config":"stdlib/doc","outcome":"invalid","emitted":"to be used to load additional classes to the the strength of the extension as follows cap be the number of the uppercase letters in the extension ' s name"}
+{"kind":"attempt","id":"HumanEval_154_cycpattern_check","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_154_cycpattern_check","config":"stdlib/doc","outcome":"invalid","emitted":"given 2 words i need to true the second word or of its rotations a substring in the first word"}
+{"kind":"attempt","id":"HumanEval_155_even_odd_count","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_155_even_odd_count","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_156_int_to_mini_roman","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_156_int_to_mini_roman","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_157_right_angle_triangle","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_157_right_angle_triangle","config":"stdlib/doc","outcome":"invalid","emitted":"<?>"}
+{"kind":"attempt","id":"HumanEval_158_find_max","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_158_find_max","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}
+{"kind":"attempt","id":"HumanEval_159_eat","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_159_eat","config":"stdlib/doc","outcome":"invalid","emitted":"i ' re a hungry rabbit"}
+{"kind":"attempt","id":"HumanEval_160_do_algebra","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_160_do_algebra","config":"stdlib/doc","outcome":"fail","emitted":"5"}
+{"kind":"attempt","id":"HumanEval_161_solve","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_161_solve","config":"stdlib/doc","outcome":"invalid","emitted":"given a string s s i a letter reverse its case from lower to upper or vise versa otherwise keep it as it the string contains no letters reverse the string the should the resulted string examples"}
+{"kind":"attempt","id":"HumanEval_162_string_to_md5","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_162_string_to_md5","config":"stdlib/doc","outcome":"invalid","emitted":"an empty string undefined"}
+{"kind":"attempt","id":"HumanEval_163_generate_integers","config":"stdlib/doc"}
+{"kind":"result","id":"HumanEval_163_generate_integers","config":"stdlib/doc","outcome":"abstain","emitted":"unknown"}

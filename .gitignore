@@ -28,3 +28,4 @@ plans/
 graphify-out/
 .claude/
 CLAUDE.md
+data/benchmarks/.cache/

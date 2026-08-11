@@ -98,6 +98,95 @@ export class Synthesizer {
   }
 }
 
+// Emission (the inverse of ingestion)
+
+/**
+ * Inverse of `BaseAtomizer`'s ARITHMETIC_CANONICAL map.
+ *
+ * Ingestion normalizes `+` to `plus` so that "1 + 1" and "1 plus 1" produce
+ * identical scope sequences - correct for arithmetic language, and destructive
+ * for source text, which comes back as `return _ plus _ ;`.
+ *
+ * Inverting it is unambiguous **in an abstracted pattern specifically**, which
+ * is the only place this runs: `extractPatternFromNode` has already replaced
+ * every identifier - including member names like `.push` - with `VAR_N`, so a
+ * surviving bare word is a keyword or an operator word, never a variable that
+ * happened to be called `plus`.
+ */
+const OPERATOR_WORD_TO_SYMBOL: Record<string, string> = {
+  plus: "+",
+  minus: "-",
+  times: "*",
+  divided: "/",
+  equals: "=",
+};
+
+/**
+ * Turns a decoded pattern back into real source.
+ *
+ * Three losses happen on the way into the manifold, and exactly one of them is
+ * irreversible without help:
+ *
+ *  1. **Spacing** - `decodeSequence` joins tokens with " ", giving
+ *     `function var_0 ( var_1 , var_2 ) { ... }`. This needs no repair at all:
+ *     JavaScript is whitespace-insensitive, so the spaced form already parses,
+ *     and `generate` re-prints it canonically.
+ *  2. **Operator words** - inverted by the map above.
+ *  3. **Case** - the atomizer lowercases, so `toUpperCase` decodes as
+ *     `touppercase` and CANNOT be mechanically restored. This is why
+ *     `varNames` is persisted at crystallization: every identifier is a `VAR_N`
+ *     slot, so restoring the slots restores the only case-bearing tokens.
+ *
+ * Returns null when the result does not parse - the caller treats that as an
+ * abstention, so a lossy recall degrades to silence rather than to a confident
+ * falsehood (PARITY §1).
+ */
+export function detokenizeCode(
+  text: string,
+  bindings: Map<number, string> = new Map()
+): string | null {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed === "unknown") return null;
+
+  const restored = trimmed
+    .split(/\s+/)
+    .map(tok => OPERATOR_WORD_TO_SYMBOL[tok.toLowerCase()] ?? tok)
+    .join(" ")
+    // Slots decode lowercased (`VAR_0` -> `var_0`), so match case-insensitively
+    // and substitute the stored name; an unbound slot stays a legal identifier
+    // rather than becoming `_`, so the parse below judges the STRUCTURE.
+    .replace(
+      /\bvar_(\d+)\b/gi,
+      (_m, id: string) => bindings.get(Number(id)) ?? `var_${id}`
+    );
+
+  // The parse is both the repair and the verdict: anything that survives it is
+  // a program, and `generate` returns it in canonical form.
+  try {
+    return generate(parse(restored, { module: false })).trim();
+  } catch {
+    // Not a standalone program - but a BODY FRAGMENT is legitimate synthesis
+    // output (a ReturnStatement or BinaryExpression node crystallizes as
+    // `return VAR_0 + VAR_1`, which is a syntax error at top level because
+    // `return` is outside a function). Re-try it in the position it would
+    // actually occupy, then hand back the body rather than the scaffold.
+    try {
+      const wrapped = parse(`function __emit__() {\n${restored}\n}`, {
+        module: false,
+      }) as { body?: { body?: { body?: AstNode[] } }[] };
+      const stmts = wrapped.body?.[0]?.body?.body;
+      if (!stmts || stmts.length === 0) return null;
+      return generate({
+        type: "Program",
+        body: stmts,
+        sourceType: "module",
+      }).trim();
+    } catch {
+      return null;
+    }
+  }
+}
+
 /** Maps JS/TS binary operator symbols to semantic intent words. */
 const OPERATOR_INTENT: Record<string, string> = {
   "+": "addition",
@@ -119,7 +208,13 @@ const OPERATOR_INTENT: Record<string, string> = {
   "??": "nullish coalescing",
 };
 
-function deriveIntent(node: AstNode): string {
+/**
+ * The intent phrase a node is crystallized under. Exported so a benchmark can
+ * ask for a pattern by the phrase ingestion ACTUALLY minted, rather than by a
+ * hand-guessed paraphrase - otherwise a channel probe silently measures intent
+ * guessing instead of the channel (tests/benchmarks/code_benchmark.ts).
+ */
+export function deriveIntent(node: AstNode): string {
   switch (node.type) {
     case "FunctionDeclaration":
     case "FunctionExpression": {
@@ -301,7 +396,9 @@ export async function processCode(
             intentQuanta,
             patternQuanta,
             1.0,
-            slotFlags
+            slotFlags,
+            "",
+            extracted.varNames
           );
           const msg = `Manual pattern ingested: "${lhs}" → "${extracted.pattern}"`;
           respond(msg);
@@ -361,7 +458,14 @@ export async function processCode(
         system
       );
       const slotFlags = store.packSlotFlags(extracted.slotTypes);
-      await store.crystallizeProof(intentQuanta, patternQuanta, 1.0, slotFlags);
+      await store.crystallizeProof(
+        intentQuanta,
+        patternQuanta,
+        1.0,
+        slotFlags,
+        "",
+        extracted.varNames
+      );
       count++;
       logger.debug(
         `[processCode] +pattern: "${intentPhrase}" → "${extracted.pattern}"`

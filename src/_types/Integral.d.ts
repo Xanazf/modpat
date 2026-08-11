@@ -309,6 +309,17 @@ declare namespace Mapping {
       | "exhausted"
       | "gated";
     diagnostics: Mapping.PerceptionDiagnostics | null;
+    /**
+     * Exact answer surface, when the manifold's token encoding cannot carry it.
+     *
+     * Ids are normally authoritative and the caller decodes them. Code is the
+     * exception: `decodeSequence` lowercases, space-joins, and canonicalizes
+     * `+` to `plus`, so re-deriving a program's text from ids destroys it. The
+     * code channel therefore carries its emitted source alongside the ids, and
+     * a caller that has this must prefer it over decoding. Absent for every
+     * other provenance, where decoding remains the single source of truth.
+     */
+    text?: string;
   }
 
   /** A token at the intersection of the forward and backward resonance waves. */
@@ -563,6 +574,8 @@ declare namespace Cognition {
     ids: Uint32Array;
     sinkStrength: number;
     provenance: Mapping.Provenance;
+    /** Exact answer surface when ids cannot carry it; see CoherentResult.text. */
+    text?: string;
   }
 
   interface ReductionResult {

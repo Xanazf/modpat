@@ -26,7 +26,8 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { numberFromW } from "@skill_cogi/Reduction";
 import {
@@ -42,6 +43,45 @@ function parseBinary(
   const m = expr.trim().match(/^(-?\d+)\s*([+-])\s*(-?\d+)$/);
   if (!m) return null;
   return { aVal: Number(m[1]), bVal: Number(m[3]), op: m[2] as "+" | "-" };
+}
+
+/**
+ * Runs a self-contained TypeScript program and reports whether it completed.
+ *
+ * The generic form of this file's argument: the territory answers by RUNNING,
+ * in a child process that never sees a manifold coordinate. Used both by the
+ * arithmetic channel below and by the code toolkit's verifier, which is the
+ * point at which "tsx execution = free territory contact" (PARITY §3.5) stops
+ * being an asset the architecture merely claims and starts being one it spends.
+ */
+export function runTypeScript(
+  source: string,
+  timeoutMs = 10_000
+): { ok: boolean; stdout: string; stderr: string } {
+  const tsxBin = join(process.cwd(), "node_modules", ".bin", "tsx");
+  if (!existsSync(tsxBin)) {
+    throw new Error(`code channel: tsx binary not found at ${tsxBin}`);
+  }
+  const dir = mkdtempSync(join(tmpdir(), "modpat-verify-"));
+  const file = join(dir, "candidate.ts");
+  try {
+    writeFileSync(file, source);
+    const stdout = execFileSync(tsxBin, [file], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs,
+    });
+    return { ok: true, stdout: String(stdout ?? ""), stderr: "" };
+  } catch (e: unknown) {
+    const err = e as { stdout?: string; stderr?: string };
+    return {
+      ok: false,
+      stdout: String(err.stdout ?? ""),
+      stderr: String(err.stderr ?? ""),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /**

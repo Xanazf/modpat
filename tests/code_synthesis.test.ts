@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { createTestTraveler } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
-import { Synthesizer } from "@skill_code/Coder";
+import { runTypeScript } from "@core_s/grounding/CodeBehaviouralFidelity";
+import { detokenizeCode, Synthesizer } from "@skill_code/Coder";
+import { parseExamples, verificationProgram } from "@skill_code/Toolkit";
 import { logger } from "@src/utils/SpectralLogger";
 import { describe, it, TestHarness } from "./utils/harness";
 
@@ -175,6 +177,166 @@ export async function executeCodeSynthesisSuite() {
         result,
         "const result = _ + _;",
         "Unbound VARs should become '_'"
+      );
+    });
+
+    // Test 6: the detokenizer inverts every loss ingestion imposes on code.
+    //
+    // These are the exact decoded forms the manifold produces (verified against
+    // `decodeSequence` output), so this pins the emission contract without
+    // needing a live vault: each case is one of the three losses PARITY §3.5
+    // measured, and together they are why round-trip pass@1 was 0%.
+    await it("Test 6: detokenizeCode inverts the manifold's code losses", async () => {
+      // Loss 1: operator words. Ingestion maps "+" to "plus" so that "1 + 1"
+      // and "1 plus 1" share a scope - correct for arithmetic, fatal for source.
+      assert.strictEqual(
+        detokenizeCode(
+          "return var_0 plus var_1",
+          new Map([
+            [0, "a"],
+            [1, "b"],
+          ])
+        ),
+        "return a + b;",
+        "operator words must come back as symbols"
+      );
+
+      // Loss 2: case. `toUpperCase` decodes as `touppercase` and cannot be
+      // restored mechanically - only the stored slot name carries it.
+      assert.strictEqual(
+        detokenizeCode(
+          "function var_0 ( var_1 ) { return var_1 . var_2 ( ) ; }",
+          new Map([
+            [0, "upper"],
+            [1, "s"],
+            [2, "toUpperCase"],
+          ])
+        ),
+        "function upper(s) {\n  return s.toUpperCase();\n}",
+        "slot names must restore identifier case, including member names"
+      );
+
+      // Loss 3: spacing. JavaScript is whitespace-insensitive, so the
+      // space-joined form already parses and `generate` re-prints it.
+      assert.strictEqual(
+        detokenizeCode(
+          "function var_0 ( var_1 , var_2 ) { if ( var_1 > var_2 ) { return var_1 ; } return var_2 ; }",
+          new Map([
+            [0, "greaterOf"],
+            [1, "a"],
+            [2, "b"],
+          ])
+        ),
+        "function greaterOf(a, b) {\n  if (a > b) {\n    return a;\n  }\n  return b;\n}",
+        "space-joined tokens must re-print as canonical source"
+      );
+
+      // `=` is canonicalized too, and only as a bare token - `===` survives
+      // ingestion intact and must NOT be rewritten.
+      assert.strictEqual(
+        detokenizeCode(
+          "return var_0 === var_1",
+          new Map([
+            [0, "a"],
+            [1, "b"],
+          ])
+        ),
+        "return a === b;",
+        "=== must pass through untouched"
+      );
+
+      // An unbound slot stays a legal identifier rather than becoming `_`, so
+      // the parse judges STRUCTURE and a missing name never fakes a failure.
+      assert.ok(
+        detokenizeCode("return var_0 plus var_1"),
+        "an unbound slot must still yield a program"
+      );
+
+      // The verdict half of the contract: anything that does not parse is null,
+      // which the caller turns into an abstention (PARITY §1 - the
+      // characteristic failure must be silence, not a confident falsehood).
+      for (const bad of [
+        "two numbers closer to each other than given threshold",
+        "function var_0 ( var_1 var_2 ) { return var_1 ; }", // comma lost
+        "unknown",
+        "",
+      ]) {
+        assert.strictEqual(
+          detokenizeCode(bad),
+          null,
+          `non-program must be refused, not committed: "${bad}"`
+        );
+      }
+    });
+
+    // Test 7: the toolkit's goal parser and its specification floor.
+    await it("Test 7: parseExamples reads doctests; the verifier needs a real spec", async () => {
+      const prompt = [
+        "//Check if any two numbers are closer than the threshold.",
+        "// >>> has_close_elements([1.0, 2.0], 0.5)",
+        "// false",
+        "// >>> has_close_elements([1.0, 2.8, 3.0], 0.3)",
+        "// true",
+        "function has_close_elements(numbers: number[], t: number): boolean {",
+      ].join("\n");
+
+      assert.deepStrictEqual(parseExamples(prompt), [
+        { call: "has_close_elements([1.0, 2.0], 0.5)", expected: "false" },
+        { call: "has_close_elements([1.0, 2.8, 3.0], 0.3)", expected: "true" },
+      ]);
+
+      // Prose above the examples is not an example, and parsing stops at the
+      // signature - a stray `>>>` in code would otherwise become a phantom goal.
+      assert.strictEqual(
+        parseExamples("//just prose, no examples\nfunction f() {").length,
+        0
+      );
+
+      // Expected values are TypeScript literals of every shape the corpus uses.
+      const shapes = parseExamples(
+        [
+          "// >>> intersperse([], 4)",
+          "// []",
+          "// >>> longest([])",
+          "// undefined",
+          '// >>> longest(["a", "bb"])',
+          '// "bb"',
+          "function f() {",
+        ].join("\n")
+      );
+      assert.deepStrictEqual(
+        shapes.map(e => e.expected),
+        ["[]", "undefined", '"bb"']
+      );
+
+      // The verification program must isolate candidates from each other: two
+      // candidates declaring the same identifier must not collide, and the
+      // first that satisfies the examples wins.
+      const program = verificationProgram(
+        [
+          {
+            source: "function f(a, b) { return a - b; }",
+            declaredName: "f",
+            signature: "wrong",
+          },
+          {
+            source: "function f(a, b) { return a + b; }",
+            declaredName: "f",
+            signature: "right",
+          },
+        ],
+        "f",
+        [{ call: "f(2, 3)", expected: "5" }]
+      );
+      assert.ok(
+        program.includes("__try0") && program.includes("__try1"),
+        "each candidate gets its own scope"
+      );
+      const run = runTypeScript(program, 10_000);
+      assert.strictEqual(
+        run.stdout.trim(),
+        "1",
+        "the verifier must select the candidate that actually satisfies the examples"
       );
     });
 

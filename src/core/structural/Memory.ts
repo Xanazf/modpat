@@ -7,6 +7,35 @@ import { metrics } from "@core_s/Metrics";
 import { type DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { scopesInSameSupercluster } from "@mutate/FrameworkIndex";
 
+/** Sentinel standing in for a literal "," token in `target_pattern`. */
+const COMMA_TOKEN = "<COMMA>";
+
+/**
+ * Namespace prefix for a CODE pattern's exact intent key.
+ *
+ * Code patterns are keyed by their intent phrase KEPT LITERAL
+ * ("CODE:function sum of"), not by the VAR-abstracted signature every other
+ * proof uses ("function VAR_0"). The abstraction is right for logic - it is
+ * what lets "socrates is human" generalize to "plato is human" - and wrong
+ * here, because it discards the one token that says WHICH function is wanted:
+ * measured, `function VAR_0` was the shared key of 8 of 37 code patterns, so
+ * the vault separated them only by spatial resonance and a near-miss returned
+ * the wrong function (PARITY §3.5 - `sumOf` retrieving `startsWith`).
+ *
+ * This is the same move `abstractSequence` already makes for numeric literals,
+ * and for the same stated reason: "removing the dependence on spatial centroid
+ * proximity for arithmetic vault lookup". Second application, same argument.
+ *
+ * The prefix namespaces the key so a literal signature can never collide with
+ * an abstract one, and so phase-1 lookup can only ever match code rows.
+ *
+ * Migration note: rows crystallized before this existed are stored under the
+ * old abstract key and will simply not be found by the exact lookup. That is a
+ * cache miss, not corruption - the pattern is re-crystallized on next
+ * ingestion, under the new key.
+ */
+const CODE_SIGNATURE_PREFIX = "CODE:";
+
 /**
  * The Store (Vault) acts as the long-term memory for the logic engine.
  *
@@ -133,6 +162,12 @@ export default class Store implements Memory.Vault {
       "topo_signature VARCHAR DEFAULT ''",
       "is_factual INTEGER DEFAULT 0",
       "framework_scope BIGINT DEFAULT 0",
+      // Original identifier names for a code pattern's VAR_N slots, JSON array,
+      // index-aligned to the slot number. The manifold stores code as a token
+      // sequence and lowercases it, so `toUpperCase` decodes as `touppercase`
+      // and cannot be mechanically restored; these names are the only record of
+      // what a slot was actually called. Empty for non-code proofs.
+      "var_names VARCHAR DEFAULT ''",
     ]) {
       try {
         await this._connection.run(
@@ -306,7 +341,17 @@ export default class Store implements Memory.Vault {
    * @param sequenceIds - The atomized quanta to abstract.
    * @returns An object containing the string signature and a map of physical scopes to variable IDs.
    */
-  public abstractSequence(sequenceIds: Uint32Array): {
+  public abstractSequence(
+    sequenceIds: Uint32Array,
+    opts: {
+      /**
+       * Keep non-numeric atoms literal in the signature instead of abstracting
+       * them to VAR_N. `varMap` is still populated identically, so target
+       * abstraction is unaffected - only the KEY changes.
+       */
+      literalAtoms?: boolean;
+    } = {}
+  ): {
     signature: string;
     varMap: Map<number, number>;
   } {
@@ -339,7 +384,12 @@ export default class Store implements Memory.Vault {
         if (!varMap.has(scope)) {
           varMap.set(scope, nextVarId++);
         }
-        signatureTokens.push(`VAR_${varMap.get(scope)}`);
+        // varMap is populated either way; only the KEY differs. Under
+        // `literalAtoms` the content word stays literal, which is the same
+        // exactness the numeric branch above already buys for arithmetic.
+        signatureTokens.push(
+          opts.literalAtoms ? symbol : `VAR_${varMap.get(scope)}`
+        );
       } else {
         // Operators retain their physical identity in the topology.
         signatureTokens.push(symbol);
@@ -353,12 +403,91 @@ export default class Store implements Memory.Vault {
   }
 
   /**
+   * Decodes the stored `var_names` JSON. Names are an emission convenience,
+   * never a correctness input, so anything unreadable (a row written before the
+   * column existed, or hand-edited) degrades to "no names" rather than to a
+   * failed recall.
+   */
+  private _parseVarNames(raw: string): string[] {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Every code pattern the vault holds, as raw token text plus slot names.
+   *
+   * The toolkit's candidate pool. A code pattern's `target_pattern` is entirely
+   * literal tokens, so it reconstructs with no manifold at all - which matters
+   * because enumerating candidates must not depend on where the query happens
+   * to have landed. Tokens are space-joined here and left for the caller to
+   * detokenize; the vault does not know what TypeScript is, and should not.
+   */
+  public async listCodePatterns(): Promise<
+    {
+      signature: string;
+      tokens: string;
+      slotFlags: bigint;
+      varNames: string[];
+    }[]
+  > {
+    await this.waitForInit();
+    const stmt = await this._connection.prepare(`
+      SELECT signature, target_pattern, slot_flags, COALESCE(var_names, '')
+      FROM wave_forms
+      WHERE slot_flags != 0
+      ORDER BY signature
+    `);
+    try {
+      const rows = (await stmt.runAndReadAll()).getRows();
+      return rows.map(row => ({
+        signature: String(row[0] ?? ""),
+        tokens: String(row[1] ?? "")
+          .split(",")
+          .map(t => (t === COMMA_TOKEN ? "," : t))
+          .join(" "),
+        slotFlags: BigInt(String(row[2] ?? "0")),
+        varNames: this._parseVarNames(String(row[3] ?? "")),
+      }));
+    } finally {
+      stmt.destroySync();
+    }
+  }
+
+  /** The exact-intent key for a code pattern; see CODE_SIGNATURE_PREFIX. */
+  private codeSignature(sequenceIds: Uint32Array): string {
+    const { signature } = this.abstractSequence(sequenceIds, {
+      literalAtoms: true,
+    });
+    return CODE_SIGNATURE_PREFIX + signature;
+  }
+
+  /**
    * Maps the resolved output quanta back to the generic VAR signature.
    *
    * @param resultIds - The resulting quanta from a resolution.
    * @param varMap - The map generated during sequence abstraction.
    * @returns A string pattern representing the universal target quanta.
    * @private
+   */
+  /**
+   * Placeholder for a literal comma token inside `target_pattern`.
+   *
+   * `target_pattern` joins its tokens with "," and `checkInterferencePattern`
+   * splits on ",", so a token that IS a comma is destroyed by its own
+   * delimiter - it splits into two empty fields and is silently dropped. That
+   * cost nothing while the vault only held English derivations, and it is fatal
+   * for code: `function f(a, b)` came back as `function var_0 ( var_1 var_2 )`,
+   * which no longer parses (measured - it was one of two remaining round-trip
+   * failures, PARITY §3.5).
+   *
+   * Escaping rather than changing the delimiter keeps old rows readable: no row
+   * written before this existed can contain this sentinel, so decoding is
+   * backward compatible. Rows written before it simply never had their commas.
    */
   private abstractTarget(
     resultIds: Uint32Array,
@@ -383,7 +512,7 @@ export default class Store implements Memory.Vault {
         targetTokens.push(`VAR_${varMap.get(scope)}`);
       } else {
         // Operators or atoms not in the original input retain their literal identity.
-        targetTokens.push(symbol);
+        targetTokens.push(symbol === "," ? COMMA_TOKEN : symbol);
       }
     }
     return targetTokens.join(",");
@@ -405,9 +534,16 @@ export default class Store implements Memory.Vault {
     outputSequence: Uint32Array,
     energy: number,
     slotFlags: bigint = 0n,
-    topoSignature: string = ""
+    topoSignature: string = "",
+    /** Original identifier names for VAR_N slots (code patterns only). */
+    varNames: string[] = []
   ) {
-    const { signature, varMap } = this.abstractSequence(inputSequence);
+    // A code pattern (slotFlags != 0) is keyed by its EXACT intent phrase; every
+    // other proof keeps the VAR-abstracted signature it always had.
+    const { signature: abstractSig, varMap } =
+      this.abstractSequence(inputSequence);
+    const signature =
+      slotFlags === 0n ? abstractSig : this.codeSignature(inputSequence);
     const targetPattern = this.abstractTarget(outputSequence, varMap);
     const [ax, ay, az, aw] = this.calculateCentroid(inputSequence);
 
@@ -465,7 +601,8 @@ export default class Store implements Memory.Vault {
             grid_x = ?, grid_y = ?, grid_z = ?, grid_w = ?,
             topo_signature = CASE WHEN ? != '' THEN ? ELSE topo_signature END,
             is_factual = ?,
-            framework_scope = CASE WHEN COALESCE(framework_scope, 0) != 0 THEN framework_scope ELSE ? END
+            framework_scope = CASE WHEN COALESCE(framework_scope, 0) != 0 THEN framework_scope ELSE ? END,
+            var_names = CASE WHEN ? != '' THEN ? ELSE var_names END
         WHERE signature = ?
           AND ABS(anchor_x - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
           AND ABS(anchor_y - ?) < ${DOPAT_CONFIG.memory.VAULT_DEDUP_THRESHOLD}
@@ -486,9 +623,12 @@ export default class Store implements Memory.Vault {
         upd.bindVarchar(12, topoSignature);
         upd.bindInteger(13, isFactual ? 1 : 0);
         upd.bindBigInt(14, frameworkScope);
-        upd.bindVarchar(15, signature);
-        upd.bindDouble(16, ax);
-        upd.bindDouble(17, ay);
+        const namesJson = varNames.length > 0 ? JSON.stringify(varNames) : "";
+        upd.bindVarchar(15, namesJson);
+        upd.bindVarchar(16, namesJson);
+        upd.bindVarchar(17, signature);
+        upd.bindDouble(18, ax);
+        upd.bindDouble(19, ay);
         await upd.run();
       } finally {
         upd.destroySync();
@@ -500,8 +640,8 @@ export default class Store implements Memory.Vault {
     const stmt = await this._connection.prepare(`
       INSERT INTO wave_forms
         (signature, target_pattern, net_energy, anchor_x, anchor_y, anchor_z, anchor_w, slot_flags,
-         grid_x, grid_y, grid_z, grid_w, topo_signature, is_factual, framework_scope)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         grid_x, grid_y, grid_z, grid_w, topo_signature, is_factual, framework_scope, var_names)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
@@ -520,6 +660,7 @@ export default class Store implements Memory.Vault {
       stmt.bindVarchar(13, topoSignature);
       stmt.bindInteger(14, isFactual ? 1 : 0);
       stmt.bindBigInt(15, frameworkScope);
+      stmt.bindVarchar(16, varNames.length > 0 ? JSON.stringify(varNames) : "");
       await stmt.run();
     } finally {
       stmt.destroySync();
@@ -540,7 +681,13 @@ export default class Store implements Memory.Vault {
   public async checkInterferencePattern(
     inputSequence: Uint32Array,
     topoSignature?: string
-  ): Promise<{ ids: Uint32Array; slotFlags: bigint; energy: number } | null> {
+  ): Promise<{
+    ids: Uint32Array;
+    slotFlags: bigint;
+    energy: number;
+    /** Original VAR_N identifier names; empty for non-code proofs. */
+    varNames: string[];
+  } | null> {
     const { signature, varMap } = this.abstractSequence(inputSequence);
     const [qx, qy, qz, qw] = this.calculateCentroid(inputSequence);
 
@@ -552,6 +699,44 @@ export default class Store implements Memory.Vault {
     let targetPattern: string | null = null;
     let slotFlags = 0n;
     let vaultEnergy = 0;
+    let varNames: string[] = [];
+
+    // Phase 1: exact code-intent lookup.
+    //
+    // A code pattern is stored under its literal intent, so this key is unique
+    // by construction and needs NO spatial disambiguation - which is the point.
+    // The grid window and the resonance threshold below both exist to choose
+    // among rows sharing an abstract signature; applied to an exact key they can
+    // only do harm, rejecting a correct match because the query's centroid
+    // drifted from the anchor it was crystallized at. (Measured: that drift, not
+    // a missing row, was most of the round-trip probe's silence.)
+    //
+    // Non-code rows can never match - the key is namespaced - so this phase is
+    // invisible to every other caller and phase 2 below is unchanged.
+    const codeSig = this.codeSignature(inputSequence);
+    const codeStmt = await this._connection.prepare(`
+      SELECT target_pattern, slot_flags, net_energy, COALESCE(var_names, '')
+      FROM wave_forms
+      WHERE signature = ?
+      ORDER BY net_energy DESC
+      LIMIT 1
+    `);
+    try {
+      codeStmt.bindVarchar(1, codeSig);
+      const codeRows = (await codeStmt.runAndReadAll()).getRows();
+      if (codeRows.length > 0) {
+        const row = codeRows[0];
+        targetPattern = row[0]?.toString() || null;
+        slotFlags = BigInt(String(row[1] ?? "0"));
+        vaultEnergy = Number(row[2] ?? 0);
+        varNames = this._parseVarNames(row[3]?.toString() ?? "");
+        metrics.increment("vault.code_hit");
+      }
+    } catch (err) {
+      console.error("Vault Code Signature Query Error:", err);
+    } finally {
+      codeStmt.destroySync();
+    }
 
     // Grid-window spatial resonance query: coarse bucket filter reduces candidates from
     // O(rows_per_signature) to O(1) before the exact squared-distance fine filter.
@@ -570,13 +755,18 @@ export default class Store implements Memory.Vault {
     const uw = DOPAT_CONFIG.memory.USAGE_WEIGHT;
     // Fetch up to 10 candidates when a topoSignature is provided for re-ranking.
     const limit = topoSignature ? 10 : 1;
-    const stmt = await this._connection.prepare(`
+    // Phase 2: the abstract-signature path, unchanged. It runs only when the
+    // exact key found nothing - an exact intent match is strictly more specific
+    // than a resonance-ranked abstract one, so there is nothing for it to add.
+    if (targetPattern === null) {
+      const stmt = await this._connection.prepare(`
       SELECT target_pattern, slot_flags, signature AS matched_sig,
              (pow(anchor_x - ?, 2) + pow(anchor_y - ?, 2) + pow(anchor_z - ?, 2)) as resonance,
              net_energy * (1 + LN(1 + COALESCE(usage_count, 0)) * ${uw}) AS combined_score,
              net_energy, COALESCE(topo_signature, '') AS topo_sig,
              COALESCE(is_factual, 0) AS is_factual,
-             COALESCE(framework_scope, 0) AS framework_scope
+             COALESCE(framework_scope, 0) AS framework_scope,
+             COALESCE(var_names, '') AS var_names
       FROM wave_forms
       WHERE signature = ?
         AND (grid_x IS NULL OR grid_x BETWEEN ? AND ?)
@@ -585,88 +775,90 @@ export default class Store implements Memory.Vault {
       ORDER BY resonance ASC, combined_score DESC
       LIMIT ${limit}
     `);
-    try {
-      stmt.bindDouble(1, qx);
-      stmt.bindDouble(2, qy);
-      stmt.bindDouble(3, qz);
-      stmt.bindVarchar(4, signature);
-      stmt.bindInteger(5, gx - R);
-      stmt.bindInteger(6, gx + R);
-      stmt.bindInteger(7, gy - R);
-      stmt.bindInteger(8, gy + R);
-      stmt.bindInteger(9, gz - R);
-      stmt.bindInteger(10, gz + R);
+      try {
+        stmt.bindDouble(1, qx);
+        stmt.bindDouble(2, qy);
+        stmt.bindDouble(3, qz);
+        stmt.bindVarchar(4, signature);
+        stmt.bindInteger(5, gx - R);
+        stmt.bindInteger(6, gx + R);
+        stmt.bindInteger(7, gy - R);
+        stmt.bindInteger(8, gy + R);
+        stmt.bindInteger(9, gz - R);
+        stmt.bindInteger(10, gz + R);
 
-      const res = await stmt.runAndReadAll();
-      const rows = res.getRows();
-      if (rows && rows.length > 0) {
-        // Filter to resonance threshold, then optionally re-rank by topo overlap.
-        const candidates = rows.filter(
-          row => Number(row[3]) < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD
-        );
+        const res = await stmt.runAndReadAll();
+        const rows = res.getRows();
+        if (rows && rows.length > 0) {
+          // Filter to resonance threshold, then optionally re-rank by topo overlap.
+          const candidates = rows.filter(
+            row => Number(row[3]) < DOPAT_CONFIG.memory.VAULT_QUERY_THRESHOLD
+          );
 
-        let chosen: (typeof candidates)[number] | null = candidates[0];
-        if (topoSignature && candidates.length > 1) {
-          // Re-rank: primary key = topo Jaccard (descending), tiebreak = combined_score.
-          let bestJaccard = -1;
-          let bestScore = -1;
-          for (const row of candidates) {
-            const rowTopo = row[6]?.toString() ?? "";
-            const j = topoSignatureJaccard(topoSignature, rowTopo);
-            const score = Number(row[4]);
-            if (j > bestJaccard || (j === bestJaccard && score > bestScore)) {
-              bestJaccard = j;
-              bestScore = score;
-              chosen = row;
+          let chosen: (typeof candidates)[number] | null = candidates[0];
+          if (topoSignature && candidates.length > 1) {
+            // Re-rank: primary key = topo Jaccard (descending), tiebreak = combined_score.
+            let bestJaccard = -1;
+            let bestScore = -1;
+            for (const row of candidates) {
+              const rowTopo = row[6]?.toString() ?? "";
+              const j = topoSignatureJaccard(topoSignature, rowTopo);
+              const score = Number(row[4]);
+              if (j > bestJaccard || (j === bestJaccard && score > bestScore)) {
+                bestJaccard = j;
+                bestScore = score;
+                chosen = row;
+              }
+            }
+          }
+
+          if (chosen) {
+            // Framework scope guard: factual proofs (output introduced new content)
+            // must originate from the same conceptual domain as the current query.
+            // Phase 1 - exact scope identity; Phase 2 - shared supercluster once
+            // the topology has been enriched (e.g. titanium ↔ iridium in metallurgy).
+            // Structural proofs (all output variables derived from input variables)
+            // are always safe to apply and bypass this check.
+            const storedIsFactual = Number(chosen[7] ?? 0) !== 0;
+            const storedFwScope = BigInt(String(chosen[8] ?? "0"));
+            if (storedIsFactual && storedFwScope !== 0n) {
+              const queryScope = this._primaryScope(inputSequence);
+              if (
+                queryScope !== 0n &&
+                !this._fwScopeOverlap(storedFwScope, queryScope)
+              ) {
+                // Different domain - suppress this factual match entirely.
+                metrics.increment("vault.framework_miss");
+                targetPattern = null;
+                chosen = null;
+              }
+            }
+          }
+          if (chosen) {
+            targetPattern = chosen[0]?.toString() || null;
+            slotFlags = BigInt(String(chosen[1] ?? "0"));
+            vaultEnergy = Number(chosen[5] ?? 0);
+            varNames = this._parseVarNames(chosen[9]?.toString() ?? "");
+            const matchedSig = chosen[2]?.toString() ?? null;
+            if (matchedSig) {
+              const conn = this._connection;
+              const sig = matchedSig;
+              (async () => {
+                const upd = await conn.prepare(
+                  `UPDATE wave_forms SET usage_count = COALESCE(usage_count, 0) + 1 WHERE signature = ?`
+                );
+                upd.bindVarchar(1, sig);
+                await upd.run();
+                upd.destroySync();
+              })().catch(() => {});
             }
           }
         }
-
-        if (chosen) {
-          // Framework scope guard: factual proofs (output introduced new content)
-          // must originate from the same conceptual domain as the current query.
-          // Phase 1 - exact scope identity; Phase 2 - shared supercluster once
-          // the topology has been enriched (e.g. titanium ↔ iridium in metallurgy).
-          // Structural proofs (all output variables derived from input variables)
-          // are always safe to apply and bypass this check.
-          const storedIsFactual = Number(chosen[7] ?? 0) !== 0;
-          const storedFwScope = BigInt(String(chosen[8] ?? "0"));
-          if (storedIsFactual && storedFwScope !== 0n) {
-            const queryScope = this._primaryScope(inputSequence);
-            if (
-              queryScope !== 0n &&
-              !this._fwScopeOverlap(storedFwScope, queryScope)
-            ) {
-              // Different domain - suppress this factual match entirely.
-              metrics.increment("vault.framework_miss");
-              targetPattern = null;
-              chosen = null;
-            }
-          }
-        }
-        if (chosen) {
-          targetPattern = chosen[0]?.toString() || null;
-          slotFlags = BigInt(String(chosen[1] ?? "0"));
-          vaultEnergy = Number(chosen[5] ?? 0);
-          const matchedSig = chosen[2]?.toString() ?? null;
-          if (matchedSig) {
-            const conn = this._connection;
-            const sig = matchedSig;
-            (async () => {
-              const upd = await conn.prepare(
-                `UPDATE wave_forms SET usage_count = COALESCE(usage_count, 0) + 1 WHERE signature = ?`
-              );
-              upd.bindVarchar(1, sig);
-              await upd.run();
-              upd.destroySync();
-            })().catch(() => {});
-          }
-        }
+      } catch (err) {
+        console.error("Vault Interference Query Error:", err);
+      } finally {
+        stmt.destroySync();
       }
-    } catch (err) {
-      console.error("Vault Interference Query Error:", err);
-    } finally {
-      stmt.destroySync();
     }
 
     if (!targetPattern) {
@@ -675,7 +867,9 @@ export default class Store implements Memory.Vault {
     }
     metrics.increment("vault.hit");
 
-    const targetTokens = targetPattern.split(",");
+    const targetTokens = targetPattern
+      .split(",")
+      .map(t => (t === COMMA_TOKEN ? "," : t));
     const resultIds: number[] = [];
 
     for (const token of targetTokens) {
@@ -714,7 +908,12 @@ export default class Store implements Memory.Vault {
       }
     }
 
-    return { ids: new Uint32Array(resultIds), slotFlags, energy: vaultEnergy };
+    return {
+      ids: new Uint32Array(resultIds),
+      slotFlags,
+      energy: vaultEnergy,
+      varNames,
+    };
   }
 
   /**

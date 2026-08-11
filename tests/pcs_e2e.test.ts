@@ -3,6 +3,7 @@ import type SemanticAtomizer from "@atomics/SemanticAtomizer";
 import { createTestTraveler } from "@core_i/Runtime";
 import { SlotType } from "@core_i/System";
 import Unfolder from "@mutate/Unfolder";
+import { parse } from "abstract-syntax-tree";
 import { describe, TestHarness } from "./utils/harness";
 
 export async function executeE2ETest() {
@@ -66,14 +67,33 @@ export async function executeE2ETest() {
     await inference.processIntent("function add |-");
     assert.ok(responses.length > 0, "processIntent should produce a response");
 
-    const synthesized = responses.join(" ");
-    // The synthesized code must not be "unknown" and must contain recognisable structure.
-    assert.ok(
-      !synthesized.toLowerCase().includes("unknown") ||
-        synthesized.includes("function") ||
-        synthesized.includes("return"),
-      `Synthesis should produce meaningful code or acknowledge the pattern. Got: "${synthesized}"`
-    );
+    const synthesized = responses.join(" ").trim();
+
+    // The synthesis contract, post-emission-gate (PARITY §3.5, 2026-08-01):
+    // an answer is EITHER parseable code OR an abstention, never text shaped
+    // like code that is not code.
+    //
+    // WHAT CHANGED, and it is a capability reduction recorded on purpose:
+    // this assertion used to accept any response containing "function" or
+    // "return", and it passed on `function add ( _ _ ) { return _ plus _ ; }`
+    // - the channel's characteristic emission, which does not parse (operators
+    // come back in word form, punctuation is space-joined, every identifier is
+    // an unbound `_`). The old test therefore certified structure it never
+    // checked. Measured against 29 corpus functions, the emission channel's
+    // pass rate on code it had just been shown was 0%, so the gate withholds
+    // that commitment and this case is now an ABSTENTION.
+    //
+    // The assertion is written as the invariant rather than as the current
+    // answer, so restoring emission (a detokenizer plus real slot bindings -
+    // §3.5's "large engineering") makes it pass on the code branch WITHOUT
+    // being edited. Do not relax it back to substring matching.
+    if (synthesized.toLowerCase() !== "unknown") {
+      assert.doesNotThrow(
+        () =>
+          parse(`function __check__() {\n${synthesized}\n}`, { module: false }),
+        `Synthesis committed a non-program: "${synthesized}". A synthesis answer must be parseable code or an abstention.`
+      );
+    }
 
     await TestHarness.disposeEnvironment(env);
     console.log("PCS E2E TEST COMPLETED SUCCESSFULLY");

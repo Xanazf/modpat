@@ -1684,9 +1684,12 @@ class Traveler implements Mapping.Engine {
         // Synthesis mode (e.g. "function add |-")
         const ids = this.atomizer.ingestSequence(text, this.system);
         const res = await this.perceiveCoherent(ids);
-        const decoded = this.atomizer
-          .decodeSequence(res.ids, this.system)
-          .trim();
+        // `res.text` is the code channel's exact emission. Decoding the ids
+        // instead would re-tokenize the program and undo the detokenizer
+        // (`=` becomes `equals`, identifiers lowercase), so when a surface is
+        // carried it is authoritative; everything else decodes as before.
+        const decoded =
+          res.text ?? this.atomizer.decodeSequence(res.ids, this.system).trim();
         this.language.respond(decoded);
         return decoded;
       } else {

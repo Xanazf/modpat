@@ -489,5 +489,75 @@
         "n": 160
       }
     }
+  },
+  "codeSynthesis": {
+    "date": "2026-08-01T19:45:26.591Z",
+    "scores": {
+      "toolkit": {
+        "passAt1": 0.025157232704402517,
+        "abstentionRate": 0.9748427672955975,
+        "confidentFalsehoods": 0,
+        "buckets": {
+          "abstain": 155,
+          "pass": 4,
+          "fail": 0,
+          "invalid": 0,
+          "timeout": 0
+        },
+        "n": 159
+      },
+      "roundtrip": {
+        "passAt1": 1,
+        "abstentionRate": 0,
+        "confidentFalsehoods": 0,
+        "buckets": {
+          "abstain": 0,
+          "pass": 29,
+          "fail": 0,
+          "invalid": 0,
+          "timeout": 0
+        },
+        "n": 29
+      },
+      "humaneval.none.name": {
+        "passAt1": 0,
+        "abstentionRate": 0.9308176100628931,
+        "confidentFalsehoods": 11,
+        "buckets": {
+          "abstain": 148,
+          "pass": 0,
+          "fail": 7,
+          "invalid": 4,
+          "timeout": 0
+        },
+        "n": 159
+      },
+      "humaneval.stdlib.name": {
+        "passAt1": 0,
+        "abstentionRate": 0.9308176100628931,
+        "confidentFalsehoods": 11,
+        "buckets": {
+          "abstain": 148,
+          "pass": 0,
+          "fail": 7,
+          "invalid": 4,
+          "timeout": 0
+        },
+        "n": 159
+      },
+      "humaneval.stdlib.doc": {
+        "passAt1": 0,
+        "abstentionRate": 0.31446540880503143,
+        "confidentFalsehoods": 109,
+        "buckets": {
+          "abstain": 50,
+          "pass": 0,
+          "fail": 4,
+          "invalid": 105,
+          "timeout": 0
+        },
+        "n": 159
+      }
+    }
   }
 }

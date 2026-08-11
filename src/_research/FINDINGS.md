@@ -14,6 +14,93 @@ Each entry: what was measured, the number, and the precise reason a naive read o
 HEAD would get it wrong.
 
 
+## Settling's goal term IS monotone, with 6x headroom - and two latent defects found on the way (2026-08-02)
+
+Asked: can settling be given a goal term without losing the monotonicity that
+made it beat relaxPath? The premise of the question was wrong. **Settling
+already has one.** `_settleOnce` integrates `a = -grad V_field - lambda*(p-tgt)`
+- a harmonic spring to the target, lambda escalated until arrival. It is not the
+initial-value problem the relaxpath-bvp demotion note makes it sound like; a
+reviewer reading "settling (IVP)" in `traverse_shadow_compare.ts` and concluding
+the system cannot steer toward a goal would be grading a label, not the code.
+
+Probes: `scripts/dev/settle_goal_{monotonicity,live,cause,verdict,wcheck}.ts`.
+
+**The answer is YES.** Both force terms are conservative, so
+`E = 1/2|v|^2 + U(p) + 1/2*lambda*|p-tgt|^2` is a Lyapunov candidate. Measured
+on the grounded TS corpus (48 pairs, the same one behind the 0.52-vs-1.00
+demotion numbers): 30/48 runs strictly monotone, the other 18 rise by a **median
+1.4e-3 relative**, max 2.1e-3. At `dt=0.02` with first-order semi-implicit
+Euler the local truncation error is O(2%), so a 0.1% rise is integrator noise,
+not a structural violation.
+
+Two stability ceilings, both derived and then measured:
+- **Monotonicity ceiling lambda ~ 3.2e2.** `det = drag = 0.94` independent of
+  lambda, so contraction is a fixed 3%/step, but `cos(theta) = trace/(2*sqrt(det))`
+  means the per-step spiral angle grows with lambda; past ~20 deg/step the
+  rotation carries energy uphill faster than damping removes it. Stable,
+  converging, and non-monotone at once.
+- **Divergence ceiling lambda = 2(1+drag)/(drag*dt^2) ~ 1.03e4.** Closed form,
+  accurate to 1% against bisection (1.022e4 non-monotone, 1.042e4 diverged).
+
+Measured real traversals never get near either: `lambda0` median 0.33,
+**`lambda*` median 13.2, max 53.5** - 6x under the monotonicity ceiling, 190x
+under divergence. Escalations: median 5, max 8.
+
+### Latent defect 1: the escalation budget is 13 doublings past the cliff
+
+`SETTLE_TRAVERSE_MAX_ESCALATIONS = 28`. From the median `lambda0 = 0.33`,
+monotonicity dies at ~10 escalations and the integrator diverges at ~15. Today
+nothing exceeds 8, so this is dormant, not broken. But a denser corpus needing
+>15 escalations would not merely fail to arrive - it would integrate a diverged
+trajectory whose nearest-atom readout is meaningless, then keep doubling into
+worse divergence, and report it through `settle.gave_up`, i.e. **an instability
+would be indistinguishable from a reach failure in the metrics.** The budget
+should be clamped to the divergence bound (or lambda escalation traded for dt
+reduction, which moves both ceilings).
+
+### Latent defect 2: the W force omits a gradient term (UNTESTED here)
+
+With conformal OFF, `U = -SUM_j infl_j * e^{-TD*max(0,dw)} * e^{-d2/F}`, and
+`forceFromCandidates` computes `dU/dx,dU/dy,dU/dz` exactly. `dU/dw` should pick
+up a second term from differentiating the temporal factor,
+`SUM_j e_j * TD * [dw_j > 0]`, and the code omits it (`Locomotion.ts`, the
+`f = 2e/F` block). An omitted gradient component is a non-conservative force: it
+does work around closed loops, so no Lyapunov function of this form can be
+decreasing where it acts. `PHI_TEMPORAL_DECAY = 3.0` is not a small coefficient.
+
+**This is unmeasured, and the reason matters: the grounded AST corpus is
+W-degenerate - 22 atoms, exactly 1 distinct posW, range 0.0.** So `dw = 0`
+everywhere, the temporal factor is identically 1, and the omitted term is
+identically 0. Production / xyz-only / w-corrected all scored an identical
+20/48 because W carries no dynamics in this corpus at all. Any conclusion about
+W traversal from `traverse_shadow_compare.ts` or its descendants is drawn from a
+corpus that does not exercise W. The bitemporal work (wBirth/wStart/wStop) is
+exactly where this would bite, and it needs a W-spread corpus to test.
+
+### Correction to a claim made mid-investigation
+
+An intermediate probe reported "f is NOT -grad V, no Lyapunov function exists",
+median relative mismatch 7.4e12. That was wrong, and the trap is worth recording:
+it finite-differenced `getMetricForce`'s RETURNED potential, which is
+`Math.max(0.01, V)` (line 295). With 22 atoms at `infl >= 5` the raw
+`V = 1 - SUM infl*e^{-d2/F}` is deeply negative everywhere populated, so the
+returned channel is pinned at the 0.01 floor and is **flat by clamping**. The
+force is a genuine gradient field; only the readout is saturated. **Anything
+that consumes `getMetricForce()[0]` as an energy is reading a constant** - worth
+auditing separately.
+
+### What this does NOT establish
+
+The goal term is *positional*: it needs `posX/Y/Z/W[targetId]`, i.e. you must
+already know which precept is the answer in order to steer toward it. That is
+routing between known endpoints, not planning. Planning consumes a
+*specification* (behavioural: "a function such that f([1,2,3]) = 3") and must
+find which point satisfies it. Monotone convergence to a known coordinate does
+not bridge that gap, and PARITY §3.5's toolkit currently bridges it by having
+the goal handed in as parsed doctests - declared there as an ablation.
+
+
 ## electSkill potential-field election is built + validated but DORMANT in production (2026-06-22)
 
 `Traveler.electSkill` was rewritten from intent string-matching to **attractor
